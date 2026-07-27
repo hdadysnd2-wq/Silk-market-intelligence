@@ -1360,7 +1360,8 @@ def create_app():
                                ready: bool, ready_reason: str,
                                analysis_id: int | None,
                                resume_reports: dict | None,
-                               report_style: str | None = None) -> dict:
+                               report_style: str | None = None,
+                               hs_confidence: float | None = None) -> dict:
         """جسم التشغيلة الثقيل — بعثات + محلل + توليف + كاتب/مراجع + بوابة
         جودة. مستخرَج من مسار /research المتزامن السابق **بلا تغيير سلوكي**
         كي يُستدعى إما مباشرة (وضع متزامن) أو من خيط خلفي (async_run=true)
@@ -1543,7 +1544,10 @@ def create_app():
         # ITEM 1) في مرحلة «إكمال بيانات المستوردين» أعلاه — تُشحن مع التقرير
         # من التشغيلة الأولى. `importer_leads` جاهز هنا لبناء النتيجة.
         result: dict = {
-            "product": product, "hs_code": hs_code, "year": None,
+            "product": product, "hs_code": hs_code,
+            # ثقةُ التصنيف تصل النتيجةَ فالعرض (كانت تُهدَر => «ثقة التصنيف —»).
+            "hs_confidence": hs_confidence,
+            "year": None,
             "preliminary": True,
             "market": {"iso3": market_ref.iso3, "m49": market_ref.m49,
                       "iso2": market_ref.iso2, "name_en": market_ref.name_en,
@@ -1608,7 +1612,8 @@ def create_app():
     def _research_background(market_ref, product, hs_code, hs_note,
                              product_card_dict, ai_ok, ai_note, prefs,
                              ready, ready_reason, analysis_id,
-                             resume_reports, report_style=None) -> None:
+                             resume_reports, report_style=None,
+                             hs_confidence=None) -> None:
         """جسم الخيط الخلفي (async_run=true) — يُغلَّف باستثناء شامل عمداً:
         خيط بايثون غير المُمسوك يفشل صامتاً (لا كسر عملية، لا تحديث حالة)
         فتبقى التشغيلة عالقة على 'running' للأبد — بلاغ التحقيق (P0) يمنع
@@ -1618,7 +1623,7 @@ def create_app():
             result = _run_research_pipeline(
                 market_ref, product, hs_code, hs_note, product_card_dict,
                 ai_ok, ai_note, prefs, ready, ready_reason, analysis_id,
-                resume_reports, report_style)
+                resume_reports, report_style, hs_confidence=hs_confidence)
             _finish_research_run(analysis_id, result)
         except Exception as e:  # noqa: BLE001 — خيط خلفي: هذا آخر حزام أمان
             log.error("background /research run %s failed: %s", analysis_id, e)
@@ -1892,10 +1897,17 @@ def create_app():
         # المُحلِّل الحتمي (لا اختلاق رمز عند فشله — فجوة معلنة في hs_note).
         hs_code = req.hs_code or stored_request.get("hs_code")
         hs_note = None
+        # ثقةُ التصنيف تُحمَل ولا تُهدَر (بلاغ «حليب نادك»): كان يُؤخَذ
+        # `dp.value` وحده وتُرمى `dp.confidence`، فلا تصل النتيجةَ إطلاقاً —
+        # ومن هناك جاء «ثقة التصنيف —» في جدول التقرير (silk_render.py:2046
+        # يقرأ `result["hs_confidence"]` الغائب فيعرض شرطة الفجوة). رمزٌ
+        # صريحٌ/مخزَّن = اختيارُ مستخدمٍ معلومُ المصدر (1.0)، كعقد المحرّك.
+        hs_confidence = 1.0 if hs_code else None
         if not hs_code and product:
             from silk_hs_resolver import resolve as resolve_hs
             dp = resolve_hs(product)
             hs_code = dp.value
+            hs_confidence = dp.confidence if dp.value is not None else None
             if hs_code is None:
                 hs_note = dp.note  # فجوة معلنة — لا اختلاق رمز HS
 
@@ -1931,17 +1943,23 @@ def create_app():
             from silk_hs_confirm import preflight_block
             _blocked = preflight_block(
                 product, hs_code, getattr(req, "hs_confirmed", False),
-                allow_claude=_classify_general_allow_claude())
+                allow_claude=_classify_general_allow_claude(),
+                # بوّابة الثقة تُفحَص هنا أيضاً — **قبل** الحجز والدولار.
+                hs_confidence=hs_confidence)
             if _blocked is not None:
                 import silk_ops_log
+                # البوّابة صارت بوّابتين (ثقة + تطابق دلالي) بشكلَي ردٍّ
+                # مختلفَين — السجلّ يقرأ ما هو موجود فعلاً، لا مفتاحاً بعينه.
+                _conf_detail = _blocked.get("hs_confirmation") or {}
                 silk_ops_log.record_error(
-                    "hs_confirmation_blocked",
-                    f"رُفض بدءُ بحثٍ برمز HS غير مؤكَّد لمنتج {product!r}: "
-                    f"{_blocked['hs_confirmation'].get('reason')}",
+                    _blocked.get("error") or "hs_confirmation_blocked",
+                    f"رُفض بدءُ بحثٍ برمز HS غير محسوم لمنتج {product!r}: "
+                    f"{_conf_detail.get('reason') or _blocked.get('message')}",
                     context={"product": product, "hs_code": hs_code,
                              "market_iso3": market_ref.iso3,
-                             "missing_terms":
-                                 _blocked["hs_confirmation"].get("missing_terms")})
+                             "hs_confidence": _blocked.get("hs_confidence"),
+                             "min_confidence": _blocked.get("min_confidence"),
+                             "missing_terms": _conf_detail.get("missing_terms")})
                 raise HTTPException(status_code=422, detail=_blocked)
 
         # بوابة «خارج التغطية» (اتفاق المالك) — تسبق الجهوزية/الحجز: مع تفعيل
@@ -2155,7 +2173,7 @@ def create_app():
                 target=_research_background,
                 args=(market_ref, product, hs_code, hs_note, product_card_dict,
                      ai_ok, ai_note, prefs, ready, ready_reason, analysis_id,
-                     resume_reports, req.report_style),
+                     resume_reports, req.report_style, hs_confidence),
                 daemon=True).start()
             return JSONResponse(status_code=202, content={
                 "analysis_id": analysis_id, "status": "running",
@@ -2166,7 +2184,7 @@ def create_app():
             result = _run_research_pipeline(
                 market_ref, product, hs_code, hs_note, product_card_dict,
                 ai_ok, ai_note, prefs, ready, ready_reason, analysis_id,
-                resume_reports, req.report_style)
+                resume_reports, req.report_style, hs_confidence=hs_confidence)
         except Exception as e:  # noqa: BLE001 — P0: فشل لا يخسر البعثات المكتملة
             log.error("sync /research run %s failed: %s", analysis_id, e)
             if analysis_id is not None:

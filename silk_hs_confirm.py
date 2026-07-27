@@ -36,6 +36,46 @@ def _min_overlap() -> float:
         return _DEFAULT_MIN_OVERLAP
 
 
+# ── بوّابة ثقة التصنيف (بلاغ «حليب نادك») ────────────────────────────────────
+# الحادثة: الرمز حُسِم وثقتُه **فارغة** («ثقة التصنيف —» في جدول التقرير)،
+# ومضى الخطُّ إلى الترتيب والبعثات على رمزٍ داخل الترويسة الصحيحة لكنه البند
+# الخاطئ (040110 «دسم ≤1%» — حليبٌ منزوع الدسم — لمنتجٍ كامل الدسم مرصودٍ في
+# السوق). الفارق بين 040110/040120/040150 **نسبةُ دسمٍ رقمية** لا كلمةٌ في
+# اسم المنتج، فبوّابةُ التطابق الدلالي (`confirm_hs`) لا تراه أصلاً: كلاهما
+# «حليب». الحارس الصحيح هنا هو **الثقة نفسها**: ثقةٌ غائبة أو دون العتبة =
+# لا ترتيبَ ولا إنفاق، بل سؤالُ المستخدم بين المرشّحين.
+#
+# رمزٌ خاطئ يُعيد تأطير **كل** رقمٍ لاحق (حجم السوق/الحصص/التركّز/الاتجاه)،
+# فالخطأ هنا ليس رقماً واحداً بل التقرير كلّه — لذا فشل-آمن: مفعّلة افتراضياً.
+_DEFAULT_MIN_CONFIDENCE = 0.8
+
+
+def min_confidence() -> float:
+    """عتبةُ ثقة التصنيف من env (`SILK_HS_MIN_CONFIDENCE`) أو الافتراضي.
+
+    الافتراض 0.8 مُعايَرٌ على سلوك المُحلِّل الحتمي الفعلي (`silk_hs_resolver`):
+    تطابقٌ تامّ = 1.0، إصابةُ كلمةٍ مفتاحية = 0.85، وما دونهما درجةُ difflib
+    (وهو أصلاً يقصّ ما دون 0.7 إلى `None`). فالعتبة تُمرِّر المطابقةَ التامّة
+    والمفتاحية، وتحجب النافذةَ الضبابية 0.7–0.79 — حيث يعيش تطابقُ الحروف
+    العارضُ («نفط خام» → 520100 قطن بدرجة 0.71)."""
+    try:
+        v = float(os.environ.get("SILK_HS_MIN_CONFIDENCE", ""))
+        return v if 0.0 < v <= 1.0 else _DEFAULT_MIN_CONFIDENCE
+    except (TypeError, ValueError):
+        return _DEFAULT_MIN_CONFIDENCE
+
+
+def confidence_gate_enabled() -> bool:
+    """هل بوّابة الثقة مفعّلة؟ (`SILK_HS_CONFIDENCE_GATE`) — فشل-آمن: نعم.
+
+    صمّامٌ **مستقلّ** عن `SILK_HS_CONFIRM_GATE` (بوّابة التطابق الدلالي):
+    البوّابتان تقيسان شيئين مختلفين، فإطفاءُ إحداهما يجب ألّا يُطفئ الأخرى."""
+    raw = os.environ.get("SILK_HS_CONFIDENCE_GATE", "").strip().lower()
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return True
+
+
 def gate_enabled() -> bool:
     """هل بوابة التأكيد الصلبة مفعّلة؟ (`SILK_HS_CONFIRM_GATE`).
 
@@ -239,13 +279,70 @@ def is_flagged(confirmation: object) -> bool:
     return isinstance(confirmation, dict) and confirmation.get("confirmed") is False
 
 
+def deterministic_candidates(product: str, top_n: int = 3,
+                             path: str = "data/hs_codes.csv") -> list[dict]:
+    """مرشّحو الرمز من البذرة الحتميّة — بلا نداء كلود وبلا شبكة وبلا تكلفة.
+
+    نفس شكل مرشّحي `silk_hs_classifier.classify_general` (`hs6` / `description_ar`
+    / `reason_ar` / `confidence`) كي تعرضهما الواجهةُ بمكوّنٍ واحد. يُستعمَل في
+    ردّ بوّابة الثقة: المستخدمُ يحتاج **خياراتٍ** لا رفضاً عارياً."""
+    from silk_hs_resolver import resolve_all
+    out: list[dict] = []
+    for dp in resolve_all(product or "", top_n=top_n, path=path):
+        if dp.value is None:
+            continue
+        row = _find_row(dp.value, path) or {}
+        out.append({"hs6": dp.value, "confidence": dp.confidence,
+                    "description_ar": _code_desc(row),
+                    "reason_ar": dp.note})
+    return out
+
+
+# حارسٌ للتمييز بين «لم يمرّر المستدعي ثقةً إطلاقاً» (سلوكٌ قديم — لا بوّابة
+# ثقة) و«مرّرها None» (تصنيفٌ بلا ثقة — يُحجَب). لا يجوز خلطهما.
+_UNSET = object()
+
+
+def confidence_block(product: str, hs_code: str | None,
+                     hs_confidence: object,
+                     path: str = "data/hs_codes.csv") -> dict | None:
+    """احجب رمزاً ثقتُه غائبةٌ أو دون العتبة — تفاصيل 422 أو `None` للمرور.
+
+    `None`/غير رقمية => حجب (هذه حالةُ «ثقة التصنيف —» حرفياً: تصنيفٌ بلا
+    ثقةٍ معلومة ليس تصنيفاً محسوماً). الردّ يحمل **مرشّحين حتميّين** ليختار
+    المستخدم، لا رفضاً عارياً — نفس عقد `preflight_block`."""
+    if not hs_code or not confidence_gate_enabled():
+        return None
+    threshold = min_confidence()
+    try:
+        conf = None if hs_confidence is None else float(hs_confidence)
+    except (TypeError, ValueError):
+        conf = None
+    if conf is not None and conf >= threshold:
+        return None
+    shown = "غير معلومة" if conf is None else f"{conf:.2f}"
+    return {
+        "error": "hs_confidence_too_low",
+        "message": (f"ثقةُ تصنيف «{product}» إلى رمز HS {hs_code} {shown} "
+                    f"(الحدّ الأدنى {threshold:.2f}) — لن يبدأ التحليل على "
+                    "رمزٍ غير محسوم: رمزٌ خاطئ يُعيد تأطير كل رقمٍ لاحق. "
+                    "اختر من المرشّحين أدناه أو أدخل رمزاً يدوياً."),
+        "hs_code": hs_code,
+        "hs_confidence": conf,
+        "min_confidence": threshold,
+        "candidates": deterministic_candidates(product, path=path),
+        "candidates_source": "deterministic",
+    }
+
+
 def preflight_block(product: str, hs_code: str | None,
                     hs_confirmed: bool = False,
                     path: str = "data/hs_codes.csv",
                     allow_claude: bool = False,
                     ingredients: list | None = None,
                     category: str | None = None,
-                    instruction: str = "") -> dict | None:
+                    instruction: str = "",
+                    hs_confidence: object = _UNSET) -> dict | None:
     """نقطةُ الاختناق المشتركة الوحيدة للبوّابة — the ONE choke-point both
     `/analyze` و`/research` يستدعيانها قبل أيّ إنفاق (الموجة ٢، تدقيق
     المُشرِف 2026-07-21: الحادثة الأصلية أُصلِحت على `/research` فقط ثم
@@ -265,8 +362,20 @@ def preflight_block(product: str, hs_code: str | None,
     `allow_claude` (يُقرَّره طبقة الـAPI عبر نفس بوّابة القياس التي يستعملها
     `/classify_hs` — هذه الوحدة لا تستورد `silk_usage`/`fastapi` عمداً)
     يتحكّم فقط بهل نداء كلود مسموحٌ هذه المرّة؛ المرشّحون الحتميّون (بذرتنا)
-    يظهرون دائماً بلا أي نداء."""
-    if not hs_code or hs_confirmed or not gate_enabled():
+    يظهرون دائماً بلا أي نداء.
+
+    بوّابةُ الثقة (بلاغ «حليب نادك»): يمرّر المستدعي `hs_confidence` صراحةً
+    فتُفحَص **أولاً** (أرخص — بلا أيّ نداء) قبل التطابق الدلالي. المستدعي الذي
+    لا يمرّرها يحتفظ بالسلوك القديم حرفياً (`_UNSET` ≠ `None`)."""
+    if not hs_code or hs_confirmed:
+        return None
+    # (١) بوّابة الثقة — صمّامٌ مستقلّ، تسبق التطابق الدلالي.
+    if hs_confidence is not _UNSET:
+        low = confidence_block(product or "", hs_code, hs_confidence, path)
+        if low is not None:
+            return low
+    # (٢) بوّابة التطابق الدلالي — كما كانت، بصمّامها الخاص.
+    if not gate_enabled():
         return None
     conf = confirm_hs(product or "", hs_code, path)
     if not is_flagged(conf):

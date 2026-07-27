@@ -140,6 +140,38 @@ def analyze(product_name: str, countries: list[dict] | None = None,
             _persist(result, db_path)
         return result
 
+    # 1b) بوّابة ثقة التصنيف — **قبل الترتيب** (بلاغ «حليب نادك»).
+    #     نقطةُ التسليم الفعلية من المُحلِّل إلى المحرّك هي هذا السطر بالضبط:
+    #     ما بعده يُبنى كلُّه على `hs.value` (الترتيب، الوكلاء، البعثات، كل
+    #     رقمٍ في التقرير). رمزٌ ثقتُه غائبةٌ أو دون العتبة لا يُمرَّر — يُعاد
+    #     طلبُ حسمٍ بمرشّحين، لا تحليلٌ صامتٌ على رمزٍ مشكوك فيه.
+    #     الرمزُ الممرَّر صراحةً (`hs_code` — تسليمُ الاكتشاف/اختيارُ المستخدم)
+    #     معلومُ المصدر بثقة 1.0 فلا يمسّه هذا الحارس (نفس عقد `/deepen`).
+    if not hs_code:
+        from silk_hs_confirm import confidence_block
+        _low = confidence_block(product_name, hs.value, hs.confidence)
+        if _low is not None:
+            result = {
+                "product": product_name, "hs_code": None,
+                "hs_confidence": hs.confidence, "hs_note": hs.note,
+                "year": year, "preliminary": True, "classified": False,
+                "markets": [],
+                # عقدُ الحسم: الواجهةُ تعرض المرشّحين وتُعيد الطلبَ بـ`hs_code`
+                # صريحٍ يختاره المستخدم — لا تخمينَ ولا مضيَّ على المشكوك فيه.
+                "needs_disambiguation": True,
+                "hs_candidates": _low["candidates"],
+                "hs_gate": {k: _low[k] for k in
+                            ("error", "message", "hs_code", "hs_confidence",
+                             "min_confidence")},
+                "note": _low["message"],
+            }
+            result["data_economics"] = _economics(_data_counter)
+            if check_quality:
+                _annotate_quality(result)
+            if persist:
+                _persist(result, db_path)
+            return result
+
     # 2) رتّب الأسواق المرشّحة لهذا الرمز — rank candidate markets.
     ranked = rank_markets(hs.value, countries=countries, year=year)
 
