@@ -138,6 +138,82 @@ def test_research_path_carries_hs_confidence_into_the_result():
     assert "hs_confidence=hs_confidence)" in src
 
 
+# ── ١ب) ماسحُ الرموز المخزَّنة (tools/audit_stored_hs.py) ────────────────────
+# رمزٌ خاطئ لا يموت مع تشغيلته: يبقى في `analyses`، يُعرَض في شريط «بحوثي
+# السابقة» بمظهرٍ رسميّ، ويُعاد تشغيلُه عبر `resume` (الذي يتخطّى بوّابة HS
+# كلياً) أو تُعاد كتابةُ تقريره من `found["hs_code"]`.
+
+def _seeded_db(tmp_path, rows):
+    """قاعدةُ تحليلاتٍ مبذورة — نفس أعمدة `silk_storage.init_db` المستعمَلة."""
+    import sqlite3
+    p = str(tmp_path / "silk.db")
+    conn = sqlite3.connect(p)
+    conn.execute("CREATE TABLE analyses (id INTEGER PRIMARY KEY, product TEXT, "
+                 "hs_code TEXT, created_at TEXT, status TEXT, kind TEXT)")
+    for i, (prod, hs) in enumerate(rows, 1):
+        conn.execute("INSERT INTO analyses (id,product,hs_code,created_at,"
+                     "status,kind) VALUES (?,?,?,?,?,?)",
+                     (i, prod, hs, "2026-07-20", "completed", "research"))
+    conn.commit()
+    conn.close()
+    return p
+
+
+def _audit(path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "audit_stored_hs",
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "tools", "audit_stored_hs.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.audit_analyses(path)
+
+
+def test_scanner_flags_a_stored_code_the_resolver_now_disagrees_with(tmp_path):
+    """الحالةُ المُبلَّغة: 040110 مخزَّن بينما المُحلِّل يعيد 040120."""
+    out = _audit(_seeded_db(tmp_path, [("حليب نادك", "040110")]))
+    assert len(out) == 1
+    assert out[0]["stored_hs"] == "040110"
+    assert out[0]["resolver_today"] == "040120"
+    assert out[0]["stored_confirmed"] is False
+
+
+def test_scanner_flags_same_code_but_below_the_new_threshold(tmp_path):
+    """الحالةُ الأخبث: لا خلافَ في الرمز، لكنّ ثقتَه دون العتبة اليوم."""
+    out = _audit(_seeded_db(tmp_path, [("نفط خام", "520100")]))
+    assert len(out) == 1
+    assert out[0]["resolver_today"] == "520100"      # نفسُ الرمز — لا «خلاف»
+    assert out[0]["below_new_threshold"] is True
+
+
+def test_scanner_is_quiet_on_a_healthy_row(tmp_path):
+    """رمزٌ سليمٌ لا يُبلَّغ عنه — لا ضجيجَ يُغرِق الإشارة."""
+    assert _audit(_seeded_db(tmp_path, [("تمور", "080410")])) == []
+
+
+def test_scanner_makes_no_network_call(tmp_path):
+    """قراءةٌ فقط: صفر شبكة، صفر نداء كلود، صفر تكلفة."""
+    import socket
+    real = socket.socket
+
+    def _no_net(*a, **k):
+        raise OSError("network disabled for offline test")
+
+    db = _seeded_db(tmp_path, [("حليب نادك", "040110"), ("تمور", "080410")])
+    socket.socket = _no_net
+    try:
+        out = _audit(db)
+    finally:
+        socket.socket = real
+    assert len(out) == 1
+
+
+def test_scanner_handles_a_missing_database_quietly(tmp_path):
+    """قاعدةٌ غائبة = لا صفوف، لا استثناء (تشغيلٌ أوّلٌ على قرصٍ نظيف)."""
+    assert _audit(str(tmp_path / "nope.db")) == []
+
+
 # ── ٢) فصلُ الحكم (حتمي) عن السرد (نداءٌ لغويٌّ اختياري) ──────────────────────
 
 def test_inconclusive_is_a_verdict_not_an_absence():
