@@ -315,9 +315,16 @@ def create_app():
 
         المسار الوحيد القادر على تفعيل الطبقات المدفوعة، ويعمل داخل
         silk_context.deepen_context() فيسمح حارس BaseAgent البنيوي بالتنفيذ.
+
+        `hs_confirmed` (بلاغ «حليب نادك»): لم يكن هذا الحقل موجوداً هنا
+        إطلاقاً — لأنّ `/deepen` لم تكن له بوّابةُ HS أصلاً، فلا مَخرجَ يحتاجه.
+        أُضيف مع البوّابة كي يملك المستخدمُ نفسَ حقّ التأكيد الصريح المتاح على
+        `/analyze` و`/research` (LAW: المالك آخِر مؤكِّد، لا طريقٌ مسدود).
         """
         product: str
         year: int | None = None
+        # تأكيدُ المستخدم الصريح يتجاوز بوّابةَ HS — نفس عقد المسارين الآخرين.
+        hs_confirmed: bool = False
         with_trends: bool = False
         with_tariffs: bool = False
         with_faostat: bool = False
@@ -841,6 +848,14 @@ def create_app():
                            "مستنفد — أعد المحاولة غداً أو ارفع السقف.")
         return True, ""
 
+    def _research_ambiguity_gate_enabled() -> bool:
+        """بوّابةُ الالتباس على `/research` (`SILK_RESEARCH_AMBIGUITY_GATE`).
+
+        مفعّلةٌ افتراضياً (فشل-آمن، كبقية بوّابات HS): سؤالٌ واحدٌ قبل تشغيلةٍ
+        تكلّف دولاراتٍ أرخص من تقريرٍ كاملٍ على رمزٍ خاطئ. تُطفأ صراحةً."""
+        raw = os.environ.get("SILK_RESEARCH_AMBIGUITY_GATE", "").strip().lower()
+        return raw not in ("0", "false", "no", "off")
+
     def _require_hs6() -> bool:
         """صمّام البوّابة الصلبة (Wave 1) — SILK_REQUIRE_HS6=1 يرفض بدءَ /research
         برمز HS فارغ (422). افتراضيًا مُطفأ => السلوك كاليوم (تُقبَل فجوة معلنة)."""
@@ -1066,6 +1081,37 @@ def create_app():
         _require_key(request)
         _rate_limit(request)
         _guard_paid(req)
+        # بوّابة HS الصلبة على المسار **المدفوع** (بلاغ «حليب نادك»، الثغرة
+        # الأولى): كان `/deepen` يمرّر `req.hs_code` مباشرةً إلى المحرّك بلا
+        # أيّ فحص — المسار الوحيد القادر على صرف رصيدٍ مدفوع، وهو الوحيد الذي
+        # كان بلا بوّابة. والأسوأ: `DeepenRequest.hs_confirmed` كان مُعلَناً
+        # بتعليقٍ يوحي بوجود بوّابة، و**لا يُقرأ إطلاقاً** — حقلٌ ميت يوحي
+        # بأمانٍ غير قائم. الآن يُقرأ هنا كما في `/analyze` و`/research`
+        # تماماً، فتصير نقطةُ الاختناق ثلاثةَ مسارات لا اثنين.
+        _deepen_hs = req.hs_code
+        _deepen_conf = 1.0 if req.hs_code else None
+        if not _deepen_hs and req.product:
+            from silk_hs_resolver import resolve as _resolve_deepen
+            _dp = _resolve_deepen(req.product)
+            _deepen_hs, _deepen_conf = _dp.value, (
+                _dp.confidence if _dp.value is not None else None)
+        from silk_hs_confirm import preflight_block as _preflight_deepen
+        _blocked = _preflight_deepen(
+            req.product, _deepen_hs, req.hs_confirmed,
+            allow_claude=_classify_general_allow_claude(),
+            hs_confidence=_deepen_conf)
+        if _blocked is not None:
+            import silk_ops_log
+            _cd = _blocked.get("hs_confirmation") or {}
+            silk_ops_log.record_error(
+                _blocked.get("error") or "hs_confirmation_blocked",
+                f"رُفض تعميقٌ مدفوع برمز HS غير محسوم لمنتج {req.product!r}: "
+                f"{_cd.get('reason') or _blocked.get('message')}",
+                context={"product": req.product, "hs_code": _deepen_hs,
+                         "path": "/deepen",
+                         "hs_confidence": _blocked.get("hs_confidence"),
+                         "missing_terms": _cd.get("missing_terms")})
+            raise HTTPException(status_code=422, detail=_blocked)
         import silk_context
         with silk_context.deepen_context():
             result = silk_engine.analyze(
@@ -1575,6 +1621,18 @@ def create_app():
         # أرقام كومتريد وتسقف الثقة عند التعليم (silk_render._deep_research_view).
         if isinstance(hs_conf, dict):
             result["hs_confirmation"] = hs_conf
+        # إعادةُ تحقّقٍ للرمز المُعاد من سجلّ (بلاغ «حليب نادك»، الثغرة الثانية):
+        # `resume` يتخطّى بوّابةَ ما قبل التشغيل عمداً (البعثاتُ المخزَّنة تُعاد
+        # بلا نداءٍ جديد، فحجبُها يُفقِد عملاً مدفوعاً اكتمل) — لكنّ المرورَ
+        # الصامت يُعيد إنتاج تقريرٍ على رمزٍ ربّما صار خاطئاً. العقد: **يمرّ
+        # ويُوسَم**، فتعرضه طبقةُ العرض في «حدود هذا التقرير».
+        try:
+            from silk_hs_confirm import revalidate
+            _reval = revalidate(product, hs_code, hs_confidence)
+            if _reval:
+                result["hs_revalidation"] = _reval
+        except Exception as e:  # noqa: BLE001 — وسمٌ تحسينيّ لا يُسقِط تشغيلة
+            log.warning("hs revalidation skipped: %s", e)
         if not ai_ok:
             result["ai_extras_note"] = ai_note
         # التدهور الفعلي = عدم الجهوزية (ready=False، بلاغ حي: _free_ai_
@@ -1961,6 +2019,46 @@ def create_app():
                              "min_confidence": _blocked.get("min_confidence"),
                              "missing_terms": _conf_detail.get("missing_terms")})
                 raise HTTPException(status_code=422, detail=_blocked)
+
+        # بوّابةُ الالتباس داخل الترويسة (البند ٣ — تحصينٌ وقائيّ لا إصلاحُ
+        # عطلٍ مُثبَت). تصحيحُ المالك مُسجَّل: حادثةُ «نادك» **لم تكن** التباساً
+        # — `resolve` أعاد 040120 الصحيح؛ الرمزُ الخاطئ دخل عبر مسارٍ بلا
+        # بوّابة (أُغلِق في البند ١). هذه البوّابة تعالج خطراً **مختلفاً** لم
+        # يقع بعد: 040110/040120/040150 تتمايز بنسبةِ دسمٍ رقمية لا بكلمة،
+        # فالمُحلِّل الحتمي قد يحسم واحداً منها بثقةٍ عالية وهو مخطئ.
+        # `silk_hs_classifier.classify_general` يملك القاعدةَ الصحيحة أصلاً
+        # (`_clearly_auto`: لا حسمَ تلقائيّ حين يتقارب المرشّحان ضمن
+        # `_AUTO_MARGIN`) — لكنّ المسارَين كانا يتجاوزانه إلى `resolve` المجرّد.
+        # هنا يُوصَل على `/research` **وحده** (المسار الأغلى؛ سؤالٌ واحدٌ قبله
+        # أرخص من تقريرٍ كاملٍ على رمزٍ خاطئ)، وبلا أيّ نداء كلود
+        # (`allow_claude=False`) فيبقى مجانياً وحتمياً.
+        # صمّام: SILK_RESEARCH_AMBIGUITY_GATE=0 يعطّله.
+        if (req.resume is None and not req.hs_code
+                and not getattr(req, "hs_confirmed", False)
+                and _research_ambiguity_gate_enabled()):
+            import silk_hs_classifier as _hsc
+            _cls = _hsc.classify_general(product or "", allow_claude=False)
+            if _cls.get("tier") != "auto" and (_cls.get("candidates") or []):
+                import silk_ops_log
+                silk_ops_log.record_error(
+                    "hs_ambiguous_blocked",
+                    f"رُفض بدءُ بحثٍ لالتباسِ رمز HS لمنتج {product!r} — "
+                    f"مرشّحون: "
+                    f"{[c.get('hs6') for c in _cls['candidates']]}",
+                    context={"product": product, "hs_code": hs_code,
+                             "market_iso3": market_ref.iso3,
+                             "tier": _cls.get("tier")})
+                raise HTTPException(status_code=422, detail={
+                    "error": "hs_ambiguous",
+                    "message": (
+                        f"«{product}» يطابق أكثر من رمزٍ مقبول بفارقٍ غير "
+                        "حاسم — اختر الرمز الصحيح قبل بدء الدراسة (البنود "
+                        "داخل الترويسة الواحدة قد تتمايز بنسبةٍ رقمية لا "
+                        "بكلمة، فالحسمُ التلقائي هنا غير آمن)."),
+                    "hs_code_deterministic": hs_code,
+                    "candidates": _cls.get("candidates") or [],
+                    "candidates_source": _cls.get("source"),
+                })
 
         # بوابة «خارج التغطية» (اتفاق المالك) — تسبق الجهوزية/الحجز: مع تفعيل
         # تغطية العالم، سوقٌ ليس Tier-1 ولا ضمن مجموعة أكبر مستوردي هذا الرمز
@@ -2787,6 +2885,16 @@ def create_app():
         # الأسلوب يُخزَّن مع السجل فتتبعه التصديرات افتراضياً.
         regen_style = str(request.query_params.get("style") or "").lower() \
             or None
+        # نفسُ عقد `resume` (يمرّ ويُوسَم): إعادةُ التوليد تُعيد استعمال
+        # `found["hs_code"]` المخزَّن بلا أيّ فحص — فتُعيد كتابةَ تقريرٍ كاملٍ
+        # على رمزٍ ربّما صار خاطئاً. الوسمُ يُحفَظ مع السجلّ فيظهر في الحدود.
+        try:
+            from silk_hs_confirm import revalidate as _reval_fn
+            _reval = _reval_fn(found.get("product", ""), found.get("hs_code"))
+            if _reval:
+                found["hs_revalidation"] = _reval
+        except Exception as e:  # noqa: BLE001 — وسمٌ تحسينيّ لا يُسقِط الطلب
+            log.warning("hs revalidation skipped on regen: %s", e)
         report_out = write_reviewed_report(
             mission_reports, analyst_summary, verdict,
             found.get("product", ""), market_name, trace_id=trace_id,

@@ -1755,6 +1755,11 @@ def _deep_research_view(result: dict) -> dict | None:
         limits.append(f"التقرير الكامل غائب: {clean_failure_reason}")
     if result.get("hs_resolution_note"):
         limits.append(f"تصنيف HS: {_humanize_gap_note(result['hs_resolution_note'])}")
+    # وسمُ إعادة التحقّق (resume / إعادة توليد التقرير): رمزٌ أُعيد من سجلٍّ
+    # سابق ولم يعد يوافق حُكمَ التصنيف اليوم — يمرّ ويُعلَن، لا يُحجَب ولا يُخفى.
+    _reval = result.get("hs_revalidation")
+    if isinstance(_reval, dict) and _reval.get("message"):
+        limits.insert(0, _reval["message"])
     if result.get("ai_extras_note"):
         limits.append(f"تحليل إضافي: {_humanize_gap_note(result['ai_extras_note'])}")
     if verdict.get("ai_note"):

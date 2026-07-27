@@ -214,6 +214,119 @@ def test_scanner_handles_a_missing_database_quietly(tmp_path):
     assert _audit(str(tmp_path / "nope.db")) == []
 
 
+# ── ١ج) إغلاقُ المسارين غير المحروسين + جذرُ البذرة ─────────────────────────
+
+def test_deepen_now_has_an_hs_gate_and_a_confirm_escape_hatch():
+    """`/deepen` (المسار المدفوع) كان بلا بوّابة HS إطلاقاً — وبلا `hs_confirmed`.
+
+    تصحيحٌ مسجَّل: الحقلُ لم يكن «ميتاً» في `DeepenRequest` — لم يكن موجوداً
+    أصلاً (وُجد في `AnalyzeRequest`/`ResearchRequest` فقط). أُضيف مع البوّابة."""
+    import ast
+    src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "api.py"), encoding="utf-8").read()
+    cls = next(n for n in ast.walk(ast.parse(src))
+               if isinstance(n, ast.ClassDef) and n.name == "DeepenRequest")
+    fields = [t.target.id for t in cls.body if isinstance(t, ast.AnnAssign)]
+    assert "hs_confirmed" in fields, "لا مَخرجَ تأكيدٍ صريح على المسار المدفوع"
+    # والبوّابة نفسها مُستدعاة داخل معالج /deepen.
+    deepen = src.split("def deepen(req: DeepenRequest")[1].split("\n    @app.")[0]
+    assert "preflight_block" in deepen or "_preflight_deepen" in deepen
+    assert "req.hs_confirmed" in deepen
+
+
+def test_resume_and_regen_revalidate_and_tag_without_blocking():
+    """`resume`/إعادةُ التوليد: تمرّ وتُوسَم — لا تُحجَب (العملُ المدفوع محفوظ)."""
+    src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "api.py"), encoding="utf-8").read()
+    assert src.count("revalidate") >= 2          # الأنبوب + إعادة التوليد
+    assert '"hs_revalidation"' in src
+    # وسمٌ لا حجب: لا HTTPException في مسار إعادة التحقّق.
+    assert "hs_revalidation" not in src.split("raise HTTPException")[0][-400:]
+
+
+def test_revalidate_flags_a_stale_stored_code_but_returns_none_when_healthy():
+    """عقدُ الوسم: dict للرمز الذي لم يعد يوافق حُكمَ اليوم، None للسليم."""
+    stale = HC.revalidate("حليب نادك", "040110")
+    assert stale and stale["resolver_today"] == "040120"
+    assert stale["agrees_with_resolver_today"] is False
+    assert HC.revalidate("تمور", "080410") is None
+
+
+def test_revalidation_message_reaches_the_report_limits():
+    """الوسمُ يظهر في «حدود هذا التقرير» — لا يُخزَّن صامتاً."""
+    src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "silk_render.py"), encoding="utf-8").read()
+    assert 'result.get("hs_revalidation")' in src
+    assert 'limits.insert(0, _reval["message"])' in src
+
+
+def test_seed_coverage_measures_the_root_cause_and_locks_it():
+    """٩٧٪ من البذرة بلا حارسٍ دلاليّ عربي — الجذر، لا العَرَض.
+
+    صفٌّ بلا `name_ar` وبلا `keywords` لا يُبلَغ من اسمٍ عربي إطلاقاً، فيصير
+    **رمزَ إمدادٍ فقط**: لا يظهر إلا حين يُمرَّر صراحةً — وهناك عاشت حادثةُ
+    040110. القفلُ يمنع نموَّ العدد بلا قرارٍ صريح."""
+    cov = HC.seed_coverage()
+    assert cov["total"] > 5000
+    assert cov["arabic_guarded"] == cov["total"] - cov["supply_only"]
+    # الحالةُ المرصودة وقت الكتابة: 159 مُحصَّناً من 5627 (5468 إمدادٌ فقط).
+    # تحسينُ التغطية مرحَّبٌ به (يُخفِّض supply_only)؛ تدهورُها يكسر القفل.
+    assert cov["supply_only"] <= 5468, (
+        f"عددُ رموز الإمداد-فقط ارتفع إلى {cov['supply_only']} — كلُّ صفٍّ "
+        "جديدٍ بلا عربية يوسّع السطحَ الذي دخل منه 040110")
+    assert cov["arabic_guarded"] >= 159
+
+
+def test_040110_family_is_supply_only_by_construction():
+    """بنودُ الترويسة 0401 عدا 040120 بلا عربية — لا يبلغها المُحلِّل العربي."""
+    from silk_hs_resolver import load_hs_codes
+    rows = {r["hs_code"]: r for r in load_hs_codes()
+            if str(r.get("hs_code", "")).startswith("0401")}
+    assert (rows["040120"].get("name_ar") or "").strip()
+    for code in ("040110", "040140", "040150"):
+        assert not (rows[code].get("name_ar") or "").strip(), code
+        assert not (rows[code].get("keywords") or "").strip(), code
+
+
+def test_english_product_can_wrongly_confirm_against_a_supply_only_row():
+    """الحارسُ ليس أعمى فحسب — يُصادِق الخطأ: «full fat milk» ضد 040110.
+
+    وصفُ 040110 «…fat content…not exceeding 1%» (منزوعُ الدسم) يحوي «fat»
+    و«milk»، فمنتجٌ **كاملُ الدسم** يجتاز التأكيدَ ضد الرمز المعاكس تماماً.
+    هذا توثيقُ حدٍّ معروف (البنودُ تتمايز برقمٍ لا بكلمة)، لا سلوكٌ مرغوب."""
+    r = HC.confirm_hs("full fat milk", "040110")
+    assert r["confirmed"] is True and r["overlap"] >= 0.5
+
+
+def test_research_ambiguity_gate_is_deterministic_and_valved():
+    """بوّابةُ الالتباس على `/research`: بلا كلود، وبصمّامٍ صريح."""
+    src = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "api.py"), encoding="utf-8").read()
+    assert "SILK_RESEARCH_AMBIGUITY_GATE" in src
+    assert "_research_ambiguity_gate_enabled()" in src
+    block = src.split('"error": "hs_ambiguous"')[0][-1400:]
+    assert "allow_claude=False" in block, "البوّابة يجب ألّا تصرف نداء كلود"
+    # مقصورةٌ على /research: لا ذكرَ لها في معالجَي /analyze و/deepen.
+    assert src.count("_research_ambiguity_gate_enabled()") == 2   # التعريف + نداء
+
+
+def test_ambiguous_product_is_caught_deterministically():
+    """المُصنِّف يرفض الحسمَ التلقائي عند تقارب المرشّحين — بلا شبكة."""
+    import socket
+    real = socket.socket
+
+    def _no_net(*a, **k):
+        raise OSError("network disabled for offline test")
+
+    socket.socket = _no_net
+    try:
+        import silk_hs_classifier as K
+        assert K.classify_general("حليب", allow_claude=False)["tier"] != "auto"
+        assert K.classify_general("تمور", allow_claude=False)["tier"] == "auto"
+    finally:
+        socket.socket = real
+
+
 # ── ٢) فصلُ الحكم (حتمي) عن السرد (نداءٌ لغويٌّ اختياري) ──────────────────────
 
 def test_inconclusive_is_a_verdict_not_an_absence():

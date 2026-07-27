@@ -335,6 +335,81 @@ def confidence_block(product: str, hs_code: str | None,
     }
 
 
+def revalidate(product: str, hs_code: str | None,
+               hs_confidence: object = None,
+               path: str = "data/hs_codes.csv") -> dict | None:
+    """أعِد التحقّق من رمزٍ **مخزَّن** يُعاد تشغيلُه — وسمٌ لا حجب.
+
+    `resume` وإعادةُ توليد التقرير يُعيدان استعمالَ رمزٍ حُسِم في الماضي: حجبُهما
+    يُفقِد المالكَ عملاً مدفوعاً سبق أن اكتمل (والبعثات المخزَّنة تُعاد بلا نداء
+    جديد) — لكنّ تمريرَهما بصمتٍ يُعيد إنتاج تقريرٍ على رمزٍ ربّما صار خاطئاً.
+    فالعقد هنا: **يمرّ ويُوسَم**. تُعيد `None` حين لا شيء يُقال (الرمزُ يوافق
+    حُكمَ اليوم ويجتاز التأكيد والعتبة)، وإلا dict يُرفَق بالنتيجة فتعرضه طبقةُ
+    العرض في «حدود هذا التقرير».
+
+    قراءةٌ حتميّة صرفة: صفر شبكة، صفر نداء كلود، صفر تكلفة."""
+    code = str(hs_code or "").strip()
+    if not code:
+        return None
+    from silk_hs_resolver import resolve
+    dp = resolve(product or "", path=path)
+    conf_contract = confirm_hs(product or "", code, path)
+    notes: list[str] = []
+    if dp.value and dp.value != code:
+        notes.append(f"المُحلِّل الحتمي اليوم يعيد {dp.value} لهذا الاسم "
+                     f"لا {code} المخزَّن")
+    if is_flagged(conf_contract):
+        _missing = "، ".join(conf_contract.get("missing_terms") or [])
+        notes.append(f"وصف الرمز المخزَّن «{conf_contract.get('code_desc')}» "
+                     f"لا يشمل صفة المنتج المميّزة"
+                     + (f" ({_missing})" if _missing else ""))
+    try:
+        _c = None if hs_confidence is None else float(hs_confidence)
+    except (TypeError, ValueError):
+        _c = None
+    if _c is not None and _c < min_confidence():
+        notes.append(f"ثقةُ التصنيف {_c:.2f} دون العتبة "
+                     f"{min_confidence():.2f} المعمول بها اليوم")
+    if not notes:
+        return None
+    return {
+        "agrees_with_resolver_today": bool(dp.value and dp.value == code),
+        "stored_hs": code,
+        "resolver_today": dp.value,
+        "resolver_confidence_today": dp.confidence,
+        "confirmed": conf_contract.get("confirmed"),
+        "notes": notes,
+        "message": ("رمزُ HS المستعمَل في هذه التشغيلة أُعيد من سجلٍّ سابق ولم "
+                    "يَعُد يوافق حُكمَ التصنيف اليوم: " + "؛ ".join(notes)
+                    + ". أعِد تصنيف المنتج قبل الاعتماد على أرقام هذا التقرير."),
+    }
+
+
+def seed_coverage(path: str = "data/hs_codes.csv") -> dict:
+    """تغطيةُ بذرة التصنيف — كم صفّاً يملك حارساً دلالياً عربياً وكم لا يملك.
+
+    صفٌّ بلا `name_ar` **وبلا** `keywords` لا يمكن بلوغُه من اسمٍ عربي إطلاقاً
+    (المُحلِّل يطابق العربية على هذين الحقلين)، فيصير **رمزَ إمدادٍ فقط**: لا
+    يُنتَج إلا حين يُمرَّر صراحةً — وهناك بالضبط تعيش حادثةُ 040110. يُستعمَل
+    في قفلِ انحدارٍ يمنع نموَّ هذا العدد بلا قرار."""
+    import csv as _csv
+    total = ar = kw = guarded = 0
+    try:
+        with open(path, newline="", encoding="utf-8") as fh:
+            for row in _csv.DictReader(fh):
+                total += 1
+                has_ar = bool((row.get("name_ar") or "").strip())
+                has_kw = bool((row.get("keywords") or "").strip())
+                ar += has_ar
+                kw += has_kw
+                guarded += bool(has_ar or has_kw)
+    except OSError:
+        return {"total": 0, "with_name_ar": 0, "with_keywords": 0,
+                "arabic_guarded": 0, "supply_only": 0}
+    return {"total": total, "with_name_ar": ar, "with_keywords": kw,
+            "arabic_guarded": guarded, "supply_only": total - guarded}
+
+
 def preflight_block(product: str, hs_code: str | None,
                     hs_confirmed: bool = False,
                     path: str = "data/hs_codes.csv",
