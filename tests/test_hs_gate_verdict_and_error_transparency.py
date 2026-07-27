@@ -288,14 +288,66 @@ def test_040110_family_is_supply_only_by_construction():
         assert not (rows[code].get("keywords") or "").strip(), code
 
 
-def test_english_product_can_wrongly_confirm_against_a_supply_only_row():
-    """الحارسُ ليس أعمى فحسب — يُصادِق الخطأ: «full fat milk» ضد 040110.
+def test_negation_aware_guard_kills_the_false_endorsement():
+    """العيبُ المُبلَّغ مُغلَق: «full fat milk» لم يعد يُصادَق ضد 040110.
 
     وصفُ 040110 «…fat content…not exceeding 1%» (منزوعُ الدسم) يحوي «fat»
-    و«milk»، فمنتجٌ **كاملُ الدسم** يجتاز التأكيدَ ضد الرمز المعاكس تماماً.
-    هذا توثيقُ حدٍّ معروف (البنودُ تتمايز برقمٍ لا بكلمة)، لا سلوكٌ مرغوب."""
-    r = HC.confirm_hs("full fat milk", "040110")
-    assert r["confirmed"] is True and r["overlap"] >= 0.5
+    و«milk»، فكان التداخلُ 0.67 يُصادِق الرمزَ المعاكس تماماً. التداخلُ يَعُدّ
+    الكلماتِ ولا يقرأ النفي — فوعيُ النفي يتقدّم عليه ويفرض الرفض."""
+    for name in ("full fat milk", "whole milk", "حليب كامل الدسم"):
+        r = HC.confirm_hs(name, "040110")
+        assert r["confirmed"] is False, name
+        assert r.get("negation_conflict") is True, name
+    # التداخلُ الخام يبقى مرصوداً (لم يُزوَّر) — الرفضُ يعلو عليه لا يمحوه.
+    assert HC.confirm_hs("full fat milk", "040110")["overlap"] >= 0.5
+
+
+def test_negation_awareness_does_not_over_block_healthy_pairs():
+    """لا انحدارَ على المسار السليم — أزواجٌ صحيحةٌ تبقى مؤكَّدة."""
+    for name, code in (("تمور", "080410"), ("عسل سدر", "040900"),
+                       ("حليب نادك", "040120"),
+                       ("زبدة الفول السوداني", "200811")):
+        r = HC.confirm_hs(name, code)
+        assert r["confirmed"] is True, (name, code)
+        assert not r.get("negation_conflict"), (name, code)
+
+
+def test_product_term_inside_an_excluded_span_is_rejected():
+    """«other than frozen» + منتجٌ مجمّد = تأكيدٌ لِما يستثنيه الرمز."""
+    blocked = HC.confirm_against_description(
+        "frozen beef", "999999", "Meat of bovine animals, other than frozen")
+    assert blocked["confirmed"] is False
+    assert blocked.get("negation_conflict") is True
+    # والمنتجُ الذي **يقع داخل** نطاق الرمز لا يُرفَض بهذه القاعدة.
+    ok = HC.confirm_against_description(
+        "fresh beef", "999999", "Meat of bovine animals, other than frozen")
+    assert not ok.get("negation_conflict")
+
+
+def test_exclusion_detector_distinguishes_bounded_from_plain_descriptions():
+    """كاشفُ النفي/العتبة يميّز الوصفَ المحدود من الوصف العادي."""
+    assert HC.describes_by_exclusion("fat content not exceeding 1%") is True
+    assert HC.describes_by_exclusion("Dates, fresh or dried") is False
+
+
+def test_false_endorsement_surface_is_measured_and_locked():
+    """حجمُ السطح المعرَّض مقيسٌ لا موصوف — ٥٠٪ من الجدول.
+
+    صفٌّ يُعرَّف بنفيٍ أو عتبةٍ رقمية لا يستطيع التداخلُ الحكمَ عليه بنيوياً؛
+    وحين يكون **إمداداً فقط** (بلا عربية) فهو بالضبط سطحُ المصادقة الكاذبة."""
+    import csv
+    rows = list(csv.DictReader(open(
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "data", "hs_codes.csv"), encoding="utf-8")))
+    bounded = [r for r in rows
+               if HC.describes_by_exclusion(f"{r.get('name_en') or ''} "
+                                            f"{r.get('name_ar') or ''}")]
+    assert len(rows) > 5000
+    # الحالةُ المرصودة وقت الكتابة: 2,828 من 5,627 (50.3%). القفلُ يرصد
+    # النموّ المفاجئ؛ الانخفاض (تحسينُ الأوصاف) مرحَّبٌ به.
+    assert len(bounded) <= 2900, (
+        f"سطحُ الأوصاف المحدودة بنفي/عتبة ارتفع إلى {len(bounded)}")
+    assert len(bounded) >= 2000
 
 
 def test_research_ambiguity_gate_is_deterministic_and_valved():

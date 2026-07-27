@@ -178,6 +178,93 @@ def _find_row(hs_code: str, path: str = "data/hs_codes.csv") -> dict | None:
 CONTEXTUAL_TAG = "بيانات فئة مجاورة — مؤشر سياقي لا مقياس فعلي"
 
 
+# ── وعيُ النفي (بلاغ «full fat milk» ضد 040110) ─────────────────────────────
+# الحادثة: `confirm_hs("full fat milk", "040110")` أعاد **مؤكَّداً** بتداخل
+# 0.67 — لأنّ وصفَ الرمز «…fat content, by weight, not exceeding 1%» يحوي
+# «fat» و«milk»، وهو يعني **النقيض** (منزوعُ الدسم). تداخلُ النصّ يَعُدّ
+# الكلماتِ ولا يقرأ النفي: «لا يتجاوز ١٪» و«كامل الدسم» يتشاركان الكلمات
+# نفسَها ويتناقضان تماماً.
+#
+# القاعدة: حين يكون الرمزُ **محدوداً بنفيٍ أو بعتبةٍ رقمية**، لا يجوز أن
+# يحسم التداخلُ وحده. يُفرَض `confirmed=False` في حالتين:
+#   (١) صفةُ المنتج تقع **داخل** المقطع المنفيّ نفسه («other than X» ومنتجُنا
+#       هو X) — تأكيدٌ صريحٌ لِما يستثنيه الرمز.
+#   (٢) اسمُ المنتج يحمل **صفةَ درجةٍ/كمّية** (كامل، عالي، منزوع، full، whole،
+#       high…) والوصفُ محدودٌ بعتبة — فالتمييزُ رقميٌّ لا لفظيّ، والتداخلُ
+#       أعمى عنه بنيوياً. فشلٌ آمن: يُسأل المستخدم بدل أن يُصادَق الخطأ.
+# ليست هذه قائمةَ منتجاتٍ مكتوبةً صلباً (عائلة `hardcoded-product-rule`) —
+# بل أدواتُ نفيٍ وصفاتُ درجةٍ لغوية، لا اسمَ منتجٍ ولا رمزَ فيها.
+_NEGATION_SPAN_RE = re.compile(
+    r"\b(?:not\s+exceeding|not\s+containing|not\s+more\s+than|less\s+than"
+    r"|other\s+than|excluding|except(?:ing)?|free\s+of|without|unsweetened"
+    r"|n\.?e\.?[cs]\.?|not\s+elsewhere\s+specified"
+    r"|بخلاف|عدا|باستثناء|لا\s+يتجاوز|دون|خالٍ\s+من|بدون)\b",
+    re.I)
+# عتبةٌ رقمية (٪ أو نسبةُ وزن/حجم) — التمييزُ الحقيقيّ بين بنود الترويسة.
+_THRESHOLD_RE = re.compile(
+    r"\d+\s*(?:%|per\s*cent|في\s*المئة|بالمئة)|by\s+weight|by\s+volume"
+    r"|بالوزن|بالحجم", re.I)
+# صفاتُ الدرجة/الكمّية التي يستحيل على التداخل أن يحكم عليها أمام عتبة.
+_DEGREE_TERMS = frozenset({
+    "full", "whole", "high", "rich", "heavy", "concentrated", "pure",
+    "low", "light", "skimmed", "skim", "lean", "reduced", "semi",
+    "sweetened", "unsweetened", "fortified", "extra", "virgin", "crude",
+    "كامل", "كامله", "كاملة", "عالي", "عاليه", "عالية", "غني", "غنيه",
+    "منزوع", "منزوعه", "منزوعة", "مركز", "مركزه", "مركزة", "خام", "نقي",
+    "قليل", "خفيف", "محلى", "مدعم", "بكر", "دسم", "الدسم",
+})
+
+
+def describes_by_exclusion(code_desc: str) -> bool:
+    """هل يُعرَّف الرمزُ بنفيٍ أو بعتبةٍ رقمية؟ — negation/threshold-defined."""
+    d = code_desc or ""
+    return bool(_NEGATION_SPAN_RE.search(d) or _THRESHOLD_RE.search(d))
+
+
+def _negated_terms(code_desc: str) -> set[str]:
+    """صفاتُ المقطع المنفيّ — ما بعد أداةِ النفي حتى أقرب فاصل."""
+    out: set[str] = set()
+    for m in _NEGATION_SPAN_RE.finditer(code_desc or ""):
+        tail = (code_desc or "")[m.end():]
+        span = re.split(r"[,;()،؛]|\band\b|\bor\b", tail, maxsplit=1)[0]
+        out.update(_tokens(span))
+    return out
+
+
+# فاصلُ الحقول عند ضمّ صفّ CSV لفحص النفي — **ليس مسافة**. المقطعُ المنفيّ
+# يمتدّ حتى أقرب فاصل، فضمُّ الحقول بمسافةٍ كان يجعل النفيَ في `name_en`
+# يبتلع `keywords` التالية: صفُّ 040221 «Milk powder unsweetened» بكلماتٍ
+# مفتاحية تحوي «حليب» أنتج تعارضاً كاذباً على «حليب» نفسه (اكتُشف بفشل
+# قفلِ بوّابة الالتباس قبل الدمج). الفاصلةُ المنقوطة تُنهي المقطع.
+_FIELD_SEP = " ؛ "
+
+
+def _negation_conflict(product_terms: list[str], code_desc: str
+                       ) -> str | None:
+    """سببُ رفضٍ قاطعٍ رغم التداخل — أو `None` حين لا تعارض.
+
+    يُستدعى بعد حساب التداخل ويتقدّم عليه: التداخلُ يَعُدّ الكلمات، وهذا يقرأ
+    ما تعنيه. Returns a human reason (Arabic) or None."""
+    desc = code_desc or ""
+    if not desc:
+        return None
+    # (١) صفةُ المنتج داخل المقطع المنفيّ = تأكيدٌ لِما يستثنيه الرمز.
+    negated = _negated_terms(desc)
+    if negated:
+        clash = [t for t in product_terms if _covered(t, sorted(negated))]
+        if clash:
+            return (f"وصفُ الرمز يستثني صراحةً ما يؤكّده اسمُ المنتج "
+                    f"({'، '.join(clash)})")
+    # (٢) صفةُ درجةٍ في اسم المنتج أمام رمزٍ محدودٍ بعتبةٍ رقمية.
+    if _THRESHOLD_RE.search(desc) or _NEGATION_SPAN_RE.search(desc):
+        degree = [t for t in product_terms if t in _DEGREE_TERMS]
+        if degree:
+            return (f"الرمزُ محدودٌ بعتبةٍ/نفيٍ رقميّ واسمُ المنتج يحمل صفةَ "
+                    f"درجة ({'، '.join(degree)}) — التمييزُ رقميٌّ لا لفظيّ، "
+                    "فلا يُحسَم بتطابق الكلمات")
+    return None
+
+
 def _overlap_stats(p_terms: list[str], desc_terms: list[str]
                    ) -> tuple[list[str], list[str], float]:
     """نواةُ حساب التداخل المشتركة — (المُغطّى، الناقص، نسبة التداخل).
@@ -219,6 +306,14 @@ def confirm_against_description(product_name: str, hs_code: str,
     shared, missing, overlap = _overlap_stats(p_terms, desc_terms)
     threshold = min_overlap if min_overlap is not None else _min_overlap()
     confirmed = overlap >= threshold
+    # وعيُ النفي يتقدّم على التداخل مهما بلغ — راجع `_negation_conflict`.
+    _conflict = _negation_conflict(p_terms, desc)
+    if _conflict:
+        return {"confirmed": False, "hs_code": str(hs_code or ""),
+                "code_desc": desc, "product_terms": p_terms,
+                "shared_terms": shared, "missing_terms": missing,
+                "overlap": overlap, "reason": _conflict,
+                "negation_conflict": True}
     if confirmed:
         reason = "وصف الرمز يشمل صفات المنتج المميّزة"
     else:
@@ -260,6 +355,18 @@ def confirm_hs(product_name: str, hs_code: str,
     shared, missing, overlap = _overlap_stats(p_terms, c_terms)
     confirmed = overlap >= _min_overlap()
     desc = _code_desc(row)
+    # وعيُ النفي يُقاس على **كلّ** نصّ الصفّ (الاسمان + الكلمات المفتاحية)،
+    # لا على الوصف المعروض وحده: عتبةُ «not exceeding 1%» قد تعيش في name_en
+    # بينما `_code_desc` يعيد name_ar القصير.
+    _full_desc = _FIELD_SEP.join(
+        str(row.get(f) or "") for f in ("name_ar", "name_en", "keywords"))
+    _conflict = _negation_conflict(p_terms, _full_desc)
+    if _conflict:
+        return {"confirmed": False, "hs_code": str(hs_code or ""),
+                "code_desc": desc, "product_terms": p_terms,
+                "shared_terms": shared, "missing_terms": missing,
+                "overlap": overlap, "reason": _conflict,
+                "negation_conflict": True}
     if confirmed:
         reason = "وصف الرمز يشمل صفات المنتج المميّزة"
     else:
