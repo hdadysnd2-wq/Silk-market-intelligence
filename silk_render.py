@@ -1297,6 +1297,13 @@ def _verdict_tone(vtxt: object) -> str:
     t = str(vtxt or "").upper()
     if "NO-GO" in t or "NO GO" in t:
         return "nogo"
+    # «مبدئي وناقص البيانات» حكمٌ حتميٌّ صادر فعلاً، لا غيابَ حكم (بلاغ
+    # المالك: كتلة SWOT تحمل توصيةً كاملة والشارة تقول «تعذّر إصدار توصية»).
+    # `JuryCommittee.evaluate` تُصدر «PRELIMINARY / INCONCLUSIVE» كلّما فشل
+    # وكيلٌ/بعثةٌ واحدة مع بقاء نتائج حقيقية — ولم يكن لها فرعٌ هنا فتنهار
+    # إلى unknown. فشلُ نداءٍ واحد يُنقِص التغطية؛ لا يمحو الحكم.
+    if "INCONCLUSIVE" in t:
+        return "inconclusive"
     if "CONDITIONAL" in t:
         return "conditional"
     if "WATCH" in t:
@@ -1314,6 +1321,8 @@ def _verdict_tone(vtxt: object) -> str:
     s = str(vtxt or "")
     if "عدم الدخول" in s:
         return "nogo"
+    if "غير محسوم" in s or "غير محسومة" in s:
+        return "inconclusive"
     if "مشروط" in s:
         return "conditional"
     if "مراقبة" in s:
@@ -1334,6 +1343,9 @@ def _verdict_tone(vtxt: object) -> str:
 # السوق» (بلاغ مراجعة المالك: الشارة كانت تخالف المتن).
 _VERDICT_LABELS_AR = {"go": "التوصية بالدخول", "conditional": "دخول مشروط",
                       "watch": "مراقبة السوق", "nogo": "عدم الدخول حالياً",
+                      # حكمٌ حتميٌّ صادر بتغطيةٍ ناقصة — ليس غيابَ حكم.
+                      "inconclusive": "نتيجة مبدئية — غير محسومة",
+                      # «unknown» محجوزةٌ الآن لغيابِ الحكم الحتمي كلياً فقط.
                       "unknown": "تعذّر إصدار توصية"}
 
 
@@ -1743,6 +1755,11 @@ def _deep_research_view(result: dict) -> dict | None:
         limits.append(f"التقرير الكامل غائب: {clean_failure_reason}")
     if result.get("hs_resolution_note"):
         limits.append(f"تصنيف HS: {_humanize_gap_note(result['hs_resolution_note'])}")
+    # وسمُ إعادة التحقّق (resume / إعادة توليد التقرير): رمزٌ أُعيد من سجلٍّ
+    # سابق ولم يعد يوافق حُكمَ التصنيف اليوم — يمرّ ويُعلَن، لا يُحجَب ولا يُخفى.
+    _reval = result.get("hs_revalidation")
+    if isinstance(_reval, dict) and _reval.get("message"):
+        limits.insert(0, _reval["message"])
     if result.get("ai_extras_note"):
         limits.append(f"تحليل إضافي: {_humanize_gap_note(result['ai_extras_note'])}")
     if verdict.get("ai_note"):
@@ -1858,6 +1875,16 @@ def _deep_research_view(result: dict) -> dict | None:
         "verdict_tone": verdict_tone,
         "verdict_label": _VERDICT_LABELS_AR[verdict_tone],
         "verdict": verdict,
+        # فصلٌ بنيويّ بين الحكم والسرد (بلاغ المالك): **الحكم** يُشتقّ من
+        # التوليف الحتمي (`silk_synthesis` — المرحلة ١ لا تُطفأ أبداً)، و**السرد**
+        # طبقةُ نثرٍ لغويةٍ اختيارية. فشلُ نداء الكاتب يُعلَّم هنا وحده — ولا
+        # يمسّ `verdict_tone`/`verdict_label` بحال. الواجهة/المُصدِّرات تعرض
+        # «السرد غير متاح» في مكانه بدل تخفيض الشارة.
+        "narrative": {
+            "available": bool(report_out.get("report")),
+            "reason": clean_failure_reason if not report_out.get("report") else "",
+            "source": "llm",
+        },
         # Wave 1.3: عقد تأكيد رمز HS — يعرضه كل مُصدِّر/لوحة كي يعيد تأطير
         # أرقام كومتريد «مؤشر سياقي» عند التعليم. None/غير مؤكَّد لا يُطأطئ شيئاً.
         "hs_confirmation": hs_conf or {},

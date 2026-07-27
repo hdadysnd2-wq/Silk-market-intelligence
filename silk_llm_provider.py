@@ -272,8 +272,15 @@ class AnthropicProvider(LLMProvider):
             # التصعيد عبر last_stop_reason() — نص جزئي مفيد لا None.
             return text
         except Exception as e:  # noqa: BLE001 — optional layer must never crash analysis
-            log.warning("AI judge call failed: %s: %s", type(e).__name__, e)
-            _last_error.set(self._error_detail(e))
+            # سجّل رمزَ الحالة وجسمَ الردّ الفعليَّين لا نوعَ الاستثناء وحده
+            # (طلب المالك): «تعذّر الاتصال» وحدها لا تُميّز 429 من 401 من 529،
+            # وهي أفعالٌ تشغيليةٌ مختلفة. `_error_detail` يلتقطهما أصلاً —
+            # كان السجلّ يرميهما فيبقى التشخيص مستحيلاً من السجلّات.
+            detail = self._error_detail(e)
+            log.warning("AI judge call failed: %s: %s (status=%s body=%s)",
+                        detail.get("type"), detail.get("message"),
+                        detail.get("status_code"), detail.get("response_body"))
+            _last_error.set(detail)
             return None
 
     def complete_tools(self, system, messages, tools, max_tokens, model, timeout):

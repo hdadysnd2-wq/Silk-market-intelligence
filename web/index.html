@@ -810,7 +810,8 @@ $("#researchBtn").addEventListener("click",function(){runDeepResearch()});
    احتياطاً محلياً عند تعذّر تحميل الخادم — لا شاشة فارغة صامتة أبداً. */
 S.serverHist=null;S.serverHistStatus="idle";
 var VERDICT_TONE={"التوصية بالدخول":"s-good","دخول مشروط":"s-warn",
-  "مراقبة السوق":"s-warn","عدم الدخول حالياً":"s-mut","تعذّر إصدار توصية":"s-mut"};
+  "مراقبة السوق":"s-warn","عدم الدخول حالياً":"s-mut",
+  "نتيجة مبدئية — غير محسومة":"s-warn","تعذّر إصدار توصية":"s-mut"};
 function loadServerHistory(){
   S.serverHistStatus="loading";
   return getJSON("/analyses").then(function(list){
@@ -887,7 +888,9 @@ function comp(m,k){var c=(m.components_detail||[]).filter(function(x){return x.n
    (view.deep_research.verdict_tone/verdict_label) — لا حساب موازٍ هنا
    من الرمز الإنجليزي الخام، ولا عرض للرمز نفسه كنص ظاهر (كان
    "CONDITIONAL-GO"/"WATCH" يظهر حرفياً على شارة الغلاف). */
-var TONE_CSS={go:"go",conditional:"go",nogo:"no",watch:"",unknown:""};
+var TONE_CSS={go:"go",conditional:"go",nogo:"no",watch:"",
+  /* حكمٌ حتميٌّ بتغطيةٍ ناقصة — شارةُ تحذير، لا شارةُ «لا توصية». */
+  inconclusive:"",unknown:""};
 function renderDeepResearch(v){
   var dr=v.deep_research,h=v.header||{},verdict=(dr.verdict||{}),ai=verdict.ai||{};
   var tone=TONE_CSS[dr.verdict_tone]||"";
