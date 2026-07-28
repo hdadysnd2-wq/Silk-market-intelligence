@@ -59,10 +59,25 @@ async function settleAfterClassification(page) {
     await page.locator("#advOk").click();
     await page.waitForFunction(() => !document.querySelector(".prov"), { timeout: 10000 });
   } catch (_) { /* لم تظهر استشارةٌ — طبيعيٌّ لأزواج HS/سوق غير مبذورة */ }
+  await settleRunButton(page);
+}
+
+// سباقٌ سابقٌ لهذا الفرع (كان `.catch(() => {})` يبتلع مهلةَ ١٥ ثانية): طلبُ
+// `/research` بعد تأكيد الرمز قد يتجاوزها على عدّاءٍ بطيءٍ يضرب مصادرَ حيّة،
+// فتمضي الجولةُ التالية وتنقر زرّاً **ما يزال معطّلاً**، ثم يصل ردُّ الطلب
+// السابق فيرسم لافتةً (toast) تعترض النقر => فشلٌ لا علاقة له بما نختبره.
+// الحلّ: انتظر استقرارَ الزرّ فعلاً (بمهلةٍ تكفي عدّاءً بطيئاً) ثم نظّف
+// اللافتات العابرة قبل الجولة التالية — بلا إضعافِ أيّ تأكيدٍ في التدفّق.
+async function settleRunButton(page) {
   await page.waitForFunction(() => {
     const b = document.querySelector("#researchBtn");
     return b && !b.disabled;
-  }, { timeout: 15000 }).catch(() => {});
+  }, { timeout: 60000 });
+  // اللافتة تزول ذاتياً بعد ٣٫٢ ثانية؛ إزالتُها هنا تمنع اعتراضَ النقر
+  // التالي حين تصل متأخّرةً. ليست تأكيداً — ضوضاءُ واجهةٍ عابرة.
+  await page.evaluate(() => {
+    document.querySelectorAll(".toast").forEach((el) => el.remove());
+  });
 }
 
 async function runCase(page, { product, expect }) {
@@ -81,6 +96,8 @@ async function runCase(page, { product, expect }) {
   }
   ok(`${product}:market_selected`);
 
+  // لا تنقر زرّاً ما يزال مشغولاً بطلبٍ سابق (نفسُ السباق أعلاه).
+  await settleRunButton(page);
   await page.locator("#researchBtn").click();
 
   if (expect === "dialog") {
