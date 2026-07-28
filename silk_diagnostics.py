@@ -172,10 +172,16 @@ def _probe_anthropic() -> dict:
 
     def go():
         import requests
+
+        # النموذج من مصدر واحد (`silk_ai_judge._MODEL`) لا افتراضٍ مكرّر هنا:
+        # المسبار الذي يجسّ نموذجاً غير الذي يناديه الإنتاج يعطي طمأنينة
+        # كاذبة — «المفتاح يعمل» بينما مسار المال يردّ 400 على نموذج آخر.
+        # (الحمولة بلا معاملات معاينة أصلاً، فلا خطر 400 منها هنا.)
+        import silk_ai_judge as _judge
         r = requests.post("https://api.anthropic.com/v1/messages", timeout=25,
                           headers={"x-api-key": key, "anthropic-version": "2023-06-01",
                                    "content-type": "application/json"},
-                          json={"model": os.environ.get("SILK_AI_MODEL", "claude-opus-4-8"),
+                          json={"model": _judge._MODEL,
                                 "max_tokens": 4,
                                 "messages": [{"role": "user", "content": "ping"}]})
         if r.status_code == 200:

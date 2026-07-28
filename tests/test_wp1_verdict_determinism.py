@@ -90,7 +90,10 @@ def test_writer_prompt_carries_hard_verdict_constraint():
     assert "لا \nتخترع نسبة ثقة" in src or "تخترع نسبة ثقة" in src
 
 
-# ── ٢) temperature مثبّتة صفراً على نداءات complete ─────────────────────────
+# ── ٢) معاملات المعاينة: قرار واعٍ بالنموذج ─────────────────────────────────
+# الثلاثة (temperature/top_p/top_k) أُزيلت معاً من Claude 4.7 فصاعداً: إرسال
+# أيٍّ منها يردّ 400 فيسقط النداء كلّه (تقرير بلا سرد، لا حكم غير حتمي). تبقى
+# temperature=0 حيث يقبلها النموذج — تخفّض التشتّت، ولا تضمن تطابقاً.
 
 class _FakeResp:
     def __init__(self, payload_store):
@@ -104,8 +107,12 @@ class _FakeResp:
                 "stop_reason": "end_turn", "usage": {}}
 
 
-def _capture_complete(monkeypatch, model, *, vision=False):
-    """نفّذ نداءً واحداً والتقط الحمولة المرسَلة فعلاً — أداة الاختبارات أدناه."""
+def _capture(monkeypatch, model, *, mode="complete", extra=None):
+    """نفّذ نداءً واحداً والتقط الحمولة المرسَلة فعلاً — أداة الاختبارات أدناه.
+
+    `extra` يحقن مفاتيح في الحمولة قبل الإرسال (لاختبار المنقّي على مفاتيح
+    لا يبنيها المزوّد اليوم — top_p/top_k — فيبقى الحارس صالحاً لو أضافها
+    موضعٌ جديد لاحقاً)."""
     import requests
     from silk_llm_provider import AnthropicProvider
     captured = {}
@@ -116,86 +123,125 @@ def _capture_complete(monkeypatch, model, *, vision=False):
 
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    if vision:
-        out = AnthropicProvider().complete_vision(
+    provider = AnthropicProvider()
+    if extra:
+        real_post = provider._post
+
+        def post_with_extra(key, payload, timeout):
+            payload.update(extra)
+            return real_post(key, payload, timeout)
+
+        monkeypatch.setattr(provider, "_post", post_with_extra)
+    if mode == "vision":
+        out = provider.complete_vision(
             "s", "t", "YWJj", "image/png", 100, model, 30.0)
+    elif mode == "tools":
+        provider.complete_tools("s", [], None, 100, model, 30.0)
+        return captured
     else:
-        out = AnthropicProvider().complete("s", "u", 100, model, 30.0)
+        out = provider.complete("s", "u", 100, model, 30.0)
     assert out == "ok"
     return captured
 
 
-def test_complete_pins_temperature_zero(monkeypatch):
-    captured = _capture_complete(monkeypatch, "claude-x")
+def test_sampling_params_present_for_a_still_supported_model(monkeypatch):
+    """نموذج ما زال يقبلها (Haiku 4.5 بمعرّفه المؤرَّخ) — temperature=0 مُرسَلة،
+    فالصفّ ٤٧ يبقى نافذاً حيث الرافعة موجودة أصلاً."""
+    captured = _capture(monkeypatch, "claude-haiku-4-5-20251001")
     assert captured.get("temperature") == 0
-    assert "top_p" not in captured   # لا top_p مع temperature (توصية Anthropic)
+    assert "top_p" not in captured    # لا يُرسَلان معاً (400 مستقلّ)
+    assert "top_k" not in captured
 
 
-def test_complete_pins_temperature_zero_on_legacy_model(monkeypatch):
-    """نموذج يقبل المعامل (جيل 4) — الحتمية تبقى مثبّتة، الصفّ ٤٧ سليم."""
-    captured = _capture_complete(monkeypatch, "claude-opus-4-8")
-    assert captured.get("temperature") == 0
-
-
-def test_complete_omits_temperature_on_deprecating_model(monkeypatch):
-    """نموذج أزال المعامل (جيل ٥) — يُهمَل تماماً، لا يُرسَل صفراً ولا غيره:
-    إرساله يردّ 400 فيصير النداء كلّه فشلاً (تقرير بلا سرد)."""
-    captured = _capture_complete(monkeypatch, "claude-opus-5")
-    assert "temperature" not in captured
-    # الحمولة الباقية سليمة — الحذف لا يمسّ شيئاً آخر
-    assert captured["model"] == "claude-opus-5"
+def test_sampling_params_absent_for_the_repo_default_model(monkeypatch):
+    """`claude-opus-4-8` — نموذج هذا الريبو الافتراضي (silk_ai_judge.py:20)
+    ويرفض المعاملات: تُحذف كلّياً. هذا هو الاختبار الذي كان سيلتقط أن قائمةً
+    تغطي الجيل الخامس وحده لا تصلح إنتاجياً."""
+    captured = _capture(monkeypatch, "claude-opus-4-8")
+    for key in ("temperature", "top_p", "top_k"):
+        assert key not in captured, key
+    # بقية الحمولة سليمة — الحذف لا يمسّ شيئاً آخر
+    assert captured["model"] == "claude-opus-4-8"
     assert captured["max_tokens"] == 100
 
 
-def test_complete_omits_temperature_for_every_default_prefix(monkeypatch):
-    """كل بادئة في القائمة الافتراضية، ومعها لاحقة مؤرَّخة (مطابقة ببادئة)."""
-    from silk_llm_provider import _NO_TEMPERATURE_PREFIXES
-    assert set(_NO_TEMPERATURE_PREFIXES) == {
-        "claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-mythos-5"}
-    for prefix in _NO_TEMPERATURE_PREFIXES:
+def test_key_is_omitted_never_neutralised(monkeypatch):
+    """الحذف لا الضبط على قيمة محايدة — حضور المفتاح وحده يكفي للرفض بـ400،
+    فقيمة 1.0 «المحايدة» ليست علاجاً."""
+    captured = _capture(monkeypatch, "claude-opus-5")
+    assert "temperature" not in captured.keys()
+
+
+def test_every_rejecting_family_is_covered(monkeypatch):
+    """كل بادئة في القائمة الافتراضية، ومعها لاحقة مؤرَّخة وصيغة كبيرة الأحرف."""
+    from silk_llm_provider import _NO_SAMPLING_PARAMS_PREFIXES
+    assert set(_NO_SAMPLING_PARAMS_PREFIXES) == {
+        "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5",
+        "claude-sonnet-5", "claude-fable-5", "claude-mythos"}
+    for prefix in _NO_SAMPLING_PARAMS_PREFIXES:
         for model in (prefix, f"{prefix}-20260401", prefix.upper()):
-            captured = _capture_complete(monkeypatch, model)
-            assert "temperature" not in captured, model
+            assert "temperature" not in _capture(monkeypatch, model), model
+    # بادئة العائلة تغطي الفرعين معاً (mythos-5 و mythos-preview)
+    for model in ("claude-mythos-5", "claude-mythos-preview"):
+        assert "temperature" not in _capture(monkeypatch, model), model
+
+
+def test_still_supported_families_keep_the_param(monkeypatch):
+    """ما دون 4.7 لم يتغيّر — لا حذف شامل يعيد اللاحتمية عليها."""
+    for model in ("claude-haiku-4-5-20251001", "claude-sonnet-4-6",
+                  "claude-opus-4-6", "claude-sonnet-4-5"):
+        assert _capture(monkeypatch, model).get("temperature") == 0, model
+
+
+def test_scrub_strips_top_p_and_top_k_on_a_rejecting_model(monkeypatch):
+    """المنقّي في `_post` نقطة اختناق: أيّ موضع يحقن top_p/top_k لا يستطيع
+    إعادة إنتاج الـ400 على نموذج رافض."""
+    captured = _capture(monkeypatch, "claude-opus-4-8",
+                        extra={"top_p": 0.9, "top_k": 40})
+    for key in ("temperature", "top_p", "top_k"):
+        assert key not in captured, key
+
+
+def test_temperature_and_top_p_are_never_sent_together(monkeypatch):
+    """على نموذج يقبلها: `top_p` يُنزَع عند تزاحمه مع `temperature` المثبَّتة
+    (Anthropic توصي بضبط أحدهما لا كليهما؛ إرسالهما معاً 400 مستقلّ)."""
+    captured = _capture(monkeypatch, "claude-haiku-4-5-20251001",
+                        extra={"top_p": 0.9})
+    assert captured.get("temperature") == 0
+    assert "top_p" not in captured
 
 
 def test_vision_call_follows_the_same_model_aware_decision(monkeypatch):
     """موضع الرؤية يتبع نفس الحكم — لا موضع ثانٍ يفوت الإصلاح."""
-    assert _capture_complete(
-        monkeypatch, "claude-opus-4-8", vision=True).get("temperature") == 0
-    assert "temperature" not in _capture_complete(
-        monkeypatch, "claude-opus-5", vision=True)
+    assert _capture(monkeypatch, "claude-haiku-4-5-20251001",
+                    mode="vision").get("temperature") == 0
+    assert "temperature" not in _capture(
+        monkeypatch, "claude-opus-4-8", mode="vision")
 
 
-def test_no_temperature_list_is_overridable_by_env(monkeypatch):
-    """`SILK_LLM_NO_TEMPERATURE` مخرج تشغيلي بلا نشر — يحلّ محل الافتراضية."""
-    monkeypatch.setenv("SILK_LLM_NO_TEMPERATURE", "claude-opus-4-8, claude-zeta")
-    assert "temperature" not in _capture_complete(monkeypatch, "claude-opus-4-8")
-    assert "temperature" not in _capture_complete(monkeypatch, "claude-zeta-1")
+def test_tools_loop_is_scrubbed_too_but_never_pinned(monkeypatch):
+    """حلقة الأدوات (البعثات) تبقى على افتراض المزوّد — لا تثبيت (مخرجاتها لا
+    تحدّد الحكم المعروض) — لكنها تمرّ بالمنقّي كغيرها."""
+    assert "temperature" not in _capture(monkeypatch, "claude-x", mode="tools")
+    captured = _capture(monkeypatch, "claude-opus-4-8", mode="tools",
+                        extra={"temperature": 0.5, "top_k": 40})
+    assert "temperature" not in captured
+    assert "top_k" not in captured
+
+
+def test_no_sampling_params_list_is_overridable_by_env(monkeypatch):
+    """`SILK_LLM_NO_SAMPLING_PARAMS` مخرج تشغيلي بلا نشر — يحلّ محل الافتراضية."""
+    monkeypatch.setenv("SILK_LLM_NO_SAMPLING_PARAMS", "claude-zeta, claude-eta")
+    assert "temperature" not in _capture(monkeypatch, "claude-zeta-1")
+    assert "temperature" not in _capture(monkeypatch, "claude-eta")
     # ما ليس في القائمة الجديدة يستعيد المعامل — الاستبدال كامل لا إضافة
-    assert _capture_complete(monkeypatch, "claude-opus-5").get("temperature") == 0
+    assert _capture(monkeypatch, "claude-opus-4-8").get("temperature") == 0
 
 
 def test_empty_env_override_means_no_model_is_exempt(monkeypatch):
     """قيمة فارغة صريحة = إعادة الإرسال للجميع (مخرج طوارئ إن أخطأت القائمة)."""
-    monkeypatch.setenv("SILK_LLM_NO_TEMPERATURE", "")
-    assert _capture_complete(monkeypatch, "claude-opus-5").get("temperature") == 0
-
-
-def test_complete_tools_keeps_default_temperature(monkeypatch):
-    """حلقة الأدوات (البعثات) تبقى على افتراضها — مخرجاتها لا تحدّد الحكم
-    المعروض مباشرة (الحكم من المحرّك الحتمي حصراً)."""
-    import requests
-    from silk_llm_provider import AnthropicProvider
-    captured = {}
-
-    def fake_post(url, timeout=None, headers=None, json=None):
-        captured.update(json or {})
-        return _FakeResp(captured)
-
-    monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    AnthropicProvider().complete_tools("s", [], None, 100, "claude-x", 30.0)
-    assert "temperature" not in captured
+    monkeypatch.setenv("SILK_LLM_NO_SAMPLING_PARAMS", "")
+    assert _capture(monkeypatch, "claude-opus-4-8").get("temperature") == 0
 
 
 # ── ٣) سُلَّم معايرة الثقة الواحد ────────────────────────────────────────────

@@ -404,7 +404,7 @@ def create_app():
         }
         # أيّ نموذج تناديه هذه النشرة فعلاً — طلب المالك: «SILK_AI_MODEL من
         # صدفة Railway». اسم النموذج ليس سرّاً (لا مفتاح ولا قيمة حسّاسة)، وهو
-        # لازم للتشخيص عن بُعد: قرار إرسال/إهمال `temperature` مبنيّ عليه
+        # لازم للتشخيص عن بُعد: قرار إرسال/إهمال معاملات المعاينة مبنيّ عليه
         # حصراً، فبلا رؤيته يبقى «هل الإصلاح فعّال إنتاجياً؟» تخميناً. القيمة
         # المحلولة (الافتراضية إن كان المتغيّر غير مضبوط)، لا نصّ المتغيّر.
         try:
@@ -413,8 +413,10 @@ def create_app():
             health["ai_model"] = {
                 "resolved": _judge._MODEL,
                 "env_set": bool(os.environ.get("SILK_AI_MODEL", "").strip()),
-                "sends_temperature": _llm._supports_temperature(_judge._MODEL),
-                "no_temperature_prefixes": list(_llm._no_temperature_prefixes()),
+                "sends_sampling_params":
+                    _llm._supports_sampling_params(_judge._MODEL),
+                "no_sampling_params_prefixes":
+                    list(_llm._no_sampling_params_prefixes()),
             }
         except Exception as _exc:  # noqa: BLE001 — فحص صحّة لا ينهار أبداً
             health["ai_model"] = {"error": f"{type(_exc).__name__}: {_exc}"}
