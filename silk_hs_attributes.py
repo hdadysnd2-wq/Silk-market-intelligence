@@ -34,6 +34,7 @@
 """
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
@@ -51,31 +52,57 @@ def enabled() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
-# ══════════════ ١) معجمُ أبعادِ القياس (لغويّ، لا أسماءَ منتجات) ═════════════
+# ══════════════ ١) معجمُ أبعادِ القياس — من ملفٍ لا من الشيفرة (G2) ═════════
 #
-# المفتاحُ بُعدُ قياسٍ يظهر في النصّ الرسميّ («fat content»، «Brix value»)،
-# والقيمةُ مرادفاتُه ثنائيةُ اللغة + تسميتُه العربية (تُستعمَل في استعلام
-# الويب وفي شرح الحوار للتاجر). بُعدٌ غيرُ مذكورٍ هنا يبقى صالحاً تماماً:
-# مفتاحُه يصير مرادفَه الوحيد وتسميتَه — فالمعجم يُثري ولا يُقيّد.
-_DIMENSION_LEXICON: dict[str, dict] = {
-    "fat":      {"ar": ("دهن", "دهون", "دسم"), "label_ar": "نسبة الدهن"},
-    "alcohol":  {"ar": ("كحول", "كحولي"), "label_ar": "النسبة الكحولية"},
-    "sugar":    {"ar": ("سكر", "سكريات"), "label_ar": "نسبة السكر"},
-    "cocoa":    {"ar": ("كاكاو",), "label_ar": "نسبة الكاكاو"},
-    "protein":  {"ar": ("بروتين",), "label_ar": "نسبة البروتين"},
-    "moisture": {"ar": ("رطوبه", "رطوبة"), "label_ar": "نسبة الرطوبة"},
-    "starch":   {"ar": ("نشا", "نشاء"), "label_ar": "نسبة النشا"},
-    "ash":      {"ar": ("رماد",), "label_ar": "نسبة الرماد"},
-    "volume":   {"ar": ("حجم", "سعه", "سعة", "لتر", "مل"),
-                 "label_ar": "الحجم/السعة"},
-    "weight":   {"ar": ("وزن", "كجم", "كغم", "جرام", "غرام"),
-                 "label_ar": "الوزن"},
-    "length":   {"ar": ("طول", "عرض", "مقاس"), "label_ar": "المقاس"},
-    "brix":     {"ar": ("بريكس",), "label_ar": "درجة بريكس"},
-}
+# **لا مصطلحَ بُعدٍ مكتوبٌ صلباً هنا** (عائلة `hardcoded-product-rule`، الدرسان
+# ٢٤/٣٠: كلمةُ نطاقٍ حرفيةٌ مجمَّدةٌ في قالبٍ قابلٍ لإعادة الاستعمال هي العيبُ
+# نفسُه الذي أخرج «التمور السعودية» في تقرير معكرونة). المعجمُ يعيش في
+# `data/measurement_dimensions.csv` — بُعدٌ جديد يُضاف بصفٍّ لا بتعديل شيفرة،
+# واستعلامُ الويب يُركِّب مصطلحَه من هناك. قفلُ `test_no_literal_dimension_term_
+# in_module_source` يُفشِل البناءَ على أيّ مصطلحٍ من الملفّ يظهر حرفياً في
+# منطق الوحدة.
+
+_DIMENSIONS_CSV = os.environ.get("SILK_DIMENSIONS_CSV",
+                                 "data/measurement_dimensions.csv")
+
+
+@functools.lru_cache(maxsize=1)
+def load_dimensions(path: str = "") -> dict:
+    """معجمُ أبعادِ القياس من الملفّ — `{dimension: {label_ar, syn}}`.
+
+    ملفٌّ غائب/تالف => قاموسٌ فارغ: الأبعادُ تبقى مكتشَفةً من النصّ الرسميّ
+    (مفتاحُها الإنجليزيّ) ويُستعمَل المفتاحُ نفسُه تسميةً ومرادفاً — تدهورٌ
+    نظيف، لا مصطلحٌ مختلَق."""
+    import csv as _csv
+    fp = path or _DIMENSIONS_CSV
+    if not os.path.isabs(fp):
+        fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), fp)
+    out: dict = {}
+    try:
+        with open(fp, newline="", encoding="utf-8") as fh:
+            for row in _csv.DictReader(fh):
+                dim = (row.get("dimension") or "").strip().lower()
+                if not dim:
+                    continue
+                syn = [t.strip() for field in ("synonyms_ar", "synonyms_en")
+                       for t in (row.get(field) or "").split("|") if t.strip()]
+                out[dim] = {"label_ar": (row.get("label_ar") or "").strip(),
+                            "syn": tuple(syn)}
+    except Exception as exc:  # noqa: BLE001 — ملفٌّ غائب = تدهورٌ نظيف
+        log.warning("failed to load dimension lexicon %s: %s", fp, exc)
+    return out
+
+
+def dimension_terms(dimension: str) -> tuple[str, tuple[str, ...]]:
+    """(التسميةُ العربية، المرادفات) لبُعدٍ — المفتاحُ نفسُه حين لا صفَّ له."""
+    row = load_dimensions().get((dimension or "").strip().lower()) or {}
+    label = row.get("label_ar") or dimension
+    syn = tuple(row.get("syn") or ()) + (dimension,)
+    return label, syn
+
 
 # كلماتٌ لا تصلح بُعداً («of a content», «net weight content») — تُتخطّى
-# بحثاً عن الكلمة الدالّة قبلها.
+# بحثاً عن الكلمة الدالّة قبلها. أدواتُ لغةٍ لا مصطلحاتُ نطاق.
 _DIM_STOPWORDS = frozenset({"a", "an", "the", "of", "net", "immediate", "any",
                             "no", "not", "its", "their", "such"})
 
@@ -85,16 +112,38 @@ _DIM_STOPWORDS = frozenset({"a", "an", "the", "of", "net", "immediate", "any",
 # كلُّ عائلةٍ لها وحدةُ أساسٍ واحدة تُقارَن عليها النطاقاتُ والقيَم، فلا
 # تُقارَن كيلوغرامات بغرامات صامتةً. وحدةٌ غير معروفة => لا تحويل => لا حسم.
 _UNIT_FAMILY: dict[str, tuple[str, float]] = {
+    # نِسَبٌ — النسبةُ المئوية ووحداتُ البطاقة المكافئة لها اصطلاحاً في وسم
+    # الأغذية (G3): «3.5 g/100ml» هي «3.5%» على العبوة. **حدٌّ موثَّق:**
+    # g/100ml نسبةُ كتلةٍ إلى حجم و«%» في نصّ HS نسبةُ كتلةٍ إلى كتلة؛
+    # يتباعدان بمقدار الكثافة (~٣٪ نسبيّاً للحليب). مقبولٌ لأنّ بطاقةَ
+    # العبوة تستعملهما بالتبادل، والانحرافُ يبقى دون أضيق نطاقٍ في المرجع.
     "%": ("percent", 1.0), "percent": ("percent", 1.0),
     "per cent": ("percent", 1.0), "pct": ("percent", 1.0),
+    "% vol": ("percent", 1.0), "%vol": ("percent", 1.0),
+    "% v/v": ("percent", 1.0), "% m/m": ("percent", 1.0),
+    "% w/w": ("percent", 1.0), "abv": ("percent", 1.0),
+    "g/100ml": ("percent", 1.0), "g/100 ml": ("percent", 1.0),
+    "g/100g": ("percent", 1.0), "g/100 g": ("percent", 1.0),
+    "ml/100ml": ("percent", 1.0), "gm/100ml": ("percent", 1.0),
+    "mg/100g": ("percent", 0.001), "mg/100ml": ("percent", 0.001),
+    # كتلة — وحدةُ الأساس الغرام.
     "mg": ("weight", 0.001), "g": ("weight", 1.0), "gr": ("weight", 1.0),
+    "gm": ("weight", 1.0),
     "gram": ("weight", 1.0), "grams": ("weight", 1.0),
     "kg": ("weight", 1000.0), "kgs": ("weight", 1000.0),
+    "kilo": ("weight", 1000.0),
     "kilogram": ("weight", 1000.0), "kilograms": ("weight", 1000.0),
+    "t": ("weight", 1_000_000.0), "tonne": ("weight", 1_000_000.0),
+    "tonnes": ("weight", 1_000_000.0),
+    # حجم — وحدةُ الأساس اللتر.
     "ml": ("volume", 0.001), "cl": ("volume", 0.01),
     "l": ("volume", 1.0), "litre": ("volume", 1.0), "litres": ("volume", 1.0),
     "liter": ("volume", 1.0), "liters": ("volume", 1.0),
+    "cc": ("volume", 0.001),
+    # طول — وحدةُ الأساس المليمتر.
     "mm": ("length", 1.0), "cm": ("length", 10.0), "m": ("length", 1000.0),
+    "micron": ("length", 0.001), "microns": ("length", 0.001),
+    # مجرَّدٌ بلا وحدة (درجةُ بريكس مثلاً).
     "": ("scalar", 1.0),
 }
 # وحدةُ العرض لكل عائلة (وحدةُ الأساس نفسها).
@@ -115,50 +164,98 @@ def _unit_family(unit: object) -> tuple[str, float] | None:
 
 # ══════════════ ٣) قراءةُ النطاق الرقميّ من الوصف الرسميّ ════════════════════
 
-_NUM = r"(\d+(?:\.\d+)?)"
+# الرقمُ ووحدتُه — مجموعاتٌ **مسمّاة** (`np/up` للبادئة، `ns/us` للاحقة) كي
+# تُقرأ بالاسم لا بترتيبٍ ينكسر كلّما أُضيف بديلٌ للنمط.
+_NUM_RAW = r"\d+(?:\.\d+)?"
 # لاحقةُ الوحدة اختيارية. الحدُّ `(?![a-z])` لا `\b` عمداً: `%` محرفٌ غيرُ
 # كلميّ فلا حدَّ كلميّ بعده، وكان `\b` يُفشِل التقاطه فتُقرأ «1%» مجرَّدةً
 # (عائلةُ `scalar`) فتفشل مقارنتُها بنسبةٍ من البطاقة/الويب.
-_UNIT = (r"\s*(%|per\s*cent|percent|kgs?|kilograms?|grams?|gr|g|mg"
-         r"|litres?|liters?|ml|cl|l|mm|cm)?(?![a-z])")
-# حدٌّ أعلى: «not exceeding N» / «no side exceeding N» / «not more than N» /
-# «less than N» / «up to N» + مقابلاتها العربية.
-_HI = (r"(?:not|no)\s+(?:\w+\s+)?exceeding|not\s+more\s+than|no\s+more\s+than"
-       r"|less\s+than|up\s+to|لا\s+يتجاوز|أقل\s+من|حتى")
-# حدٌّ أدنى: «exceeding N» / «more than N» / «over N» + مقابلاتها.
-_LO = (r"exceeding|more\s+than|greater\s+than|over|above"
-       r"|يتجاوز|أكثر\s+من|تزيد\s+عن")
-# صيغةُ اللاحقة: «2 litres or less» / «2kg or less».
-_HI_SUFFIX = r"or\s+less|or\s+under|أو\s+أقل|فأقل"
+# الوحداتُ المركّبة (g/100ml…) أولاً — الأطولُ يفوز فلا يُقتطَع «g» وحدها.
+_UNIT_RAW = (r"\s*(?:g/100\s*ml|g/100\s*g|gm/100\s*ml|ml/100\s*ml"
+             r"|mg/100\s*g|mg/100\s*ml|%\s*vol|%\s*v/v|%\s*m/m|%\s*w/w"
+             r"|%|per\s*cent|percent|abv|kgs?|kilograms?|kilo|tonnes?"
+             r"|grams?|gm|gr|g|mg|litres?|liters?|ml|cl|cc|l"
+             r"|microns?|mm|cm|m)?(?![a-z0-9])")
+
+
+_NUM_P = f"(?P<np>{_NUM_RAW})"
+_NUM_S = f"(?P<ns>{_NUM_RAW})"
+_UNIT_P = _UNIT_RAW.replace("(?:", "(?P<up>", 1)
+_UNIT_S = _UNIT_RAW.replace("(?:", "(?P<us>", 1)
+# نسخةٌ مجهّلةٌ لإعادة الاستعمال خارج محلّل الحدود (قراءةُ قيمةٍ من نصّ ويب).
+_NUM = f"({_NUM_RAW})"
+_UNIT = _UNIT_RAW.replace("(?:", "(", 1)
+# ── صرامةُ الحدّ تُحمَل من العبارة المطابِقة، لا تُفترَض بالجانب (G1) ────────
+#
+# نصُّ HS **غيرُ متماثل** عمداً: «exceeding 1%» يستثني 1.0 و«not exceeding 6%»
+# يشمل 6.0. تسطيحُ الاثنين إلى «أدنى حصريّ / أعلى شامل» يعمل صدفةً على
+# الصياغة الغالبة ويُخطئ على «less than N» (حصريّ) و«N or more» (شامل) —
+# وخطأُ حدٍّ واحد يُصدِر **رمزاً خاطئاً بوسمِ مصدرٍ واثق**، أي اختلاقاً لا
+# فجوة. لذا كل عبارةٍ مصنَّفةٌ صراحةً هنا بجانبها **وشمولها**.
+_BOUNDS: tuple[tuple[str, str, bool], ...] = (
+    # (نمط، الجانب، شامل؟)
+    (r"(?:not|no)\s+(?:\w+\s+)?exceeding", "hi", True),
+    (r"not\s+more\s+than|no\s+more\s+than", "hi", True),
+    (r"up\s+to|not\s+over|no\s+greater\s+than", "hi", True),
+    (r"less\s+than|under|below|fewer\s+than", "hi", False),
+    (r"not\s+less\s+than|at\s+least", "lo", True),
+    (r"exceeding|more\s+than|greater\s+than|over|above", "lo", False),
+    (r"لا\s+يتجاوز|حتى", "hi", True),
+    (r"أقل\s+من|دون", "hi", False),
+    (r"لا\s+يقل\s+عن", "lo", True),
+    (r"يتجاوز|أكثر\s+من|تزيد\s+عن", "lo", False),
+)
+# صيغُ اللاحقة («2 litres or less») — الرقمُ يسبق العبارة.
+_BOUNDS_SUFFIX: tuple[tuple[str, str, bool], ...] = (
+    (r"or\s+less|or\s+under|أو\s+أقل|فأقل", "hi", True),
+    (r"or\s+more|and\s+over|or\s+over|أو\s+أكثر|فأكثر", "lo", True),
+)
+
+# البادئاتُ مرتَّبةٌ بالأطول-أولاً كي يفوز «not more than» على «more than»
+# و«not exceeding» على «exceeding» عند نفس الموضع.
+_PREFIX_ALT = "|".join(f"(?P<b{i}>{pat})" for i, (pat, _s, _inc)
+                       in enumerate(_BOUNDS))
+_SUFFIX_ALT = "|".join(f"(?P<s{i}>{pat})" for i, (pat, _s, _inc)
+                       in enumerate(_BOUNDS_SUFFIX))
 
 _EVENT_RE = re.compile(
-    rf"(?P<hi>{_HI})\s*{_NUM}{_UNIT}"
-    rf"|(?P<lo>{_LO})\s*{_NUM}{_UNIT}"
-    rf"|{_NUM}{_UNIT}\s*(?P<hisuf>{_HI_SUFFIX})",
+    rf"(?:{_PREFIX_ALT})\s*{_NUM_P}{_UNIT_P}"
+    rf"|{_NUM_S}{_UNIT_S}\s*(?:{_SUFFIX_ALT})",
     re.I)
 
 _DIM_WORD_RE = re.compile(r"(\w+)\s+(?:content|value|strength|degree)", re.I)
 
 
 def _events(text: str) -> list[dict]:
-    """أحداثُ الحدود في النصّ — [{kind:'lo'|'hi', value, unit, pos}]."""
+    """أحداثُ الحدود — [{kind, inclusive, value, unit, family, factor, pos, span}].
+
+    `inclusive` مأخوذٌ من **العبارة التي طابقت فعلاً** لا من الجانب (G1)."""
     out: list[dict] = []
     for m in _EVENT_RE.finditer(text or ""):
-        if m.group("hi"):
-            kind, num, unit = "hi", m.group(2), m.group(3)
-        elif m.group("lo"):
-            kind, num, unit = "lo", m.group(5), m.group(6)
-        else:
-            kind, num, unit = "hi", m.group(7), m.group(8)
+        kind = inclusive = None
+        for i, (_pat, side, inc) in enumerate(_BOUNDS):
+            if m.group(f"b{i}"):
+                kind, inclusive = side, inc
+                num, unit = m.group("np"), m.group("up")
+                break
+        if kind is None:
+            for i, (_pat, side, inc) in enumerate(_BOUNDS_SUFFIX):
+                if m.group(f"s{i}"):
+                    kind, inclusive = side, inc
+                    num, unit = m.group("ns"), m.group("us")
+                    break
+        if kind is None:                       # pragma: no cover — فرعٌ مستحيل
+            continue
         try:
             value = float(num)
-        except (TypeError, ValueError):   # pragma: no cover — النمط رقميّ
+        except (TypeError, ValueError):        # pragma: no cover — النمط رقميّ
             continue
         fam = _unit_family(unit or "")
         if fam is None:
             continue
-        out.append({"kind": kind, "value": value, "unit": (unit or "").lower(),
-                    "family": fam[0], "factor": fam[1], "pos": m.start()})
+        out.append({"kind": kind, "inclusive": inclusive, "value": value,
+                    "unit": (unit or "").lower(), "family": fam[0],
+                    "factor": fam[1], "pos": m.start(), "span": m.span()})
     return out
 
 
@@ -174,13 +271,38 @@ def _dimension_from_text(text: str, before: int) -> str:
     return best
 
 
+# ── المحورُ غيرُ الرقميّ (G1، اكتُشف بمسحِ المرجع كاملاً) ────────────────────
+#
+# ترويسةٌ قد تنقسم بمحورين معاً: 0902 = لونُ الشاي (أخضر/أسود) × وزنُ التعبئة
+# (≤٣كجم/>٣كجم). قياسُ الوزن وحده لا يُحدِّد بنداً — يختار أحدَ اثنين
+# يختلفان في اللون أيضاً، **فيَصدُر رمزٌ خاطئ بوسمِ مصدرٍ واثق**. لذا لا
+# يُقبَل مُميِّزٌ إلا حين تكون أوصافُ المرشّحين متطابقةً **بعد نزع عباراتِ
+# الحدّ** — أي أنّ المحورَ الرقميَّ هو الفارقُ الوحيد بينهم.
+# `but` وحدَها تُسقَط: تُدخِلها صياغةُ النطاق ذي الطرفين ولا معنى لها.
+_RESIDUAL_DROP = frozenset({"but"})
+_RESIDUAL_SPLIT = re.compile(r"[^0-9a-z\u0600-\u06ff]+", re.I)
+
+
+def _residual_axis(desc: str, evs: list[dict]) -> frozenset:
+    """صفاتُ الوصف بعد نزع عباراتِ الحدّ — بصمةُ المحاور غير الرقمية."""
+    text, out = desc or "", []
+    for a, b in sorted((e["span"] for e in evs), reverse=True):
+        text = text[:a] + " " + text[b:]
+    for tok in _RESIDUAL_SPLIT.split(text.lower()):
+        tok = tok.strip()
+        if tok and not tok.isdigit() and tok not in _RESIDUAL_DROP:
+            out.append(tok)
+    return frozenset(out)
+
+
 def band_of(hs6: object, description: str = "") -> dict | None:
     """نطاقُ العتبة الرقمية لرمز HS6 — أو `None` حين لا عتبةَ في وصفه.
 
     الوصفُ الرسميّ أولاً (المصدرُ الذي تعيش فيه العتبة فعلاً)، ثم الوصفُ
     المُمرَّر إن غاب الرمزُ عن المرجع. يعيد dict:
-    `{hs6, lo, hi, unit, family, dimension, desc}` بوحدةِ أساسِ العائلة —
-    `lo`/`hi` قد يكون أيٌّ منهما `None` (نطاقٌ مفتوحُ الطرف)."""
+    `{hs6, lo, lo_inclusive, hi, hi_inclusive, unit, family, dimension,
+    axis, desc}` بوحدةِ أساسِ العائلة — `lo`/`hi` قد يكون أيٌّ منهما `None`
+    (نطاقٌ مفتوحُ الطرف)، و`*_inclusive` مأخوذٌ من عبارة الحدّ نفسِها (G1)."""
     from silk_hs_resolver import official_description
     code = str(hs6 or "").strip()
     desc = official_description(code) or (description or "").strip()
@@ -201,15 +323,18 @@ def band_of(hs6: object, description: str = "") -> dict | None:
     his = [e for e in chosen if e["kind"] == "hi"]
     lo = los[-1]["value"] * los[-1]["factor"] if los else None
     hi = his[-1]["value"] * his[-1]["factor"] if his else None
+    lo_inc = bool(los[-1]["inclusive"]) if los else False
+    hi_inc = bool(his[-1]["inclusive"]) if his else False
     if lo is not None and hi is not None and lo >= hi:
         return None                      # نطاقٌ متناقض — فجوة لا اختلاق
     dimension = _FAMILY_DIMENSION.get(family) or _dimension_from_text(
         desc, chosen[0]["pos"])
     if not dimension:
         return None                      # بُعدٌ مجهول => لا يصلح مُميِّزاً
-    return {"hs6": code, "lo": lo, "hi": hi, "family": family,
+    return {"hs6": code, "lo": lo, "lo_inclusive": lo_inc,
+            "hi": hi, "hi_inclusive": hi_inc, "family": family,
             "unit": _FAMILY_UNIT.get(family, ""), "dimension": dimension,
-            "desc": desc}
+            "axis": _residual_axis(desc, evs), "desc": desc}
 
 
 # ══════════════ ٤) المُميِّز — هل تتمايز المرشّحات ببُعدٍ رقميٍّ واحد؟ ═══════
@@ -230,41 +355,63 @@ def _candidate_codes(candidates: list) -> list[tuple[str, str]]:
 def discriminator(candidates: list) -> dict | None:
     """المُميِّزُ الرقميّ بين المرشّحين — أو `None` حين لا يوجد.
 
-    يُشترَط: **مرشّحان فأكثر** لهما نطاقٌ فعليّ، **بُعدٌ ووحدةٌ واحدة** لهم
-    جميعاً، ونطاقاتٌ **غيرُ متداخلة** (تقسيمُ ترويسةٍ سليم). أيُّ إخلالٍ =>
-    `None` => الحوارُ كما كان (لا حسمَ على أساسٍ مشوَّش)."""
+    يُشترَط أربعةُ شروطٍ **كلُّها**، وإخلالُ أيٍّ منها يعيد `None` (فيُعرَض
+    الحوارُ كما كان — لا حسمَ على أساسٍ مشوَّش):
+      (١) مرشّحان فأكثر لهما نطاقٌ فعليّ؛
+      (٢) بُعدٌ ووحدةٌ واحدة لهم جميعاً؛
+      (٣) **المحورُ الرقميُّ هو الفارقُ الوحيد** — أوصافُهم متطابقةٌ بعد نزع
+          عباراتِ الحدّ (`axis`). ترويسةٌ تنقسم بمحورين (لونُ الشاي × وزنُ
+          التعبئة) لا يُحدِّدها قياسٌ واحد، وقبولُها يُصدِر رمزاً خاطئاً
+          بوسمِ مصدرٍ واثق — اختلاقٌ لا فجوة؛
+      (٤) نطاقاتٌ **متّصلةٌ بلا تداخلٍ ولا ازدواجِ تغطية** — الحدُّ المشترك
+          يملكه **طرفٌ واحدٌ بالضبط** (`prev.hi_inclusive ^ next.lo_inclusive`).
+    """
     bands = [b for b in (band_of(code, desc)
                          for code, desc in _candidate_codes(candidates))
              if b is not None]
     if len(bands) < 2:
         return None
-    dims = {b["dimension"] for b in bands}
-    fams = {b["family"] for b in bands}
-    if len(dims) != 1 or len(fams) != 1:
+    if len({b["dimension"] for b in bands}) != 1:
         return None
+    if len({b["family"] for b in bands}) != 1:
+        return None
+    if len({b["axis"] for b in bands}) != 1:
+        return None                      # محورٌ غيرُ رقميٍّ إضافي — لا حسم
     ordered = sorted(bands, key=lambda b: (b["lo"] if b["lo"] is not None
                                            else float("-inf")))
     for prev, nxt in zip(ordered, ordered[1:]):
-        prev_hi = prev["hi"] if prev["hi"] is not None else float("inf")
-        nxt_lo = nxt["lo"] if nxt["lo"] is not None else float("-inf")
-        if nxt_lo < prev_hi:
-            return None                  # نطاقاتٌ متداخلة — لا تقسيمَ حاسم
+        prev_hi = prev["hi"]
+        nxt_lo = nxt["lo"]
+        if prev_hi is None or nxt_lo is None:
+            return None                  # طرفٌ مفتوحٌ في الوسط — تداخلٌ حتميّ
+        if prev_hi != nxt_lo:
+            return None                  # فجوةٌ أو تداخلٌ رقميّ
+        if bool(prev["hi_inclusive"]) == bool(nxt["lo_inclusive"]):
+            return None                  # الحدُّ مزدوجُ التغطية أو مكشوف
     dimension = ordered[0]["dimension"]
-    lex = _DIMENSION_LEXICON.get(dimension, {})
+    label_ar, syn = dimension_terms(dimension)
     return {"dimension": dimension, "family": ordered[0]["family"],
-            "unit": ordered[0]["unit"],
-            "label_ar": lex.get("label_ar") or dimension,
-            "synonyms": tuple(lex.get("ar", ())) + (dimension,),
-            "bands": ordered}
+            "unit": ordered[0]["unit"], "label_ar": label_ar,
+            "synonyms": syn, "bands": ordered}
 
 
 def _contains(band: dict, base_value: float) -> bool:
-    """هل تقع القيمة (بوحدة الأساس) داخل النطاق؟ — الحدُّ الأعلى شامل،
-    والأدنى حصريّ (عقدُ نصّ HS: «exceeding N but not exceeding M»)."""
-    if band["lo"] is not None and base_value <= band["lo"]:
-        return False
-    if band["hi"] is not None and base_value > band["hi"]:
-        return False
+    """هل تقع القيمة (بوحدة الأساس) داخل النطاق؟ — بالشمول **المُحلَّل** من
+    عبارة الحدّ لا بافتراضٍ حسب الجانب (G1): «less than 6» تستثني 6.0 بينما
+    «not exceeding 6» تشملها، وكلتاهما حدٌّ أعلى."""
+    lo, hi = band.get("lo"), band.get("hi")
+    if lo is not None:
+        if band.get("lo_inclusive"):
+            if base_value < lo:
+                return False
+        elif base_value <= lo:
+            return False
+    if hi is not None:
+        if band.get("hi_inclusive"):
+            if base_value > hi:
+                return False
+        elif base_value >= hi:
+            return False
     return True
 
 
@@ -298,12 +445,17 @@ def range_ar(band: dict, label_ar: str = "") -> str:
     """«حتى 1%» / «أكثر من 6% وحتى 10%» — لا رمزَ ولا عتبةً جمركية خام."""
     unit = band.get("unit") or ""
     lo, hi = band.get("lo"), band.get("hi")
+    # اللغةُ تعكس الشمولَ المُحلَّل: «حتى ٦٪» تشمل ٦ بينما «دون ٦٪» تستثنيها.
+    hi_txt = (f"حتى {_fmt(hi)}{unit}" if band.get("hi_inclusive")
+              else f"دون {_fmt(hi)}{unit}") if hi is not None else ""
+    lo_txt = (f"من {_fmt(lo)}{unit}" if band.get("lo_inclusive")
+              else f"أكثر من {_fmt(lo)}{unit}") if lo is not None else ""
     if lo is None and hi is not None:
-        txt = f"حتى {_fmt(hi)}{unit}"
+        txt = hi_txt
     elif lo is not None and hi is None:
-        txt = f"أكثر من {_fmt(lo)}{unit}"
+        txt = lo_txt
     elif lo is not None and hi is not None:
-        txt = f"أكثر من {_fmt(lo)}{unit} وحتى {_fmt(hi)}{unit}"
+        txt = f"{lo_txt} و{hi_txt}"
     else:
         return ""
     return f"{txt} {label_ar}".strip() if label_ar else txt
@@ -471,7 +623,7 @@ def _report(disc: dict | None, **over) -> dict:
         "source_url": None, "confidence": None, "note_ar": "",
         "attribute": (disc or {}).get("dimension"),
         "label_ar": (disc or {}).get("label_ar"),
-        "searched": [], "missing_ar": "",
+        "searched": [], "missing_ar": "", "readings": [],
         "bands_ar": [{"hs6": b["hs6"],
                       "range_ar": range_ar(b, (disc or {}).get("label_ar") or "")}
                      for b in (disc or {}).get("bands", [])],
@@ -482,16 +634,49 @@ def _report(disc: dict | None, **over) -> dict:
     return base
 
 
+# تفاوتٌ مسموحٌ بين قراءتين قبل اعتبارهما متعارضتين — **صفرٌ افتراضياً**
+# (تطابقٌ تامّ بعد التحويل لوحدة الأساس). قراءتان تختلفان رقمياً تعنيان أنّ
+# القياس **غيرُ ثابت**، وثباتُه شرطُ الحسم — حتى لو وقع كلاهما في نفس النطاق
+# صدفةً (أمرُ المُشرِف G4: «التعارضُ يتصرّف كعدم التطابق تماماً»).
+_AGREE_TOL = float(os.environ.get("SILK_HS_ATTR_AGREE_TOL", "0") or "0")
+_FLOAT_EPS = 1e-9
+
+# أولويةُ المصادر عند **الاتّفاق** (لا عند التعارض — التعارضُ يحجب مطلقاً):
+# بطاقةُ العبوة قراءةٌ مباشرةٌ للمنتج نفسه، والويبُ استشهادٌ ثانويّ عنه.
+_SOURCE_RANK = {"image": 2, "web": 1}
+
+
+def _base(value: float, unit: object, disc: dict) -> float | None:
+    fam = _unit_family(unit if unit is not None else "")
+    if fam is None or fam[0] != disc["family"]:
+        return None
+    return float(value) * fam[1]
+
+
+def _readings_agree(readings: list[dict], disc: dict) -> bool:
+    """هل تتّفق كلُّ القراءات رقمياً (بعد التحويل لوحدة الأساس)؟"""
+    bases = [b for b in (_base(r["value"], r["unit"], disc) for r in readings)
+             if b is not None]
+    if len(bases) != len(readings):
+        return False                     # قراءةٌ بوحدةٍ غير قابلة للتحويل
+    return max(bases) - min(bases) <= max(_AGREE_TOL, _FLOAT_EPS)
+
+
 def resolve_by_attribute(product: str, candidates: list,
                          label_attributes: object = None,
                          allow_web: bool = True,
                          gl: str | None = None) -> dict:
     """احسِم الرمزَ بالسمة الرقمية قبل عرض الحوار — التقريرُ الموحّد دوماً.
 
-    الترتيب: صورةُ العبوة (بلا أيّ نداءٍ إضافي) ← استعلامُ ويبٍ واحد ← فجوة.
+    **يُستشار المساران كلاهما** (بطاقةُ العبوة + استعلامُ ويبٍ واحد) ثم
+    يُقارَنان (G4): اتّفاقٌ => حسمٌ بأعلى المصدرين سلطةً؛ **تعارضٌ => لا
+    رمز**، حالُه حالُ عدم التطابق تماماً، والقراءتان معاً في التقرير. لا
+    يُقصَّر مسارُ الويب حين ينجح مسارُ الصورة: قراءةٌ ثانيةٌ تُناقض الأولى
+    دليلٌ على أنّ القياس غيرُ ثابت، وإخفاؤها يُحوِّل تعارضاً إلى ثقةٍ كاذبة.
+
     `hs6` غيرُ `None` يعني حسماً بدليلٍ موسوم؛ `None` يعني **اعرِض الحوار**
-    محمَّلاً بـ`searched`/`missing_ar`/`bands_ar` (ما جُرِّب، ما نقص، وحدودُ
-    كلّ مرشّحٍ بلغةٍ مفهومة) — لا رمزَ مُخمَّن أبداً."""
+    محمَّلاً بـ`searched`/`missing_ar`/`bands_ar`/`readings` — لا رمزَ
+    مُخمَّن أبداً."""
     if not enabled():
         return _report(None, missing_ar="حسمُ السمة الرقمية مُعطَّل "
                                         "(SILK_HS_ATTRIBUTE_RESOLVE=0)")
@@ -501,43 +686,65 @@ def resolve_by_attribute(product: str, candidates: list,
                                         "واحدة — لا حسمَ آليّ ممكن")
     label = disc.get("label_ar") or disc["dimension"]
     searched: list[str] = []
+    readings: list[dict] = []
 
     # (١) صورةُ العبوة — سماتٌ مستخلَصةٌ سلفاً، صفر نداءٍ إضافي.
     value, unit, attr_name = value_from_label(label_attributes, disc)
     if value is not None:
-        hs6 = select_by_value(disc, value, unit)
+        readings.append({"source": "image", "value": value, "unit": unit,
+                         "source_url": None, "detail": attr_name})
         searched.append(f"صورة العبوة ({attr_name}: {_fmt(value)}{unit})")
-        if hs6:
-            return _report(disc, hs6=hs6, resolved_from="image", value=value,
-                           unit=unit, confidence=1.0, searched=searched,
-                           note_ar=f"{_IMAGE_NOTE} — {label} {_fmt(value)}{unit}")
-        searched.append(f"القيمة {_fmt(value)}{unit} لا تقع في نطاقٍ وحيد")
     else:
         searched.append("صورة العبوة (لا سمةٌ رقمية مقروءة)"
                         if label_attributes else "صورة العبوة (لم تُرفَق)")
 
-    # (٢) الويب — استعلامٌ واحد برابطٍ قابلٍ للاستشهاد.
+    # (٢) الويب — استعلامٌ واحد برابطٍ قابلٍ للاستشهاد. **يُشغَّل دائماً**
+    # (لا يُختصَر عند نجاح الصورة) كي يُكتشَف التعارضُ لا أن يُطمَس.
     if allow_web:
         hit = probe_web(product, disc, gl=gl)
         if hit:
-            hs6 = select_by_value(disc, hit["value"], hit["unit"])
+            readings.append({"source": "web", "value": hit["value"],
+                             "unit": hit["unit"],
+                             "source_url": hit["source_url"] or None,
+                             "detail": hit.get("title") or ""})
             searched.append(
                 f"بحث ويب ({label}: {_fmt(hit['value'])}{hit['unit']})")
-            if hs6:
-                return _report(
-                    disc, hs6=hs6, resolved_from="web", value=hit["value"],
-                    unit=hit["unit"], source_url=hit["source_url"] or None,
-                    confidence=_WEB_CONFIDENCE, searched=searched,
-                    note_ar=(f"{_WEB_NOTE}: {hit['source_url']} — "
-                             f"{label} {_fmt(hit['value'])}{hit['unit']}"))
-            searched.append(
-                f"القيمة {_fmt(hit['value'])}{hit['unit']} لا تقع في نطاقٍ وحيد")
         else:
             searched.append(f"بحث ويب عن {label} (بلا رقمٍ موثَّق)")
     else:
         searched.append("بحث الويب غير متاح لهذا الطلب")
 
-    return _report(disc, searched=searched,
+    # (٣) المقارنة — تعارضٌ رقميّ يحجب مطلقاً (G4).
+    if len(readings) > 1 and not _readings_agree(readings, disc):
+        detail = "، ".join(
+            f"{'صورة العبوة' if r['source'] == 'image' else 'مصدر ويب'} "
+            f"{_fmt(r['value'])}{r['unit']}" for r in readings)
+        searched.append(f"تعارضٌ بين القراءات: {detail}")
+        return _report(disc, searched=searched, readings=readings,
+                       missing_ar=(f"قراءتان متعارضتان لـ{label} ({detail}) — "
+                                   "لا يُحسَم رمزٌ على قياسٍ غير ثابت؛ أكّد "
+                                   "البند المطابق أدناه."))
+
+    # (٤) الحسم — أعلى المصدرين سلطةً بين المتّفقين.
+    for r in sorted(readings, key=lambda x: -_SOURCE_RANK.get(x["source"], 0)):
+        hs6 = select_by_value(disc, r["value"], r["unit"])
+        if not hs6:
+            searched.append(
+                f"القيمة {_fmt(r['value'])}{r['unit']} لا تقع في نطاقٍ وحيد")
+            break
+        if r["source"] == "image":
+            note = f"{_IMAGE_NOTE} — {label} {_fmt(r['value'])}{r['unit']}"
+            conf = 1.0
+        else:
+            note = (f"{_WEB_NOTE}: {r['source_url']} — "
+                    f"{label} {_fmt(r['value'])}{r['unit']}")
+            conf = _WEB_CONFIDENCE
+        return _report(disc, hs6=hs6, resolved_from=r["source"],
+                       value=r["value"], unit=r["unit"],
+                       source_url=r["source_url"], confidence=conf,
+                       searched=searched, readings=readings, note_ar=note)
+
+    return _report(disc, searched=searched, readings=readings,
                    missing_ar=(f"لم يُعثَر على {label} لهذا المنتج لا من صورة "
                                "العبوة ولا من مصدرٍ ويبٍ قابلٍ للاستشهاد — "
                                "أرفِق صورة العبوة أو اختر الرمز المطابق أدناه."))

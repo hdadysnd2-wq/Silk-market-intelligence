@@ -266,14 +266,285 @@ def test_module_has_no_hardcoded_product_name_or_iso_or_hs_code():
 
 
 def test_generalizes_across_families_no_family_is_privileged():
-    """نفسُ المنطق يحسم في عائلاتٍ لا تشترك في شيءٍ سوى بنية العتبة."""
+    """نفسُ المنطق يحسم في عائلاتٍ **غيرِ لبنية**، لكلٍّ بُعدُها (G2).
+
+    الترويسات مأخوذةٌ من `data/hs_reference.csv` الفعليّ لا من نموذج، وكلٌّ
+    منها أحاديّةُ المحور فعلاً (يقبلها `discriminator` بشروطه الأربعة)."""
     cases = [
-        (_cands("220421", "220422", "220429"), 5.0, "L", "220422"),
-        (_cands("090210", "090220"), 500.0, "g", "090210"),
-        (_cands("200912", "200919"), 12.0, "", "200912"),
-        (_cands("040210", "040221"), 26.0, "%", "040221"),
+        # (مرشّحون، قيمة، وحدة، المتوقَّع، البُعد) — ٣ أبعادٍ غيرِ لبنية.
+        (_cands("220421", "220422", "220429"), 5.0, "L", "220422", "volume"),
+        (_cands("721391", "721399"), 20.0, "mm", "721399", "length"),
+        (_cands("010391", "010392"), 30.0, "kg", "010391", "weight"),
+        (_cands("200912", "200919"), 12.0, "", "200912", "brix"),
     ]
-    for cands, value, unit, expected in cases:
+    for cands, value, unit, expected, dim in cases:
         d = attrs.discriminator(cands)
         assert d is not None, f"لم يُكتشف مُميِّزٌ لـ{[c['hs6'] for c in cands]}"
+        assert d["dimension"] == dim, f"{expected}: بُعدٌ خاطئ {d['dimension']}"
         assert attrs.select_by_value(d, value, unit) == expected
+    assert len({c[4] for c in cases}) == 4, "العيّناتُ لا تغطّي أبعاداً متمايزة"
+
+
+# ══════════════ G1 — صرامةُ الحدّ تُحمَل من العبارة لا من الجانب ═════════════
+
+_FAKE = "000000"        # رمزٌ غيرُ موجودٍ في المرجع => يُقرأ الوصفُ المُمرَّر
+
+
+@pytest.mark.parametrize("phrase,lo,lo_inc,hi,hi_inc", [
+    ("not exceeding 6%",   None, False, 6.0, True),
+    ("less than 6%",       None, False, 6.0, False),
+    ("not more than 6%",   None, False, 6.0, True),
+    ("under 6%",           None, False, 6.0, False),
+    ("exceeding 1%",       1.0,  False, None, False),
+    ("more than 1%",       1.0,  False, None, False),
+    ("at least 1%",        1.0,  True,  None, False),
+    ("not less than 1%",   1.0,  True,  None, False),
+    ("1% or less",         None, False, 1.0, True),
+    ("1% or more",         1.0,  True,  None, False),
+])
+def test_bound_strictness_comes_from_the_matched_phrase(
+        phrase, lo, lo_inc, hi, hi_inc):
+    """«less than 6%» و«not exceeding 6%» حدّان أعليان **مختلفا الشمول** —
+    تسطيحُهما يُصدِر رمزاً خاطئاً بوسمِ مصدرٍ واثق (اختلاقٌ لا فجوة)."""
+    b = attrs.band_of(_FAKE, f"of a fat content, by weight, {phrase}")
+    assert b is not None, f"لم يُقرأ حدٌّ من «{phrase}»"
+    assert (b["lo"], b["lo_inclusive"], b["hi"], b["hi_inclusive"]) == (
+        lo, lo_inc, hi, hi_inc)
+
+
+def test_strict_and_inclusive_upper_bounds_differ_at_the_boundary():
+    """القيمةُ على الحدّ: تدخل «not exceeding 6» ولا تدخل «less than 6»."""
+    inclusive = attrs.band_of(_FAKE, "of a fat content, not exceeding 6%")
+    strict = attrs.band_of(_FAKE, "of a fat content, less than 6%")
+    assert attrs._contains(inclusive, 6.0) is True
+    assert attrs._contains(strict, 6.0) is False
+    assert attrs._contains(strict, 5.999) is True
+
+
+@pytest.mark.parametrize("value,expected", [
+    (0.99, "040110"),   # داخل «حتى 1%»
+    (1.0,  "040110"),   # الحدُّ يملكه البندُ الأدنى («not exceeding 1%» شامل)
+    (1.01, "040120"),
+    (5.99, "040120"),
+    (6.0,  "040120"),   # «exceeding 1% but not exceeding 6%» — الأعلى شامل
+    (6.01, "040140"),
+])
+def test_040120_boundaries_exactly(value, expected):
+    """حدودُ البند المُبلَّغ عنه بالضبط — لا انزلاقَ بمقدارٍ واحد."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    assert attrs.select_by_value(d, value, "%") == expected
+
+
+def test_property_every_multiband_heading_is_either_clean_or_refused():
+    """خاصّيةٌ على **كلّ** ترويسةٍ متعدّدةِ النطاقات في المرجع الفعليّ:
+
+    إمّا أن تكون قسمةً نظيفةً (بُعدٌ واحد، محورٌ رقميٌّ وحيد، حدودٌ متّصلةٌ
+    بلا فجوةٍ ولا ازدواجِ تغطية) — وعندها يقبلها `discriminator` —
+    وإمّا أن **يرفضها** فلا تُحسَم آلياً أبداً. لا حالةَ ثالثة: قبولُ قسمةٍ
+    غيرِ نظيفة يعني إصدارَ رمزٍ خاطئ بوسمِ مصدرٍ واثق."""
+    import collections
+    from silk_hs_resolver import load_hs_reference
+    by_head = collections.defaultdict(list)
+    for code in load_hs_reference():
+        b = attrs.band_of(code)
+        if b is not None:
+            by_head[code[:4]].append(b)
+    multi = {h: bs for h, bs in by_head.items() if len(bs) >= 2}
+    assert len(multi) >= 40, f"عيّنةٌ أضعفُ من المتوقَّع: {len(multi)} ترويسة"
+    accepted = 0
+    for head, bands in multi.items():
+        disc = attrs.discriminator([{"hs6": b["hs6"]} for b in bands])
+        if disc is None:
+            continue                      # مرفوضة — آمنة بالتعريف
+        accepted += 1
+        got = disc["bands"]
+        assert len({b["dimension"] for b in got}) == 1, head
+        assert len({b["axis"] for b in got}) == 1, (
+            f"{head}: قُبِلت رغم محورٍ غيرِ رقميٍّ إضافي")
+        for prev, nxt in zip(got, got[1:]):
+            assert prev["hi"] is not None and nxt["lo"] is not None, head
+            assert prev["hi"] == nxt["lo"], f"{head}: فجوةٌ/تداخلٌ رقميّ"
+            assert bool(prev["hi_inclusive"]) != bool(nxt["lo_inclusive"]), (
+                f"{head}: الحدُّ المشترك مزدوجُ التغطية أو مكشوف")
+        # ولا قيمةٌ تنتمي لأكثر من بندٍ واحد على أيٍّ من الحدود.
+        for b in got:
+            for edge in (b["lo"], b["hi"]):
+                if edge is None:
+                    continue
+                owners = [x["hs6"] for x in got if attrs._contains(x, edge)]
+                assert len(owners) <= 1, f"{head}: {edge} يملكه {owners}"
+    assert accepted >= 5, f"الحارسُ رفض كلَّ شيء تقريباً ({accepted} مقبولة)"
+
+
+def test_second_axis_heading_is_refused_not_resolved():
+    """0902 = لونُ الشاي × وزنُ التعبئة. قياسُ الوزن وحده لا يُحدِّد بنداً —
+    يُرفَض. (نفسُ المحور فقط يمرّ.)"""
+    assert attrs.discriminator(_cands("090210", "090240")) is None
+    assert attrs.discriminator(_cands("090210", "090220")) is not None
+
+
+# ══════════════ G2 — صفرُ مصطلحِ بُعدٍ حرفيٍّ في الشيفرة ═════════════════════
+
+def test_dimension_terms_come_from_the_config_file_not_the_code():
+    lex = attrs.load_dimensions()
+    assert lex and "fat" in lex, "لم يُقرأ معجمُ الأبعاد من الملفّ"
+    label, syn = attrs.dimension_terms("fat")
+    assert label and syn
+    # بُعدٌ خارج الملفّ يتدهور نظيفاً لمفتاحه — لا مصطلحٌ مختلَق.
+    label2, syn2 = attrs.dimension_terms("zzz_unknown_dimension")
+    assert label2 == "zzz_unknown_dimension" and syn2 == ("zzz_unknown_dimension",)
+
+
+def _module_body() -> str:
+    """مصدرُ الوحدة مجرَّداً من التوثيق والتعليقات — المنطقُ وحده."""
+    import re
+    src = open(os.path.join(_ROOT, "silk_hs_attributes.py"),
+               encoding="utf-8").read()
+    body = re.sub(r'"""(?:.|\n)*?"""', "", src)
+    return "\n".join(ln.split("#", 1)[0] for ln in body.splitlines())
+
+
+def test_no_literal_arabic_dimension_term_anywhere_in_the_module():
+    """قفلٌ ضدّ عودة عائلة الدرس ٣٠ (كلمةُ نطاقٍ حرفيةٌ مجمَّدةٌ في قالب):
+    لا تسميةَ عربيةَ بُعدٍ ولا مرادفَه العربيّ يظهر حرفياً في منطق الوحدة.
+
+    العربيةُ هي السطحُ الذي يواجه التاجرَ (الاستعلام + شرحُ الحوار)، فتجميدُ
+    مصطلحٍ عربيٍّ في الشيفرة هو العيبُ بعينه. المرادفاتُ الإنجليزية تُفحَص
+    في `test_query_construction_has_no_literal_term` لأنّ بعضَها يتصادف مع
+    رموز الوحدات (`litre`) التي يحتاجها المحلّلُ لأسبابٍ لا علاقة لها."""
+    body = _module_body()
+    arabic = set()
+    for row in attrs.load_dimensions().values():
+        if row["label_ar"]:
+            arabic.add(row["label_ar"])
+        arabic.update(t for t in row["syn"]
+                      if any("\u0600" <= ch <= "\u06ff" for ch in t))
+    leaked = sorted(t for t in arabic if t and t in body)
+    assert not leaked, f"مصطلحُ بُعدٍ عربيٌّ حرفيٌّ في المنطق: {leaked}"
+
+
+def test_query_construction_has_no_literal_term():
+    """سطحُ الاستعلام/التوجيه **خالٍ تماماً** من أيّ مصطلحٍ من الملفّ (بأيّ
+    لغة) — الاستعلامُ يُركَّب من البُعد المكتشَف لا من كلمةٍ مجمَّدة."""
+    import inspect
+    src = inspect.getsource(attrs.probe_web)
+    terms = set()
+    for dim, row in attrs.load_dimensions().items():
+        if row["label_ar"]:
+            terms.add(row["label_ar"])
+        terms.update(t for t in row["syn"] if t != dim)
+        terms.add(dim)
+    leaked = sorted(t for t in terms if len(t) >= 3 and t in src)
+    assert not leaked, f"مصطلحٌ حرفيٌّ في بناء الاستعلام: {leaked}"
+
+
+def test_web_query_interpolates_the_detected_dimension(monkeypatch):
+    """استعلامُ الويب يُركَّب من البُعد المكتشَف — يتغيّر بتغيّر الترويسة."""
+    seen = []
+    monkeypatch.setattr(attrs, "_web_search",
+                        lambda q, num, gl: seen.append(q) or [])
+    monkeypatch.setattr(attrs, "_cache_read", lambda k: None)
+    monkeypatch.setattr(attrs, "_cache_write", lambda k, v: None)
+    for cands, dim in ((_cands("040110", "040120", "040140", "040150"), "fat"),
+                       (_cands("220421", "220422", "220429"), "volume"),
+                       (_cands("010391", "010392"), "weight")):
+        attrs.probe_web("منتجٌ ما", attrs.discriminator(cands))
+    assert len(seen) == 3 and len(set(seen)) == 3, (
+        f"الاستعلامُ لا يتغيّر بتغيّر البُعد: {seen}")
+    for q, dim in zip(seen, ("fat", "volume", "weight")):
+        assert attrs.dimension_terms(dim)[0] in q
+
+
+# ══════════════ G3 — تطبيعُ الوحدات ══════════════════════════════════════════
+
+@pytest.mark.parametrize("unit,family,factor", [
+    ("%", "percent", 1.0), ("percent", "percent", 1.0),
+    ("g/100ml", "percent", 1.0), ("g/100g", "percent", 1.0),
+    ("ml/100ml", "percent", 1.0), ("% vol", "percent", 1.0),
+    ("abv", "percent", 1.0), ("mg/100g", "percent", 0.001),
+    ("g", "weight", 1.0), ("kg", "weight", 1000.0),
+    ("mg", "weight", 0.001), ("tonne", "weight", 1_000_000.0),
+    ("ml", "volume", 0.001), ("cl", "volume", 0.01),
+    ("l", "volume", 1.0), ("litres", "volume", 1.0),
+    ("mm", "length", 1.0), ("cm", "length", 10.0), ("m", "length", 1000.0),
+    ("micron", "length", 0.001),
+    ("", "scalar", 1.0),
+])
+def test_unit_conversion_table_entry(unit, family, factor):
+    assert attrs._unit_family(unit) == (family, factor)
+
+
+def test_label_in_g_per_100ml_resolves_like_a_percentage():
+    """«3.5 g/100ml» على البطاقة = «3.5%» — لا تُهدَر قراءةٌ صحيحة للحوار."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    val, unit, _name = attrs.value_from_label(
+        [{"name": "نسبة الدهن", "value": 3.5, "unit": "g/100ml"}], d)
+    assert (val, unit) == (3.5, "g/100ml")
+    assert attrs.select_by_value(d, 3.5, "g/100ml") == "040120"
+
+
+@pytest.mark.parametrize("unit", ["oz", "lb", "cup", "iu", "kcal", "٪", "gal"])
+def test_unconvertible_units_are_rejected_not_guessed(unit):
+    """وحدةٌ خارج الجدول => لا تحويل => لا حسم (تُعرَض في الحوار)."""
+    assert attrs._unit_family(unit) is None
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    assert attrs.select_by_value(d, 3.5, unit) is None
+
+
+# ══════════════ G4 — قاعدةُ التعارض ══════════════════════════════════════════
+
+def _stub_web(monkeypatch, value_text: str, link="https://x.test"):
+    monkeypatch.setattr(attrs, "_cache_read", lambda k: None)
+    monkeypatch.setattr(attrs, "_cache_write", lambda k, v: None)
+    monkeypatch.setattr(attrs, "_web_search", lambda q, n, g: _fake_hits([
+        {"title": "منتجٌ تجريبي", "snippet": value_text, "link": link}]))
+
+
+def test_image_and_web_disagreement_blocks_exactly_like_no_match(monkeypatch):
+    """الصورةُ ٣٫٥ والويبُ ١٫٥ => **لا رمز**، الحوارُ يُعرَض، والقراءتان معاً."""
+    _stub_web(monkeypatch, "نسبة الدهن 1.5%")
+    out = attrs.resolve_by_attribute(
+        "منتجٌ تجريبي", _cands("040110", "040120", "040140", "040150"),
+        label_attributes=[{"name": "نسبة الدهن", "value": 3.5, "unit": "%"}],
+        allow_web=True)
+    assert out["hs6"] is None and out["resolved_from"] is None
+    assert {r["source"] for r in out["readings"]} == {"image", "web"}
+    assert {r["value"] for r in out["readings"]} == {3.5, 1.5}
+    assert "تعارض" in out["missing_ar"]
+    assert any("تعارض" in s for s in out["searched"])
+
+
+def test_agreeing_readings_resolve_with_the_stronger_source(monkeypatch):
+    """اتّفاقُ القراءتين => حسمٌ، والوسمُ لبطاقة العبوة (الأعلى سلطةً)."""
+    _stub_web(monkeypatch, "نسبة الدهن 3.5%")
+    out = attrs.resolve_by_attribute(
+        "منتجٌ تجريبي", _cands("040110", "040120", "040140", "040150"),
+        label_attributes=[{"name": "نسبة الدهن", "value": 3.5, "unit": "%"}],
+        allow_web=True)
+    assert out["hs6"] == "040120" and out["resolved_from"] == "image"
+    assert len(out["readings"]) == 2
+
+
+def test_same_band_but_different_numbers_is_still_a_conflict(monkeypatch):
+    """٢٫٠ و٥٫٠ يقعان في نفس البند — ومع ذلك **تعارض**: القياسُ غيرُ ثابت،
+    وثباتُه شرطُ الحسم (الحسمُ هنا يُخفي خلافاً حقيقياً خلف نتيجةٍ صحيحة)."""
+    _stub_web(monkeypatch, "نسبة الدهن 5%")
+    out = attrs.resolve_by_attribute(
+        "منتجٌ تجريبي", _cands("040110", "040120", "040140", "040150"),
+        label_attributes=[{"name": "نسبة الدهن", "value": 2.0, "unit": "%"}],
+        allow_web=True)
+    assert out["hs6"] is None, "حُسِم رغم تعارضِ القراءتين"
+
+
+def test_web_is_consulted_even_when_the_label_already_answered(monkeypatch):
+    """لا يُقصَّر مسارُ الويب عند نجاح الصورة — وإلا لَما اكتُشف التعارضُ أبداً."""
+    calls = []
+    monkeypatch.setattr(attrs, "_cache_read", lambda k: None)
+    monkeypatch.setattr(attrs, "_cache_write", lambda k, v: None)
+    monkeypatch.setattr(attrs, "_web_search",
+                        lambda q, n, g: calls.append(q) or [])
+    attrs.resolve_by_attribute(
+        "منتجٌ تجريبي", _cands("040110", "040120", "040140", "040150"),
+        label_attributes=[{"name": "نسبة الدهن", "value": 3.5, "unit": "%"}],
+        allow_web=True)
+    assert calls, "الويبُ لم يُستشَر — التعارضُ يمرّ بلا اكتشاف"

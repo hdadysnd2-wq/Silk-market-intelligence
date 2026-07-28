@@ -43,6 +43,47 @@ def _node() -> str | None:
     return shutil.which("node")
 
 
+# ── محرّكُ تحويل PDF: شرطُ بيئةٍ صريحٌ لا حُمرةٌ صامتة (PART 3) ───────────────
+#
+# التدفّقُ الكامل ينقر زرّ **PDF** (المُسلَّم النهائي، اللائحة ١٩) فيحتاج
+# فلاتر Writer لقراءة .docx. صورةُ النشر (`Dockerfile`) ووظيفةُ
+# `e2e-live-shape` تُثبّتان `libreoffice-writer`؛ بيئةُ تطويرٍ بلا الحزمة
+# تُفشِل الخطوةَ بمهلةِ تنزيلٍ غامضة لا علاقة لها بالشيفرة — وهو بالضبط ما
+# يجعل رُتبةً حمراءَ تُقرأ «ورقَ حائط» فتُتجاهَل. الحلُّ: **تخطٍّ مُسمّىً
+# بسببه** بعد إثباتِ العطل على مستندٍ أدنى (لا على مستنداتنا)، فيبقى الفشلُ
+# الحقيقيُّ أحمرَ ويبقى عطلُ البيئة معلَناً.
+_MIN_DOCX_PROBE = "silk_rung3_pdf_probe"
+
+
+def _docx_to_pdf_engine_works() -> bool:
+    """هل تستطيع البيئةُ تحويل **أبسط** .docx إلى PDF؟ — مِجَسٌّ لا يمسّ
+    شيفرتنا إطلاقاً: يفشل => العطلُ في الحزم لا في المستند."""
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        return False
+    import tempfile
+    try:
+        from docx import Document
+    except Exception:  # noqa: BLE001
+        return False
+    d = tempfile.mkdtemp(prefix=_MIN_DOCX_PROBE)
+    src = os.path.join(d, "probe.docx")
+    doc = Document()
+    doc.add_paragraph("probe")
+    doc.save(src)
+    profile = tempfile.mkdtemp(prefix=_MIN_DOCX_PROBE + "_lo")
+    try:
+        subprocess.run(
+            [soffice, "--headless", "--norestore",
+             f"-env:UserInstallation=file://{profile}",
+             "--convert-to", "pdf", "--outdir", d, src],
+            capture_output=True, timeout=120,
+            env={**os.environ, "HOME": profile})
+    except Exception:  # noqa: BLE001
+        return False
+    return os.path.exists(os.path.join(d, "probe.pdf"))
+
+
 def _node_path() -> str | None:
     """جذر حزم npm العمومية — حيث تُثبَّت playwright في هذه البيئة/CI."""
     node = _node()
@@ -78,6 +119,15 @@ def test_rung3_full_browser_flow_word_and_md_export_and_sidebar():
     if not _playwright_available(node_path):
         pytest.skip("حزمة playwright غير محلولة عبر NODE_PATH "
                     "(أفضل جهد؛ وظيفة e2e-live-shape تثبّتها)")
+
+    # PART 3: التدفّقُ ينقر زرّ PDF — بلا فلاتر Writer يفشل التنزيل لسببٍ
+    # بيئيٍّ بحت. أثبِتْه على مستندٍ أدنى ثم تخطَّ **بسببٍ مُسمّى** بدل
+    # ترك رُتبةٍ حمراءَ صامتة. وظيفةُ `e2e-live-shape` تُثبّت الحزمة فتعمل.
+    if not _docx_to_pdf_engine_works():
+        pytest.skip("PDF_ENGINE_MISSING: محرّكُ docx→PDF غير مكتمل في هذه "
+                    "البيئة (فشل تحويلُ مستندٍ أدنى لا يمسّ شيفرتنا — حزمةُ "
+                    "libreoffice-writer غائبة). الخطوةُ تعمل على وظيفة "
+                    "e2e-live-shape وعلى صورة النشر (اللائحة ١٩).")
 
     from live_shape_server import LiveShapeServer
     with LiveShapeServer() as srv:

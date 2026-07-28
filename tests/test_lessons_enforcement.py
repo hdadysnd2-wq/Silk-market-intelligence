@@ -559,6 +559,25 @@ _SYMBOL_ANCHORS_EXTRA = [
      ["def test_view_discloses_how_an_auto_resolved_code_was_determined"]),
     (65, "tests/test_regression_registry.py",
      ["def _guard_ask_what_the_product_answers"]),
+    # البند ٦٦ — صرامةُ الحدّ تُحمَل من العبارة، والمحورُ الثاني يُرفَض.
+    (66, "silk_hs_attributes.py",
+     ["_BOUNDS", "_BOUNDS_SUFFIX", "lo_inclusive", "hi_inclusive",
+      "def _residual_axis"]),
+    (66, "tests/test_hs_attribute_autoresolve.py",
+     ["def test_bound_strictness_comes_from_the_matched_phrase",
+      "def test_property_every_multiband_heading_is_either_clean_or_refused",
+      "def test_second_axis_heading_is_refused_not_resolved"]),
+    (66, "tests/test_regression_registry.py",
+     ["def _guard_band_boundary_strictness_and_second_axis"]),
+    # البند ٦٧ — مصطلحُ البُعد من بياناتٍ لا من شيفرة (عودةُ عائلة ٣٠).
+    (67, "data/measurement_dimensions.csv", ["dimension,label_ar"]),
+    (67, "silk_hs_attributes.py",
+     ["def load_dimensions", "def dimension_terms"]),
+    (67, "tests/test_hs_attribute_autoresolve.py",
+     ["def test_no_literal_arabic_dimension_term_anywhere_in_the_module",
+      "def test_query_construction_has_no_literal_term"]),
+    (67, "tests/test_regression_registry.py",
+     ["def _guard_dimension_terms_not_frozen_in_code"]),
 ]
 
 

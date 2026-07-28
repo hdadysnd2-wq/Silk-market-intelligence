@@ -208,3 +208,126 @@ def test_intake_drops_attributes_without_a_real_number():
     ])
     assert out == [{"name": "نسبة الدهن", "value": 3.5, "unit": "%"},
                    {"name": "الحجم", "value": 1.0, "unit": "L"}]
+
+
+# ══════════════ G5 — لا انحدارَ في حقولِ الرؤية القائمة ══════════════════════
+#
+# **نطاقٌ مُعلَنٌ صراحةً:** هذا يقيس طبقةَ **التحليل** (نفسُ ردِّ النموذج =>
+# نفسُ الحقول قبل/بعد إضافة `attributes`). لا يقيس **سلوكَ النموذج** — هل
+# تُضعِف السمةُ الجديدة جودةَ استخلاص الاسم/الفئة؟ ذلك يتطلّب نداءَ رؤيةٍ
+# حقيقياً بمفتاح (G8) وهو غيرُ متاحٍ هنا؛ مذكورٌ في التقرير بدلوه الصحيح.
+
+# مجموعةُ تجاربَ ثابتة: ردودُ نموذجٍ بالشكل **القديم** (بلا `attributes`)
+# وبالشكل **الجديد** (معها) لنفس المنتجات.
+_VISION_FIXTURES = [
+    ('{"product_name_ar":"عصير برتقال","product_name_en":"Orange juice",'
+     '"category_hint":"مشروبات","ingredients":["برتقال","سكر"],'
+     '"readable":true,"confidence":0.91}',
+     '{"product_name_ar":"عصير برتقال","product_name_en":"Orange juice",'
+     '"category_hint":"مشروبات","ingredients":["برتقال","سكر"],'
+     '"attributes":[{"name":"درجة بريكس","value":11,"unit":""}],'
+     '"readable":true,"confidence":0.91}'),
+    ('```json\n{"product_name_ar":"","product_name_en":"","category_hint":"",'
+     '"ingredients":[],"readable":false,"confidence":0.2}\n```',
+     '```json\n{"product_name_ar":"","product_name_en":"","category_hint":"",'
+     '"ingredients":[],"attributes":[],"readable":false,"confidence":0.2}\n```'),
+    ('{"product_name_ar":"زيت زيتون بكر","product_name_en":"",'
+     '"category_hint":"زيوت","ingredients":[],"readable":true,'
+     '"confidence":0.77}',
+     '{"product_name_ar":"زيت زيتون بكر","product_name_en":"",'
+     '"category_hint":"زيوت","ingredients":[],'
+     '"attributes":[{"name":"الحجم","value":500,"unit":"ml"}],'
+     '"readable":true,"confidence":0.77}'),
+]
+
+_PREEXISTING_FIELDS = ("product_name_ar", "product_name_en", "category_hint",
+                       "ingredients", "confidence")
+
+
+@pytest.mark.parametrize("before_raw,after_raw", _VISION_FIXTURES,
+                         ids=["readable", "unreadable", "no-en-name"])
+def test_added_attributes_field_does_not_change_preexisting_extraction(
+        before_raw, after_raw):
+    """إضافةُ حقلٍ للنداء المقيس **لا تُغيّر** أيّاً من الحقول القائمة."""
+    import silk_product_intake as intake
+    tiny = "iVBORw0KGgo="            # ترويسةُ PNG صالحة — يكفي للتحقّق
+
+    def _run(raw):
+        with mock.patch.object(intake, "_vision_extract", return_value=raw):
+            return intake.intake_image(
+                __import__("base64").b64encode(
+                    b"\x89PNG\r\n\x1a\n" + b"\x00" * 64).decode(),
+                "image/png", "product", allow_vision=True)
+
+    before, after = _run(before_raw), _run(after_raw)
+    assert before["ok"] == after["ok"] and before["status"] == after["status"]
+    assert before["product_name"] == after["product_name"]
+    b_x, a_x = before.get("extraction") or {}, after.get("extraction") or {}
+    for field in _PREEXISTING_FIELDS:
+        assert b_x.get(field) == a_x.get(field), (
+            f"حقلٌ قائمٌ تغيّر بإضافة السمات: {field} "
+            f"({b_x.get(field)!r} -> {a_x.get(field)!r})")
+
+
+def test_old_shape_response_still_yields_empty_attributes_not_a_crash():
+    """ردٌّ بالشكل القديم (بلا `attributes`) يمرّ بقائمةٍ فارغة — لا انهيار
+    ولا سمةٌ مختلَقة (نموذجٌ لم يُحدَّث بعد، أو ذاكرةٌ قديمة)."""
+    import silk_product_intake as intake
+    assert intake._sanitize_attributes(None) == []
+    assert intake.intake_name("تمر سكري")["extraction"]["attributes"] == []
+
+
+# ══════════════ سلسلةُ الإفصاح في مستندٍ **مُصيَّرٍ فعلاً** ═══════════════════
+#
+# هذا القفلُ وُلد من عطلٍ حقيقيّ التقطه فحصُ التصيير لا اختبارُ الوحدة:
+# `view["limits"]` كان يحمل السطر (فالاختبارُ أخضر)، بينما **مستندُ العميل** —
+# المُسلَّم الفعليّ — يبني أقسامَه من `deep_research` فخرج السطرُ منه تماماً.
+# القاعدة: ادّعاءُ «التقريرُ يعرض المصدر» يُثبَت بفتح المستند، لا بقراءة العرض.
+
+@pytest.mark.parametrize("renderer,label", [
+    ("render_client_docx", "العميل"),
+    ("render_docx", "المشغّل"),
+])
+def test_provenance_string_appears_in_the_actually_rendered_document(
+        renderer, label, tmp_path):
+    import silk_render
+    import silk_reports
+    pytest.importorskip("docx")
+    sys.path.insert(0, os.path.join(_ROOT, "tools"))
+    from canonical_netherlands import netherlands_research_blob
+    from docx import Document
+
+    blob = netherlands_research_blob()
+    blob["hs_provenance"] = {
+        "hs6": "040120", "resolved_from": "web", "attribute": "fat",
+        "label_ar": "نسبة الدهن", "value": 3.5, "unit": "%",
+        "source_url": "https://example-retailer.test/label", "confidence": 0.5}
+    with _env(SILK_HERMETIC="1"):
+        view = silk_render.build_view(blob)
+        path = getattr(silk_reports, renderer)(
+            view, str(tmp_path / f"{renderer}.docx"))
+    doc = Document(path)
+    text = "\n".join(p.text for p in doc.paragraphs)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                text += "\n" + cell.text
+    assert "الرمز محدَّد من مصدر ويب" in text, (
+        f"مستند {label}: سطرُ الإفصاح غائبٌ عن المستند المُصيَّر فعلاً")
+    assert "example-retailer.test/label" in text, (
+        f"مستند {label}: الرابطُ المُستشهَد به غائب")
+
+
+def test_no_provenance_sentence_when_the_code_was_not_measured(tmp_path):
+    """بلا حسمٍ آليّ لا جملةَ إفصاحٍ في أيّ مستند — لا نصٌّ مُقحَم."""
+    import silk_render
+    import silk_reports
+    pytest.importorskip("docx")
+    sys.path.insert(0, os.path.join(_ROOT, "tools"))
+    from canonical_netherlands import netherlands_research_blob
+    from docx import Document
+    with _env(SILK_HERMETIC="1"):
+        view = silk_render.build_view(netherlands_research_blob())
+        path = silk_reports.render_client_docx(view, str(tmp_path / "c.docx"))
+    text = "\n".join(p.text for p in Document(path).paragraphs)
+    assert "الرمز محدَّد" not in text

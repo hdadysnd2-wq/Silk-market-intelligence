@@ -1354,6 +1354,90 @@ def _guard_ask_what_the_product_answers():
              "الرمز محدَّد من صورة العبوة", "الرمز محدَّد من مصدر ويب")()
     _needles("web/index.html", "attribute_probe", "label_attributes",
              'd.error==="hs_ambiguous"')()
+    # (د) عائلةُ اللائحة ١٢ (الحدود تناقض المتن): المصالحةُ اللفظية
+    # (`revalidate`) لا تعمل على رمزٍ حُسِم بقياس — وإلا ظهر «المُحلِّل يعيد
+    # رمزاً آخر» بجوار «الرمز محدَّد من صورة العبوة» في نفس التقرير.
+    assert ('if not (isinstance(hs_provenance, dict) '
+            'and hs_provenance.get("hs6")):') in src, (
+        "المصالحةُ اللفظية تعمل على رمزٍ مقيس — تناقضٌ محتوم")
+
+
+def _guard_band_boundary_strictness_and_second_axis():
+    """LESSONS ٦٦ — عيبان يُصدِران **رمزاً خاطئاً بوسمِ مصدرٍ واثق** (اختلاقٌ
+    لا فجوة): (أ) تسطيحُ صرامةِ الحدّ («less than 6» تُعامَل كـ«not exceeding
+    6») فتُبتلَع قيمةُ الحدّ؛ (ب) ترويسةٌ تنقسم بمحورين (لونُ الشاي × وزنُ
+    التعبئة) يحسمها قياسٌ واحد. الحارس **سلوكيّ** على المرجع الحقيقيّ."""
+    import silk_hs_attributes as A
+    FAKE = "000000"                       # ليس في المرجع => يُقرأ الوصفُ الحرّ
+    assert A.band_of(FAKE, "x") is None or True
+    inc = A.band_of(FAKE, "of a fat content, not exceeding 6%")
+    strict = A.band_of(FAKE, "of a fat content, less than 6%")
+    assert inc and strict, "لم تُقرأ الحدود من العبارة"
+    assert inc["hi"] == strict["hi"] == 6.0
+    assert inc["hi_inclusive"] is True and strict["hi_inclusive"] is False, (
+        "صرامةُ الحدّ مُسطَّحة — «less than» تُعامَل معاملةَ «not exceeding»")
+    assert A._contains(inc, 6.0) is True and A._contains(strict, 6.0) is False
+    lo_inc = A.band_of(FAKE, "of a fat content, at least 1%")
+    assert lo_inc and lo_inc["lo_inclusive"] is True, "حدٌّ أدنى شاملٌ مفقود"
+    # (ب) المحورُ الثاني: ترويسةٌ تنقسم بلونٍ ووزنٍ معاً لا تُحسَم بالوزن وحده.
+    import collections
+    from silk_hs_resolver import load_hs_reference
+    heads = collections.defaultdict(list)
+    for code in load_hs_reference():
+        b = A.band_of(code)
+        if b:
+            heads[code[:4]].append(b)
+    multi = {h: bs for h, bs in heads.items() if len(bs) >= 2}
+    assert len(multi) >= 40, "المرجعُ لم يُقرأ — الحارس بلا عيّنة"
+    accepted = refused = 0
+    for head, bands in multi.items():
+        d = A.discriminator([{"hs6": b["hs6"]} for b in bands])
+        if d is None:
+            refused += 1
+            continue
+        accepted += 1
+        assert len({b["axis"] for b in d["bands"]}) == 1, (
+            f"{head}: قُبِلت رغم محورٍ غيرِ رقميٍّ إضافي")
+        for prev, nxt in zip(d["bands"], d["bands"][1:]):
+            assert prev["hi"] == nxt["lo"], f"{head}: فجوةٌ/تداخل"
+            assert bool(prev["hi_inclusive"]) != bool(nxt["lo_inclusive"]), (
+                f"{head}: حدٌّ مزدوجُ التغطية أو مكشوف")
+    assert accepted >= 5 and refused >= 5, (
+        f"توازنُ الحارس مختلّ (مقبولة {accepted}، مرفوضة {refused})")
+    _needles("tests/test_hs_attribute_autoresolve.py",
+             "def test_bound_strictness_comes_from_the_matched_phrase",
+             "def test_property_every_multiband_heading_is_either_clean_or_refused",
+             "def test_second_axis_heading_is_refused_not_resolved")()
+
+
+def _guard_dimension_terms_not_frozen_in_code():
+    """LESSONS ٦٧ — عودةُ عائلة الدرس ٣٠ (كلمةُ نطاقٍ حرفيةٌ مجمَّدةٌ في قالبٍ
+    قابلٍ لإعادة الاستعمال): مصطلحُ البُعد كان مكتوباً في استعلام الويب،
+    فيعمل على الألبان ويُخرِس كلَّ ترويسةٍ أخرى. الحارس: المعجمُ من ملفٍ،
+    وصفرُ مصطلحٍ عربيٍّ في المنطق، وصفرُ مصطلحٍ في بناء الاستعلام."""
+    import inspect
+    import silk_hs_attributes as A
+    lex = A.load_dimensions()
+    assert len(lex) >= 8, "معجمُ الأبعاد لم يُقرأ من الملفّ"
+    assert _exists("data/measurement_dimensions.csv")
+    body = _read("silk_hs_attributes.py")
+    body = re.sub(r'"""(?:.|\n)*?"""', "", body)
+    body = "\n".join(ln.split("#", 1)[0] for ln in body.splitlines())
+    arabic = set()
+    for row in lex.values():
+        if row["label_ar"]:
+            arabic.add(row["label_ar"])
+        arabic.update(t for t in row["syn"]
+                      if any("\u0600" <= ch <= "\u06ff" for ch in t))
+    leaked = sorted(t for t in arabic if t and t in body)
+    assert not leaked, f"مصطلحُ بُعدٍ عربيٌّ مجمَّدٌ في المنطق: {leaked}"
+    qsrc = inspect.getsource(A.probe_web)
+    frozen = sorted(t for dim, row in lex.items()
+                    for t in ((row["label_ar"],) + tuple(row["syn"]) + (dim,))
+                    if len(t) >= 3 and t in qsrc)
+    assert not frozen, f"مصطلحٌ مجمَّدٌ في بناء الاستعلام: {frozen}"
+    # وبُعدٌ خارج الملفّ يتدهور لمفتاحه — لا مصطلحٌ مختلَق.
+    assert A.dimension_terms("zzz_x") == ("zzz_x", ("zzz_x",))
 
 
 _LESSONS = {
@@ -1428,6 +1512,8 @@ _LESSONS = {
     63: _guard_bloc_list_single_source,           # DEF-2 — عضويةُ الكتلة من مصدرٍ واحد (EU27 كاملة)
     64: _guard_g41_domestic_production,           # DEF-1/G4.1 — مرتكزُ الإنتاج المحليّ (سوقٌ مُنتِجة لا تُوسَم)
     65: _guard_ask_what_the_product_answers,      # بلاغ المُشرِف — قِسِ الرقمَ قبل أن تسأل عنه
+    66: _guard_band_boundary_strictness_and_second_axis,  # صرامةُ الحدّ + المحورُ الثاني
+    67: _guard_dimension_terms_not_frozen_in_code,        # مصطلحُ بُعدٍ مجمَّد (عودةُ ٣٠)
 }
 
 _TRAPS = [

@@ -149,7 +149,7 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
           "retrieved_at": "2026-07-28",
           "status": "",
           "data_year": null,
@@ -159,7 +159,7 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
           "retrieved_at": "2026-07-28",
           "status": "",
           "data_year": null,
@@ -169,7 +169,7 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
           "retrieved_at": "2026-07-28",
           "status": "",
           "data_year": null,
@@ -250,8 +250,8 @@
             ],
             "rejected": [],
             "coverage": 0.6,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:25+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:04:58+00:00"
           },
           "competitor": {
             "agent": "competitor",
@@ -348,8 +348,8 @@
             ],
             "rejected": [],
             "coverage": 0.8,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:26+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:01+00:00"
           },
           "regulatory": {
             "agent": "regulatory",
@@ -433,8 +433,8 @@
             ],
             "rejected": [],
             "coverage": 0.75,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:25+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:04:58+00:00"
           },
           "pricing": {
             "agent": "pricing",
@@ -482,8 +482,8 @@
             ],
             "rejected": [],
             "coverage": 0.4,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:31+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:06+00:00"
           },
           "risk": {
             "agent": "risk",
@@ -509,15 +509,15 @@
               }
             ],
             "gaps": [
-              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
               "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
             ],
             "rejected": [],
             "coverage": 0.2,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:33+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:05+00:00"
           },
           "consumer_demand": {
             "agent": "consumer_demand",
@@ -559,15 +559,15 @@
               }
             ],
             "gaps": [
-              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-              "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))"
+              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+              "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
             ],
             "rejected": [],
             "coverage": 0.33,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:30+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:03+00:00"
           },
           "supplier": {
             "agent": "supplier",
@@ -581,8 +581,8 @@
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:25+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:04:58+00:00"
           },
           "logistics": {
             "agent": "logistics",
@@ -591,16 +591,16 @@
             "status": "failed",
             "findings": [],
             "gaps": [
-              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
               "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
               "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
               "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:33+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:06+00:00"
           }
         },
         "coverage": 0.39,
@@ -825,7 +825,7 @@
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
             "note": "HS080410 total imports (World) to market 156 2023, USD — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T08:26:09+00:00",
+            "retrieved_at": "2026-07-28T09:04:41+00:00",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -840,7 +840,7 @@
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
             "note": "HS080410 imports to CHN 2023; share 50.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T08:26:09+00:00",
+            "retrieved_at": "2026-07-28T09:04:41+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
@@ -855,7 +855,7 @@
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
             "note": "HS080410 imports to CHN 2023; share 30.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T08:26:09+00:00",
+            "retrieved_at": "2026-07-28T09:04:41+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
@@ -870,7 +870,7 @@
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
             "note": "HS080410 imports to CHN 2023; share 20.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T08:26:09+00:00",
+            "retrieved_at": "2026-07-28T09:04:41+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
@@ -1066,7 +1066,7 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
           "retrieved_at": "2026-07-28",
           "status": "",
           "data_year": null,
@@ -1076,7 +1076,7 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
           "retrieved_at": "2026-07-28",
           "status": "",
           "data_year": null,
@@ -1086,7 +1086,7 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
           "retrieved_at": "2026-07-28",
           "status": "",
           "data_year": null,
@@ -1167,8 +1167,8 @@
             ],
             "rejected": [],
             "coverage": 0.6,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:25+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:04:58+00:00"
           },
           "competitor": {
             "agent": "competitor",
@@ -1253,8 +1253,8 @@
             ],
             "rejected": [],
             "coverage": 0.8,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:32+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:03+00:00"
           },
           "regulatory": {
             "agent": "regulatory",
@@ -1380,8 +1380,8 @@
             "gaps": [],
             "rejected": [],
             "coverage": 1.0,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:25+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:04:58+00:00"
           },
           "pricing": {
             "agent": "pricing",
@@ -1429,8 +1429,8 @@
             ],
             "rejected": [],
             "coverage": 0.4,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:33+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:05+00:00"
           },
           "risk": {
             "agent": "risk",
@@ -1456,15 +1456,15 @@
               }
             ],
             "gaps": [
-              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
               "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
             ],
             "rejected": [],
             "coverage": 0.2,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:33+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:05+00:00"
           },
           "consumer_demand": {
             "agent": "consumer_demand",
@@ -1506,15 +1506,15 @@
               }
             ],
             "gaps": [
-              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-              "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))"
+              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+              "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
             ],
             "rejected": [],
             "coverage": 0.33,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:31+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:03+00:00"
           },
           "supplier": {
             "agent": "supplier",
@@ -1528,8 +1528,8 @@
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:25+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:04:58+00:00"
           },
           "logistics": {
             "agent": "logistics",
@@ -1538,16 +1538,16 @@
             "status": "failed",
             "findings": [],
             "gaps": [
-              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
               "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
               "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
               "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T08:26:25+00:00",
-            "finished_at": "2026-07-28T08:26:33+00:00"
+            "started_at": "2026-07-28T09:04:58+00:00",
+            "finished_at": "2026-07-28T09:05:06+00:00"
           }
         },
         "coverage": 0.42,
@@ -1768,7 +1768,7 @@
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
             "note": "HS080410 total imports (World) to market 784 2023, USD — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T08:26:09+00:00",
+            "retrieved_at": "2026-07-28T09:04:41+00:00",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -1783,7 +1783,7 @@
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
             "note": "HS080410 imports to ARE 2023; share 100.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T08:26:09+00:00",
+            "retrieved_at": "2026-07-28T09:04:41+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
@@ -2010,7 +2010,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
             "retrieved_at": "2026-07-28",
             "status": "",
             "data_year": null,
@@ -2020,7 +2020,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
             "retrieved_at": "2026-07-28",
             "status": "",
             "data_year": null,
@@ -2030,7 +2030,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
             "retrieved_at": "2026-07-28",
             "status": "",
             "data_year": null,
@@ -2218,8 +2218,8 @@
               ],
               "rejected": [],
               "coverage": 0.6,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:25+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:04:58+00:00"
             },
             "competitor": {
               "agent": "competitor",
@@ -2316,8 +2316,8 @@
               ],
               "rejected": [],
               "coverage": 0.8,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:26+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:01+00:00"
             },
             "regulatory": {
               "agent": "regulatory",
@@ -2401,8 +2401,8 @@
               ],
               "rejected": [],
               "coverage": 0.75,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:25+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:04:58+00:00"
             },
             "pricing": {
               "agent": "pricing",
@@ -2450,8 +2450,8 @@
               ],
               "rejected": [],
               "coverage": 0.4,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:31+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:06+00:00"
             },
             "risk": {
               "agent": "risk",
@@ -2477,15 +2477,15 @@
                 }
               ],
               "gaps": [
-                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
               ],
               "rejected": [],
               "coverage": 0.2,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:33+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:05+00:00"
             },
             "consumer_demand": {
               "agent": "consumer_demand",
@@ -2527,15 +2527,15 @@
                 }
               ],
               "gaps": [
-                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-                "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))"
+                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+                "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
               ],
               "rejected": [],
               "coverage": 0.33,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:30+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:03+00:00"
             },
             "supplier": {
               "agent": "supplier",
@@ -2549,8 +2549,8 @@
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:25+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:04:58+00:00"
             },
             "logistics": {
               "agent": "logistics",
@@ -2559,16 +2559,16 @@
               "status": "failed",
               "findings": [],
               "gaps": [
-                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
                 "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
                 "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:33+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:06+00:00"
             }
           },
           "coverage": 0.39,
@@ -2881,7 +2881,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
             "retrieved_at": "2026-07-28",
             "status": "",
             "data_year": null,
@@ -2891,7 +2891,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
             "retrieved_at": "2026-07-28",
             "status": "",
             "data_year": null,
@@ -2901,7 +2901,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
+            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
             "retrieved_at": "2026-07-28",
             "status": "",
             "data_year": null,
@@ -3089,8 +3089,8 @@
               ],
               "rejected": [],
               "coverage": 0.6,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:25+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:04:58+00:00"
             },
             "competitor": {
               "agent": "competitor",
@@ -3175,8 +3175,8 @@
               ],
               "rejected": [],
               "coverage": 0.8,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:32+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:03+00:00"
             },
             "regulatory": {
               "agent": "regulatory",
@@ -3302,8 +3302,8 @@
               "gaps": [],
               "rejected": [],
               "coverage": 1.0,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:25+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:04:58+00:00"
             },
             "pricing": {
               "agent": "pricing",
@@ -3351,8 +3351,8 @@
               ],
               "rejected": [],
               "coverage": 0.4,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:33+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:05+00:00"
             },
             "risk": {
               "agent": "risk",
@@ -3378,15 +3378,15 @@
                 }
               ],
               "gaps": [
-                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
               ],
               "rejected": [],
               "coverage": 0.2,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:33+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:05+00:00"
             },
             "consumer_demand": {
               "agent": "consumer_demand",
@@ -3428,15 +3428,15 @@
                 }
               ],
               "gaps": [
-                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-                "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))",
-                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\")))"
+                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+                "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
+                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
               ],
               "rejected": [],
               "coverage": 0.33,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:31+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:03+00:00"
             },
             "supplier": {
               "agent": "supplier",
@@ -3450,8 +3450,8 @@
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:25+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:04:58+00:00"
             },
             "logistics": {
               "agent": "logistics",
@@ -3460,16 +3460,16 @@
               "status": "failed",
               "findings": [],
               "gaps": [
-                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39409): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
                 "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
                 "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T08:26:25+00:00",
-              "finished_at": "2026-07-28T08:26:33+00:00"
+              "started_at": "2026-07-28T09:04:58+00:00",
+              "finished_at": "2026-07-28T09:05:06+00:00"
             }
           },
           "coverage": 0.42,
