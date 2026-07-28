@@ -37,6 +37,56 @@ _PRERUN_FLOW = os.path.join(_ROOT, "tests", "e2e", "prerun_flow.cjs")
 _READINESS_FLOW = os.path.join(_ROOT, "tests", "e2e", "readiness_flow.cjs")
 _HS_CANDIDATES_FLOW = os.path.join(_ROOT, "tests", "e2e", "hs_candidates_flow.cjs")
 _HS_TIER_FAMILY_FLOW = os.path.join(_ROOT, "tests", "e2e", "hs_tier_family_flow.cjs")
+_HS_DIALOG_FLOW = os.path.join(_ROOT, "tests", "e2e",
+                               "hs_dialog_official_flow.cjs")
+
+# حالتا رُتبة ٣ لحوار المرشّحين — **فصلان مختلفان وبُعدا قياسٍ مختلفان** (شرط
+# المُشرِف: لا على 0401 وحدها). المكتوب هنا صلباً هو **اسم المنتج والتوقّع**
+# فقط؛ كلُّ ما يُؤكَّد في المتصفّح (الأشقّاء، حدود النطاق، مجموعة المرجع)
+# يُشتَقّ لحظةَ التشغيل من `data/hs_reference.csv`.
+_DIALOG_CASES = (
+    {"product": "حليب طازج مبستر", "heading": "0401", "dimension": "fat",
+     "anchor": "040110"},
+    {"product": "شاي أخضر معبأ", "heading": "0902", "dimension": "weight",
+     "anchor": "090210"},
+)
+
+# رموزٌ تُمنَع من نصّ الحوار: اسمُ المنتج المكتوب وعلامةٌ تجاريةٌ وبلدٌ — نثرُ
+# الحوار وصفٌ رسميٌّ للبند، لا صدىً لِما كتبه التاجر (البند ٧٤).
+_DIALOG_BANNED = ("نادك", "المراعي", "هولندا", "طازج", "معبأ")
+
+
+def _dialog_cases_payload() -> tuple[str, str]:
+    """يبني حمولةَ الحالات ومجموعةَ المرجع الرسميّ **من المرجع نفسه**."""
+    import json
+
+    import silk_hs_attributes as attrs
+    import silk_hs_dialog as dialog
+    import silk_hs_resolver as resolver
+
+    cases = []
+    for case in _DIALOG_CASES:
+        anchor = case["anchor"]
+        siblings = dialog.axis_siblings(anchor)
+        assert len(siblings) >= 2, f"{anchor}: axis has no sibling to complete"
+        edges: dict[str, list[str]] = {}
+        for hs6 in siblings:
+            band = attrs.band_of(hs6, resolver.official_description(hs6))
+            assert band, f"{hs6}: no band parsed from the official description"
+            unit = band.get("unit") or ""
+            vals = [v for v in (band.get("lo"), band.get("hi")) if v is not None]
+            # الحدُّ المتوقَّع مشتقٌّ من **المُحلِّل** (`band_of`) لا من المُصيِّر
+            # المُختبَر (`range_ar`) — فالتأكيد ليس دائرياً.
+            edges[hs6] = [
+                f"{int(v) if float(v).is_integer() else v}{unit}" for v in vals]
+        cases.append({
+            "product": case["product"], "heading": case["heading"],
+            "dimension": case["dimension"], "siblings": siblings,
+            "edges": edges, "banned_tokens": list(_DIALOG_BANNED),
+        })
+    official = sorted(resolver.load_hs_reference())
+    assert len(official) > 5000, f"reference looks truncated: {len(official)}"
+    return json.dumps(cases, ensure_ascii=False), json.dumps(official)
 
 
 def _node() -> str | None:
@@ -254,6 +304,47 @@ def test_rung3_hs_candidates_dialog_blocks_on_flagged_product_and_never_auto_bad
             f"HS-candidates Playwright flow failed (rc={r.returncode}).\n"
             f"STDOUT:\n{out}\nSTDERR:\n{err}")
         assert "HSCAND PASS" in out, f"missing PASS marker.\nSTDOUT:\n{out}"
+
+
+def test_rung3_hs_dialog_renders_only_official_codes_complete_siblings_and_bands():
+    """البند ٧٢–٧٤ في متصفّحٍ حقيقي: حوارُ المرشّحين على **فصلين مختلفين**
+    وببُعدَي قياسٍ مختلفين — «حليب طازج مبستر» (الفصل ٠٤، بُعد `fat`) و«شاي
+    أخضر معبأ» (الفصل ٠٩، بُعد `weight`) — يُصيَّر عبر مسار المستخدم الحقيقي
+    (خطّاف المنتج ← سوق ← «بحث عميق» ← `/classify_hs` ← `showHsCandidates`)،
+    ثم يُقرأ الـDOM ويُؤكَّد أربعُ خصائصٍ مشتقّةٍ من `data/hs_reference.csv`:
+    لا رمزَ خارج المرجع، أشقّاءُ المحور كاملون، حدودُ النطاق الرسميّة حاضرةٌ
+    نصّاً، ولا صدىً لاسم منتجٍ/علامةٍ/بلدٍ في نثر الحوار.
+
+    الحادثة التي يقفلها: الحوارُ كان يعرض نثرَ نموذجٍ (حدوداً تناقض المرجع)
+    ورمزاً لا وجود له في المرجع ولا في البذرة، ومجموعةً مقتطعةً إلى ثلاثة —
+    فيخرج التاجرُ برمزٍ جمركيٍّ **خاطئ بلا أيّ إشارة**."""
+    node = _node()
+    if not node:
+        pytest.skip("node غير متاح في هذه البيئة (أفضل جهد؛ وظيفة CI تثبّته)")
+    node_path = _node_path()
+    if not _playwright_available(node_path):
+        pytest.skip("حزمة playwright غير محلولة عبر NODE_PATH "
+                    "(أفضل جهد؛ وظيفة e2e-live-shape تثبّتها)")
+
+    cases_json, official_json = _dialog_cases_payload()
+    from live_shape_server import LiveShapeServer
+    with LiveShapeServer(prerun_flags=True) as srv:
+        env = dict(
+            os.environ,
+            NODE_PATH=node_path or "",
+            BASE_URL=srv.base_url,
+            PRERUN_MARKET_ISO3=srv.PRERUN_MARKET_ISO3,
+            DIALOG_CASES=cases_json,
+            OFFICIAL_CODES=official_json,
+        )
+        r = subprocess.run([node, _HS_DIALOG_FLOW], capture_output=True,
+                           env=env, timeout=240)
+        out = r.stdout.decode("utf-8", "replace")
+        err = r.stderr.decode("utf-8", "replace")
+        assert r.returncode == 0, (
+            f"HS-dialog Playwright flow failed (rc={r.returncode}).\n"
+            f"STDOUT:\n{out}\nSTDERR:\n{err}")
+        assert "HSDIALOG PASS" in out, f"missing PASS marker.\nSTDOUT:\n{out}"
 
 
 def test_rung3_ui_tier_consumption_locked_across_product_families():

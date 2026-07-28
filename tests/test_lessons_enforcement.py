@@ -605,6 +605,31 @@ _SYMBOL_ANCHORS_EXTRA = [
       "def test_every_cross_basis_unit_in_the_table_is_guarded"]),
     (71, "tests/test_regression_registry.py",
      ["def _guard_cross_basis_edge_refusal"]),
+    # البند ٧٢ (E2) — نصُّ البند من المرجع الرسميّ حصراً، عبر مُصيِّرٍ واحد.
+    (72, "silk_hs_dialog.py",
+     ["def official_text", "def in_official_reference", "def band_text_ar",
+      "def build_candidates"]),
+    (72, "tests/test_hs_dialog_official_source.py",
+     ["def test_every_multiband_heading_renders_text_faithful_to_the_reference",
+      "def test_a_code_absent_from_the_official_reference_is_never_offered",
+      "def test_every_user_facing_producer_delegates_to_the_one_renderer"]),
+    (72, "tests/test_regression_registry.py",
+     ["def _guard_dialog_band_text_from_the_official_reference_only"]),
+    # البند ٧٣ (E3) — اكتمالُ أشقّاء المحور شرطُ صحّةٍ لا تفضيلُ عرض.
+    (73, "silk_hs_dialog.py", ["def axis_siblings", "def _heading_index"]),
+    (73, "tests/test_hs_dialog_official_source.py",
+     ["def test_no_axis_group_can_ever_present_a_proper_subset_of_its_siblings",
+      "def test_frontend_does_not_truncate_the_candidate_list"]),
+    (73, "tests/test_regression_registry.py",
+     ["def _guard_dialog_axis_siblings_never_partial"]),
+    # البند ٧٤ (E4) — لا صدى لاسم منتجٍ/علامةٍ/دولةٍ في نثرٍ يُقدَّم رسمياً.
+    (74, "silk_hs_dialog.py",
+     ["def sanitize_prose", "_AR_CLITICS", "def _country_terms"]),
+    (74, "tests/test_hs_dialog_official_source.py",
+     ["def test_generated_prose_never_echoes_the_product_or_brand",
+      "def test_module_has_no_hardcoded_product_brand_or_country_literal"]),
+    (74, "tests/test_regression_registry.py",
+     ["def _guard_dialog_prose_carries_no_product_brand_or_country"]),
 ]
 
 

@@ -1637,6 +1637,172 @@ def _guard_cross_basis_edge_refusal():
              "def near_any_edge", "_UNIT_BASIS", "_EDGE_MARGIN")()
 
 
+def _dialog_band_numbers(band: dict) -> list[str]:
+    """أرقامُ النطاق كما يجب أن تظهر — مشتقّةٌ من **المُحلِّل** لا من المُصيِّر
+    المُختبَر، فالتأكيدُ ليس دائرياً."""
+    unit = band.get("unit") or ""
+    out = []
+    for v in (band.get("lo"), band.get("hi")):
+        if v is None:
+            continue
+        out.append(f"{int(v) if float(v).is_integer() else v}{unit}")
+    return out
+
+
+def _guard_dialog_band_text_from_the_official_reference_only():
+    """البند ٧٢ — نصُّ الحدّ المعروض مشتقٌّ من المرجع الرسميّ حصراً.
+
+    الحادثة: نثرُ نموذجٍ وقتَ الطلب كان يغلب الوصفَ الرسميّ بالتداخل اللفظيّ،
+    فعُرِض على التاجر حدٌّ **يناقض** بندَه (`040110` بوصف «لا تتجاوز 6%»
+    وبندُه ≤١٪)، ورمزٌ لا وجودَ له في المرجع (`040190`). الحارسُ سلوكيّ: يمرّ
+    نثراً مناقضاً عبر نقطة الاختناق ويقرأ الناتج، ثم يكنس **كلّ** بندٍ ذي
+    نطاقٍ في `data/hs_reference.csv` لا عيّنة."""
+    import silk_hs_attributes as attrs
+    import silk_hs_dialog as dialog
+    from silk_hs_resolver import load_hs_reference, official_description
+
+    contradicting = {
+        "040110": "نسبة الدهن لا تتجاوز 6%",
+        "040120": "نسبة الدهن تتجاوز 6%",
+        "040190": "حليب وقشطة أخرى",
+    }
+    rows = dialog.build_candidates(
+        "حليب نادك كامل الدسم", list(contradicting), contradicting)
+    shown = {r["hs6"] for r in rows}
+    assert "040190" not in shown, "رمزٌ مجهولٌ للمدوّنتين عُرِض على التاجر"
+    # والنفيُ المقابل: نقصُ نسختنا من المرجع ليس سقفاً — بندٌ حقيقيٌّ تعرفه
+    # البذرةُ وحدها يُعرَض، بلا نصٍّ مُختلَق (اللائحة ٣٩ من طرفها المقابل).
+    from silk_hs_resolver import load_hs_codes
+    seed_only = sorted({r["hs_code"] for r in load_hs_codes()}
+                       - set(load_hs_reference()))
+    assert seed_only, "لا فجوةَ بين المدوّنتين — الحارسُ فقد موضوعَه"
+    kept = {r["hs6"]: r for r in dialog.build_candidates("—", seed_only)}
+    assert set(seed_only) <= set(kept), (
+        f"بنودٌ حقيقيةٌ سقطت لنقصِ نسختنا: {set(seed_only) - set(kept)}")
+    assert all(kept[c]["description_ar"] == "" for c in seed_only), (
+        "نصٌّ غيرُ رسميٍّ سدّ فراغَ الوصف")
+    assert {"040110", "040120", "040140", "040150"} <= shown, shown
+    by_code = {r["hs6"]: r for r in rows}
+    assert "6%" not in by_code["040110"]["band_ar"], (
+        "حدُّ 040110 المعروض يناقض بندَه الرسميّ (≤١٪) — عودةُ الحادثة")
+    for code, prose in contradicting.items():
+        row = by_code.get(code)
+        if row is None:
+            continue
+        assert row["description_ar"] == official_description(code), (
+            f"{code}: الوصفُ المعروض ليس الوصفَ الرسميّ حرفياً")
+        assert prose not in row["band_ar"], f"{code}: نثرُ نموذجٍ صار حدَّ بند"
+        assert prose not in row["description_ar"], f"{code}: نثرٌ صار وصفاً"
+
+    # كنسٌ كامل: كلُّ بندٍ ذي نطاقٍ في المرجع يُصيَّر بأرقام نطاقه هو.
+    checked = 0
+    for code in load_hs_reference():
+        band = attrs.band_of(code)
+        if band is None:
+            continue
+        text = dialog.band_text_ar(code)
+        assert text, f"{code}: بندٌ ذو نطاقٍ بلا نصّ حدٍّ معروض"
+        for needle in _dialog_band_numbers(band):
+            assert needle in text, (
+                f"{code}: النصُّ «{text}» لا يحمل حدَّ المرجع {needle}")
+        checked += 1
+    assert checked >= 380, f"الكنسُ لم يشمل المرجعَ فعلياً: {checked}"
+    _needles("silk_hs_dialog.py", "def build_candidates", "def band_text_ar",
+             "def official_text", "def in_official_reference")()
+    # ولا مُصيِّرَ ثانٍ: كلُّ منتجٍ لقائمة الحوار يمرّ بنقطة الاختناق.
+    _needles("silk_hs_classifier.py", "silk_hs_dialog")()
+    _needles("silk_hs_confirm.py", "silk_hs_dialog")()
+
+
+def _guard_dialog_axis_siblings_never_partial():
+    """البند ٧٣ — لا تُعرَض مجموعةٌ جزئيةٌ من محورٍ رقميّ.
+
+    الحادثة: سقط `040140`/`040150` من القائمة فلم يجد منتجٌ كامل الدسم خياراً
+    صحيحاً أصلاً — فيختار التاجر أقربَ المعروض ويخرج برمزٍ **خاطئ بلا إشارة**.
+    السببُ مركّب: فجوةُ بذرةٍ (٨ من ٣٩٣ بنداً فقط قابلةٌ للبلوغ باسمٍ عربيّ)
+    مضروبةٌ في اقتطاعٍ صلبٍ إلى ثلاثة في الخادم وفي الواجهة معاً.
+
+    الحارسُ خاصّيّ على **كامل** المرجع: أيُّ عضوٍ من أيّ مجموعةِ محورٍ يُدخَل
+    وحدَه يُخرِج المجموعةَ كاملة."""
+    import collections
+    import silk_hs_attributes as attrs
+    import silk_hs_dialog as dialog
+    from silk_hs_resolver import load_hs_reference
+
+    groups: dict = collections.defaultdict(list)
+    for code in load_hs_reference():
+        band = attrs.band_of(code)
+        if band is not None:
+            groups[(code[:4], band["axis"])].append(code)
+    families = {k: sorted(v) for k, v in groups.items() if len(v) >= 2}
+    assert len(families) >= 60, f"مجموعاتُ المحاور تبدو مبتورة: {len(families)}"
+
+    covered = 0
+    for members in families.values():
+        for member in members:
+            shown = [r["hs6"] for r in dialog.build_candidates("—", [member])]
+            missing = [m for m in members if m not in shown]
+            assert not missing, (
+                f"{member}: أشقّاءُ المحور غائبون عن الحوار {missing}")
+            covered += 1
+    assert covered >= 150, f"الكنسُ لم يشمل المجموعاتِ فعلياً: {covered}"
+    # ولا اقتطاعَ في الواجهة يُعيد العطلَ بعد إصلاح الخادم.
+    _absent("web/index.html", "cands.slice(0,3)", "cands.slice(0, 3)")()
+    _needles("web/index.html", "c.band_ar")()
+    # وحدُّ النطاق: الإكمالُ يصل الحوارَ ولا يصل المُحلِّلَ الرقميّ — وإلا
+    # اتّسعت تغطيةُ الحسم من بابٍ خلفيّ (نهيُ المُشرِف الصريح).
+    import silk_hs_attributes as _attrs
+    import silk_hs_confirm as confirm
+    rows = dialog.build_candidates("—", ["040110"])
+    assert {r["hs6"] for r in rows if r["axis_completion"]} == {
+        "040120", "040140", "040150"}, rows
+    seen: dict = {}
+    real = _attrs.resolve_by_attribute
+    _attrs.resolve_by_attribute = (
+        lambda p, c, **kw: (seen.setdefault("codes",
+                                            [x.get("hs6") for x in c]),
+                            real(p, c, **kw))[1])
+    try:
+        confirm.resolve_or_probe("—", rows, allow_web=False)
+    finally:
+        _attrs.resolve_by_attribute = real
+    assert seen["codes"] == ["040110"], (
+        f"المُحلِّلُ غُذّي بأشقّاءَ لم يطلبهم المستدعي: {seen['codes']}")
+
+
+def _guard_dialog_prose_carries_no_product_brand_or_country():
+    """البند ٧٤ — نثرُ الحوار وصفٌ رسميٌّ للبند، لا صدىً لِما كتبه التاجر.
+
+    الحادثة: النصُّ المعروض حمل **اسمَ العلامة التجارية** داخل وصفٍ يُقدَّم
+    بوصفه رسمياً («… حليب نادك كامل الدسم») — فيبدو الوصفُ مُصادِقاً على
+    منتجِ التاجر بينما هو وصفُ بندٍ جمركيّ. عائلةُ اللائحة ٣٠ (لا منتجَ
+    مثبَّتٌ في القوالب) من الطرف المقابل: لا منتجَ **مُقحَمٌ** في النثر."""
+    import silk_hs_dialog as dialog
+
+    product = "حليب نادك كامل الدسم"
+    for prose, banned in (
+            (f"وصفٌ عامّ لـ{product} من هولندا", ("نادك", "هولندا")),
+            ("عبوة نادك المستوردة من هولندا وألمانيا",
+             ("نادك", "هولندا", "ألمانيا")),
+            ("Nadec milk from Netherlands", ("Netherlands",)),
+    ):
+        out = dialog.sanitize_prose(prose, product)
+        for token in banned:
+            assert token not in out, (
+                f"«{token}» نجا في نثر الحوار: {out!r} — عودةُ الحادثة")
+
+    rows = dialog.build_candidates(
+        product, ["040110", "040120"],
+        {"040110": f"يناسب {product}", "040120": "قشطة من هولندا"})
+    assert rows, "نقطةُ الاختناق لم تُخرِج شيئاً"
+    for row in rows:
+        for token in ("نادك", "هولندا"):
+            assert token not in row["reason_ar"], (
+                f"{row['hs6']}: «{token}» وصل نثرَ الحوار عبر نقطة الاختناق")
+    _needles("silk_hs_dialog.py", "def sanitize_prose", "_AR_CLITICS",
+             "def _country_terms")()
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1715,6 +1881,9 @@ _LESSONS = {
     69: _guard_client_operator_document_divergence,        # F3 — تباعدُ مُسلَّمَي العميل/المشغّل
     70: _guard_attribute_resolver_flag_off_by_default,     # D1 — صمّامٌ مُطفأٌ افتراضياً
     71: _guard_cross_basis_edge_refusal,                   # D2 — أساسُ النسبة قربَ الحافّة
+    72: _guard_dialog_band_text_from_the_official_reference_only,  # E2 — نصُّ الحدّ من المرجع حصراً
+    73: _guard_dialog_axis_siblings_never_partial,         # E3 — لا مجموعةَ محورٍ جزئية
+    74: _guard_dialog_prose_carries_no_product_brand_or_country,  # E4 — لا صدى منتج/علامة/دولة
 }
 
 _TRAPS = [
