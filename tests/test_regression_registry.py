@@ -1331,17 +1331,29 @@ def _guard_ask_what_the_product_answers():
     assert len(codes) >= 3, "لم تُقرأ نطاقاتُ الترويسة من الوصف الرسميّ"
     disc = A.discriminator([{"hs6": c} for c in codes])
     assert disc and disc["dimension"] == "fat" and disc["unit"] == "%"
-    # (أ) قياسٌ من بطاقة العبوة يحسم بلا أيّ سؤال، وموسومٌ بمصدره.
-    got = A.resolve_by_attribute(
-        "منتجٌ من هذه الترويسة", [{"hs6": c} for c in codes], allow_web=False,
-        label_attributes=[{"name": disc["label_ar"], "value": 3.5,
-                           "unit": "%"}])
-    assert got["hs6"] and got["resolved_from"] == "image"
-    assert "صورة العبوة" in got["note_ar"]
-    # (ب) بلا قياسٍ لا يُحسَم رمزٌ أبداً، والحوارُ يحمل ما نقص وحدودَ البنود.
-    gap = A.resolve_by_attribute("منتجٌ من هذه الترويسة",
-                                 [{"hs6": c} for c in codes], allow_web=False)
-    assert gap["hs6"] is None and gap["missing_ar"] and gap["bands_ar"]
+    # الصمّامُ مُطفأٌ افتراضياً (D1/اللائحة ٧٠) — يُفعَّل هنا صراحةً لأنّ هذا
+    # الحارسَ يختبر **سلوكَ الميزة**، لا افتراضَها (ذاك حارسُ اللائحة ٧٠).
+    _saved = os.environ.get("SILK_HS_ATTRIBUTE_RESOLVE")
+    os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = "1"
+    try:
+        # (أ) قياسٌ من بطاقة العبوة يحسم بلا أيّ سؤال، وموسومٌ بمصدره.
+        got = A.resolve_by_attribute(
+            "منتجٌ من هذه الترويسة", [{"hs6": c} for c in codes],
+            allow_web=False,
+            label_attributes=[{"name": disc["label_ar"], "value": 3.5,
+                               "unit": "%"}])
+        assert got["hs6"] and got["resolved_from"] == "image"
+        assert "صورة العبوة" in got["note_ar"]
+        # (ب) بلا قياسٍ لا يُحسَم رمزٌ أبداً، والحوارُ يحمل ما نقص وحدودَ البنود.
+        gap = A.resolve_by_attribute(
+            "منتجٌ من هذه الترويسة", [{"hs6": c} for c in codes],
+            allow_web=False)
+        assert gap["hs6"] is None and gap["missing_ar"] and gap["bands_ar"]
+    finally:
+        if _saved is None:
+            os.environ.pop("SILK_HS_ATTRIBUTE_RESOLVE", None)
+        else:
+            os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = _saved
     # (ج) نقطةُ اختناقٍ واحدة موصولةٌ بكِلا مسارَي الإنفاق + بوّابةِ الالتباس.
     src = _read("api.py")
     assert src.count("preflight_resolve") >= 3, (
@@ -1561,6 +1573,70 @@ def _guard_client_operator_document_divergence():
     _needles("silk_reports.py", "def _hs_provenance_sentence")()
 
 
+def _guard_attribute_resolver_flag_off_by_default():
+    """D1 — الصمّامُ **مُطفأٌ افتراضياً**. تفعيلُه عند الدمج يجعل ميزةً لم
+    تُجرَّب قطّ بمفتاحٍ حيّ تُصدِر رموزاً جمركية لكلّ مستخدم؛ وتفعيلُه قرارُ
+    مالكٍ منفصلٌ بعد الدمج مشروطٌ بإغلاق G8. الحارسُ سلوكيّ: يقرأ الدالّة
+    فعلاً في غياب المتغيّر وفي حضوره."""
+    import silk_hs_attributes as A
+    saved = os.environ.pop("SILK_HS_ATTRIBUTE_RESOLVE", None)
+    try:
+        assert A.enabled() is False, (
+            "الصمّامُ مفعّلٌ افتراضياً — خرقُ D1: ميزةٌ بلا دليلٍ حيّ تُصدِر "
+            "رموزاً جمركية لكلّ مستخدم عند الدمج")
+        for on in ("1", "true", "yes", "on"):
+            os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = on
+            assert A.enabled() is True, f"لم يُفعَّل بـ{on!r}"
+        for off in ("0", "false", "no", "off", "", "maybe"):
+            os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = off
+            assert A.enabled() is False, f"فُعِّل بقيمةٍ ليست تفعيلاً: {off!r}"
+        # ومُطفأً: لا حسمَ إطلاقاً مهما كانت القراءةُ صالحة.
+        os.environ.pop("SILK_HS_ATTRIBUTE_RESOLVE", None)
+        out = A.resolve_by_attribute(
+            "منتجٌ ما", [{"hs6": c} for c in
+                        ("040110", "040120", "040140", "040150")],
+            label_attributes=[{"name": A.dimension_terms("fat")[0],
+                               "value": 3.5, "unit": "%"}],
+            allow_web=False)
+        assert out["hs6"] is None and out["resolved_from"] is None
+    finally:
+        if saved is None:
+            os.environ.pop("SILK_HS_ATTRIBUTE_RESOLVE", None)
+        else:
+            os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = saved
+
+
+def _guard_cross_basis_edge_refusal():
+    """D2 — قراءةٌ بأساسِ نسبةٍ مخالف قربَ حافّة لا تحسم. `g/100ml` كتلة/حجم
+    بينما نصّ HS «by weight» كتلة/كتلة؛ الفارقُ ~٣٪ نسبيّاً (~٠٫١٨ عند حدّ
+    ٦٫٠) — يكفي لعبور الحدّ، فتُلتَفّ صرامةُ G1 من هذا الباب الواحد."""
+    import silk_hs_attributes as A
+    saved = os.environ.get("SILK_HS_ATTRIBUTE_RESOLVE")
+    os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = "1"
+    try:
+        d = A.discriminator([{"hs6": c} for c in
+                             ("040110", "040120", "040140", "040150")])
+        assert d is not None
+        assert A.band_basis(d["bands"][0]) == "mm", "أساسُ النطاق لم يُقرأ"
+        for v in (5.9, 6.0, 6.1):          # داخل ٠٫٥ من حدّ ٦٫٠
+            assert A.select_by_value(d, v, "g/100ml") is None, (
+                f"{v} g/100ml حُسِمت قربَ حافّة رغم مخالفة الأساس")
+        assert A.select_by_value(d, 3.5, "g/100ml") == "040120"   # بعيدةٌ
+        for same in ("%", "g/100g", "% w/w"):                     # نفسُ الأساس
+            assert A.select_by_value(d, 5.9, same) == "040120", same
+        # وكلُّ مدخلٍ مخالفِ الأساس في الجدول محروسٌ فعلاً (لا بابَ جديد).
+        cross = {u for u in A._UNIT_FAMILY
+                 if A.cross_basis_conflict(u, d["bands"])}
+        assert cross >= {"g/100ml", "gm/100ml", "mg/100ml", "ml/100ml"}, cross
+    finally:
+        if saved is None:
+            os.environ.pop("SILK_HS_ATTRIBUTE_RESOLVE", None)
+        else:
+            os.environ["SILK_HS_ATTRIBUTE_RESOLVE"] = saved
+    _needles("silk_hs_attributes.py", "def cross_basis_conflict",
+             "def near_any_edge", "_UNIT_BASIS", "_EDGE_MARGIN")()
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1637,6 +1713,8 @@ _LESSONS = {
     67: _guard_dimension_terms_not_frozen_in_code,        # مصطلحُ بُعدٍ مجمَّد (عودةُ ٣٠)
     68: _guard_multi_axis_heading_confident_wrong_code,    # F2 — محورٌ ثانٍ غيرُ رقميّ
     69: _guard_client_operator_document_divergence,        # F3 — تباعدُ مُسلَّمَي العميل/المشغّل
+    70: _guard_attribute_resolver_flag_off_by_default,     # D1 — صمّامٌ مُطفأٌ افتراضياً
+    71: _guard_cross_basis_edge_refusal,                   # D2 — أساسُ النسبة قربَ الحافّة
 }
 
 _TRAPS = [

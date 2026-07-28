@@ -30,6 +30,15 @@ sys.path.insert(0, _ROOT)
 import silk_hs_attributes as attrs  # noqa: E402
 
 
+# الصمّامُ **مُطفأٌ افتراضياً** (D1) — هذه الملفّاتُ تختبر الميزةَ نفسَها،
+# فتُفعّلها صراحةً. اختبارُ الافتراض نفسِه يعيش في
+# `test_flag_is_off_by_default_and_needs_explicit_opt_in` ولا يستعمل هذه.
+@pytest.fixture(autouse=True)
+def _enable_attribute_resolver(monkeypatch):
+    monkeypatch.setenv("SILK_HS_ATTRIBUTE_RESOLVE", "1")
+
+
+
 # ── أدوات ────────────────────────────────────────────────────────────────────
 
 class _NoNet:
@@ -232,6 +241,28 @@ def test_dialog_report_states_what_was_searched_and_what_is_missing():
     assert ranges["040150"] and "10" in ranges["040150"]
     for hs6, txt in ranges.items():
         assert hs6 not in txt, "سطرُ الحدّ يعيد الرمز بدل وصفه بلغةٍ مفهومة"
+
+
+def test_flag_is_off_by_default_and_needs_explicit_opt_in(monkeypatch):
+    """D1 — **مُطفأٌ افتراضياً.** تفعيلُه عند الدمج كان سيجعل ميزةً لم
+    تُجرَّب بمفتاحٍ حيّ تُصدِر رموزاً جمركية لكلّ مستخدم؛ تفعيلُه قرارُ
+    مالكٍ منفصلٌ بعد الدمج مشروطٌ بإغلاق G8."""
+    monkeypatch.delenv("SILK_HS_ATTRIBUTE_RESOLVE", raising=False)
+    assert attrs.enabled() is False, "الصمّامُ مفعّلٌ افتراضياً — خرقُ D1"
+    # ومُطفأً: السلوكُ حرفياً كما كان قبل هذا الفرع (حوارٌ، لا حسم).
+    with _NoNet():
+        out = attrs.resolve_by_attribute(
+            "منتجٌ ما", _cands("040110", "040120", "040140", "040150"),
+            label_attributes=[{"name": "نسبة الدهن", "value": 3.5,
+                               "unit": "%"}],
+            allow_web=False)
+    assert out["hs6"] is None and out["resolved_from"] is None
+    for on in ("1", "true", "yes", "on"):
+        monkeypatch.setenv("SILK_HS_ATTRIBUTE_RESOLVE", on)
+        assert attrs.enabled() is True, f"لم يُفعَّل بـ{on!r}"
+    for off in ("0", "false", "no", "off", "", "  ", "maybe"):
+        monkeypatch.setenv("SILK_HS_ATTRIBUTE_RESOLVE", off)
+        assert attrs.enabled() is False, f"فُعِّل بقيمةٍ ليست تفعيلاً: {off!r}"
 
 
 def test_valve_off_disables_auto_resolution_entirely(monkeypatch):
@@ -565,3 +596,78 @@ def test_web_is_consulted_even_when_the_label_already_answered(monkeypatch):
         label_attributes=[{"name": "نسبة الدهن", "value": 3.5, "unit": "%"}],
         allow_web=True)
     assert calls, "الويبُ لم يُستشَر — التعارضُ يمرّ بلا اكتشاف"
+
+
+# ══════════════ D2 — أساسُ النسبة قربَ الحافّة ═══════════════════════════════
+
+def test_band_basis_read_from_the_official_text():
+    """أساسُ النطاق يُقرأ من نصّه الرسميّ لا يُفترَض."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    assert attrs.band_basis(d["bands"][0]) == "mm"      # «by weight»
+    assert attrs.band_basis({"desc": ""}) is None       # لا تصريح => لا اتّهام
+
+
+@pytest.mark.parametrize("unit,basis", [
+    ("g/100ml", "mv"), ("g/100 ml", "mv"), ("gm/100ml", "mv"),
+    ("mg/100ml", "mv"), ("ml/100ml", "vv"), ("% vol", "vv"), ("abv", "vv"),
+    ("g/100g", "mm"), ("mg/100g", "mm"), ("% w/w", "mm"),
+    ("%", None), ("percent", None), ("٪", None),
+])
+def test_unit_basis_table_entry(unit, basis):
+    assert attrs.unit_basis(unit) == basis
+
+
+@pytest.mark.parametrize("value", [5.9, 6.0, 6.1])
+def test_cross_basis_reading_near_a_band_edge_refuses(value):
+    """كتلة/حجم قربَ حدّ ٦٪: فارقُ الكثافة (~٠٫١٨ عند ٦) قد يعبر الحدّ،
+    فالحسمُ هنا يُصدِر البندَ المجاور بوسمِ مصدرٍ واثق."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    assert attrs.select_by_value(d, value, "g/100ml") is None
+
+
+def test_cross_basis_reading_far_from_any_edge_still_resolves():
+    """بعيداً عن الحواف يبقى التحويلُ تقريبياً لا خاطئاً — لا نُهدِر قراءة."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    assert attrs.select_by_value(d, 3.5, "g/100ml") == "040120"
+
+
+@pytest.mark.parametrize("unit", ["%", "percent", "٪", "g/100g", "% w/w"])
+def test_same_basis_reading_near_an_edge_is_unaffected(unit):
+    """`%` و`g/100g` بأساس النطاق نفسِه — الحافّةُ لا تُقلقها."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    assert attrs.select_by_value(d, 5.9, unit) == "040120"
+
+
+def test_cross_basis_refusal_reason_names_the_basis():
+    """الحوارُ يقول **لماذا** — «لا تقع في نطاقٍ وحيد» وحدَها تُخفي أنّ
+    القراءة صالحةٌ وأنّ العيبَ في تحويل الأساس عند هذا الحدّ."""
+    with _NoNet():
+        out = attrs.resolve_by_attribute(
+            "منتجٌ ما", _cands("040110", "040120", "040140", "040150"),
+            label_attributes=[{"name": "نسبة الدهن", "value": 5.9,
+                               "unit": "g/100ml"}],
+            allow_web=False)
+    assert out["hs6"] is None
+    joined = " | ".join(out["searched"])
+    # يُسمّي الوحدةَ وأساسَها ويقول إنّ الرفضَ لقُربِ حافّة — لا «لا تقع في
+    # نطاقٍ وحيد» العارية التي تُخفي أنّ القراءة صالحةٌ أصلاً.
+    assert "g/100ml" in joined and "(mv)" in joined, joined
+    assert "حافّة" in joined and "أساس" in joined, joined
+
+
+def test_every_cross_basis_unit_in_the_table_is_guarded():
+    """كلُّ مدخلٍ مخالفِ الأساس في `_UNIT_FAMILY` محروسٌ فعلاً — لا مدخلٌ
+    يُضاف لاحقاً فيفتح البابَ نفسَه بصمت."""
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    cross = [u for u in attrs._UNIT_FAMILY
+             if attrs.cross_basis_conflict(u, d["bands"])]
+    assert set(cross) >= {"g/100ml", "g/100 ml", "gm/100ml", "mg/100ml",
+                          "ml/100ml", "% vol", "%vol", "% v/v", "abv"}, cross
+    for unit in cross:
+        fam = attrs._unit_family(unit)
+        if fam is None or fam[0] != d["family"]:
+            continue
+        edge = d["bands"][1]["hi"]           # حافّةٌ حقيقية من المجموعة
+        val = edge / fam[1]
+        assert attrs.select_by_value(d, val, unit) is None, (
+            f"{unit}: حُسِم على الحافّة رغم مخالفة الأساس")

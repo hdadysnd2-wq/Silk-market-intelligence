@@ -591,6 +591,20 @@ _SYMBOL_ANCHORS_EXTRA = [
       "def test_no_provenance_sentence_when_the_code_was_not_measured"]),
     (69, "tests/test_regression_registry.py",
      ["def _guard_client_operator_document_divergence"]),
+    # البند ٧٠ (D1) — صمّامُ ميزةٍ جديدةٍ يُشحَن مُطفأً؛ تفعيلُه قرارُ مالك.
+    (70, "silk_hs_attributes.py", ['raw in ("1", "true", "yes", "on")']),
+    (70, "tests/test_hs_attribute_autoresolve.py",
+     ["def test_flag_is_off_by_default_and_needs_explicit_opt_in"]),
+    (70, "tests/test_regression_registry.py",
+     ["def _guard_attribute_resolver_flag_off_by_default"]),
+    # البند ٧١ (D2) — أساسُ النسبة قربَ الحافّة لا يُحسَم بتحويلٍ تقريبيّ.
+    (71, "silk_hs_attributes.py",
+     ["def cross_basis_conflict", "def near_any_edge", "_UNIT_BASIS"]),
+    (71, "tests/test_hs_attribute_autoresolve.py",
+     ["def test_cross_basis_reading_near_a_band_edge_refuses",
+      "def test_every_cross_basis_unit_in_the_table_is_guarded"]),
+    (71, "tests/test_regression_registry.py",
+     ["def _guard_cross_basis_edge_refusal"]),
 ]
 
 

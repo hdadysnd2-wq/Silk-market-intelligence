@@ -26,6 +26,15 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
 
 
+# الصمّامُ **مُطفأٌ افتراضياً** (D1) — هذه الملفّاتُ تختبر الميزةَ نفسَها،
+# فتُفعّلها صراحةً. اختبارُ الافتراض نفسِه يعيش في
+# `test_flag_is_off_by_default_and_needs_explicit_opt_in` ولا يستعمل هذه.
+@pytest.fixture(autouse=True)
+def _enable_attribute_resolver(monkeypatch):
+    monkeypatch.setenv("SILK_HS_ATTRIBUTE_RESOLVE", "1")
+
+
+
 @contextlib.contextmanager
 def _env(**vals):
     old = {k: os.environ.get(k) for k in vals}

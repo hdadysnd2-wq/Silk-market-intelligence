@@ -43,13 +43,20 @@ log = logging.getLogger("silk.hs_attributes")
 
 
 def enabled() -> bool:
-    """الصمّام — مفعّلٌ افتراضياً، يُطفَأ صراحةً بـ`SILK_HS_ATTRIBUTE_RESOLVE=0`.
+    """الصمّام — **مُطفأٌ افتراضياً**؛ يُفعَّل صراحةً بـ
+    `SILK_HS_ATTRIBUTE_RESOLVE=1`.
 
-    مفعّلٌ افتراضياً لأنّ المُطفَأ هو **الحالةُ المُبلَّغ عنها** (سؤالُ التاجر
-    عن عتبةٍ جمركية)؛ والتفعيل لا يُخمِّن شيئاً: لا يحسم إلا برقمٍ مقيسٍ
-    يقع في نطاقٍ وحيد، وإلا يعود للحوار كما كان بالضبط."""
+    كان مفعّلاً افتراضياً في أوّل شحنة، وذلك **قرارٌ خاطئ صُحِّح بأمر
+    المُشرِف (D1)**: تفعيلُه عند الدمج يجعل ميزةً **لم تُجرَّب قطّ بمفتاحٍ
+    حيّ** تُصدِر رموزاً جمركية لكلّ مستخدم. الحجّةُ السابقة («المُطفَأ هو
+    الحالةُ المُبلَّغ عنها») تُبرِّر **الرغبة** في تفعيله، لا تفعيلَه قبل
+    الدليل الحيّ — وهي حجّةٌ اعتُمِدت ذاتياً بلا إقرار المالك.
+
+    تفعيلُه قرارُ مالكٍ منفصلٌ بعد الدمج، مشروطٌ بإغلاق G8 (تشغيلٌ حيّ
+    مُوثَّق لمساري الصورة والويب ولمسار الرفض). مُطفأً يبقى السلوكُ حرفياً
+    كما كان قبل هذا الفرع: الحوارُ يُعرَض كما هو."""
     raw = os.environ.get("SILK_HS_ATTRIBUTE_RESOLVE", "").strip().lower()
-    return raw not in ("0", "false", "no", "off")
+    return raw in ("1", "true", "yes", "on")
 
 
 # ══════════════ ١) معجمُ أبعادِ القياس — من ملفٍ لا من الشيفرة (G2) ═════════
@@ -162,6 +169,76 @@ _FAMILY_UNIT = {"percent": "%", "weight": "g", "volume": "L",
 # يحسمها النصُّ («fat content» / «Brix value»).
 _FAMILY_DIMENSION = {"weight": "weight", "volume": "volume",
                      "length": "length"}
+
+
+# ══════════════ ٢ب) أساسُ النسبة — الحافّةُ لا تُعبَر بتحويلٍ تقريبيّ (D2) ══
+#
+# `%` في نصّ HS نسبةُ كتلةٍ إلى **كتلة** («by weight»)، بينما بطاقةُ العبوة
+# قد تكتب كتلة/**حجم** (`g/100ml`) أو حجم/حجم (`% vol`). الأساسان يتباعدان
+# بمقدار الكثافة — ~٣٪ نسبيّاً للحليب، أي ~٠٫١٨ مطلقة عند حدّ ٦٫٠٪. هذا
+# **يكفي لعبور الحدّ**: صرامةُ G1 التي ترفض ٦٢ ترويسةً تُلتَفّ من هذا الباب
+# الواحد. لذا: قراءةٌ بأساسٍ مخالف **قريبةٌ من أيّ حافّة** لا تحسم شيئاً —
+# تسقط للحوار بسببٍ يُسمّي الأساس. بعيداً عن الحواف تبقى مقبولةً (التحويلُ
+# تقريبيٌّ لا خاطئ، والخطأ لا يقلب النطاق).
+#
+# «mm» = كتلة/كتلة، «mv» = كتلة/حجم، «vv» = حجم/حجم. و`%` العارية بلا أساسٍ
+# مُعلَن => ترث أساسَ النطاق فلا تعارضَ فيها أبداً.
+_UNIT_BASIS: dict[str, str] = {
+    "g/100ml": "mv", "g/100 ml": "mv", "gm/100ml": "mv", "mg/100ml": "mv",
+    "ml/100ml": "vv", "% vol": "vv", "%vol": "vv", "% v/v": "vv", "abv": "vv",
+    "g/100g": "mm", "g/100 g": "mm", "mg/100g": "mm",
+    "% m/m": "mm", "% w/w": "mm",
+}
+# أساسُ النطاق يُقرأ من نصّه الرسميّ («by weight» / «by volume»).
+# النصُّ الرسميّ في `hs_reference.csv` إنجليزيٌّ حصراً، فالأنماطُ إنجليزية.
+# (مقابلاتٌ عربيةٌ هنا كانت ستكون تخميناً غيرَ مُختبَر، وتصطدم بمعجم الأبعاد.)
+_BAND_BASIS_RE = (
+    (re.compile(r"by\s+weight", re.I), "mm"),
+    (re.compile(r"by\s+volume|alcoholic\s+strength", re.I), "vv"),
+)
+# مسافةُ الأمان من الحافّة — بوحدة أساس العائلة. config-driven.
+_EDGE_MARGIN = float(os.environ.get("SILK_HS_ATTR_EDGE_MARGIN", "0.5") or "0.5")
+
+
+def unit_basis(unit: object) -> str | None:
+    """أساسُ نسبةِ الوحدة (`mm`/`mv`/`vv`) — أو `None` حين لا أساسَ مُعلَن."""
+    u = re.sub(r"\s+", " ", str(unit or "").strip().lower().rstrip("."))
+    return _UNIT_BASIS.get(u)
+
+
+def band_basis(band: dict) -> str | None:
+    """أساسُ نسبةِ النطاق من وصفه الرسميّ — أو `None` حين لا يُصرّح به."""
+    desc = (band or {}).get("desc") or ""
+    for pattern, basis in _BAND_BASIS_RE:
+        if pattern.search(desc):
+            return basis
+    return None
+
+
+def cross_basis_conflict(unit: object, bands: list) -> bool:
+    """هل تُقرأ هذه الوحدةُ بأساسٍ يخالف أساسَ النطاقات؟
+
+    `mv` (كتلة/حجم) لا يوافق أيّ أساسٍ يستعمله نصُّ HS، فيُعَدّ مخالفاً
+    دوماً. غيرُها يُقارَن بأساس النطاق المُصرَّح به؛ نطاقٌ لا يُصرّح بأساسه
+    لا يُتَّهم (لا اختلاقَ تعارضٍ بلا دليل)."""
+    ub = unit_basis(unit)
+    if ub is None:
+        return False                       # «%» عارية — ترث أساسَ النطاق
+    if ub == "mv":
+        return True                        # كتلة/حجم: خارج اصطلاح HS دائماً
+    declared = {b for b in (band_basis(x) for x in (bands or [])) if b}
+    return bool(declared) and ub not in declared
+
+
+def near_any_edge(bands: list, base_value: float,
+                  margin: float | None = None) -> bool:
+    """هل تقع القيمةُ ضمن `margin` من أيّ حافّةِ نطاقٍ في المجموعة؟"""
+    m = _EDGE_MARGIN if margin is None else margin
+    for b in bands or []:
+        for edge in (b.get("lo"), b.get("hi")):
+            if edge is not None and abs(base_value - edge) <= m:
+                return True
+    return False
 
 
 def _unit_family(unit: object) -> tuple[str, float] | None:
@@ -440,6 +517,11 @@ def select_by_value(disc: dict | None, value: object,
     if fam is None or fam[0] != disc["family"]:
         return None
     base = v * fam[1]
+    # D2: قراءةٌ بأساسٍ مخالف قربَ حافّة لا تحسم — التحويلُ التقريبيّ قد
+    # يعبر الحدّ، فيَصدُر رمزُ البند المجاور بوسمِ مصدرٍ واثق.
+    if cross_basis_conflict(unit, disc["bands"]) and near_any_edge(
+            disc["bands"], base):
+        return None
     hits = [b["hs6"] for b in disc["bands"] if _contains(b, base)]
     return hits[0] if len(hits) == 1 else None
 
@@ -738,8 +820,22 @@ def resolve_by_attribute(product: str, candidates: list,
     for r in sorted(readings, key=lambda x: -_SOURCE_RANK.get(x["source"], 0)):
         hs6 = select_by_value(disc, r["value"], r["unit"])
         if not hs6:
-            searched.append(
-                f"القيمة {_fmt(r['value'])}{r['unit']} لا تقع في نطاقٍ وحيد")
+            # D2: سببٌ يُسمّي الأساس حين كان الرفضُ لقُربِ حافّةٍ بأساسٍ مخالف
+            # — «لا تقع في نطاقٍ وحيد» وحدَها تُخفي أنّ القراءة **صالحة**
+            # لكنّ تحويلَها تقريبيٌّ عند هذا الحدّ بالذات.
+            base = _base(r["value"], r["unit"], disc)
+            if (base is not None
+                    and cross_basis_conflict(r["unit"], disc["bands"])
+                    and near_any_edge(disc["bands"], base)):
+                reason = (
+                    f"القيمة {_fmt(r['value'])}{r['unit']} بوحدةٍ أساسُ "
+                    f"نسبتها ({unit_basis(r['unit'])}) يخالف أساسَ حدود "
+                    f"البنود، وهي على مسافة ≤{_fmt(_EDGE_MARGIN)} من حافّة "
+                    "— فارقُ الأساس قد يعبر الحدّ فلا تُحسَم")
+            else:
+                reason = (f"القيمة {_fmt(r['value'])}{r['unit']} لا تقع في "
+                          "نطاقٍ وحيد")
+            searched.append(reason)
             break
         if r["source"] == "image":
             note = f"{_IMAGE_NOTE} — {label} {_fmt(r['value'])}{r['unit']}"
