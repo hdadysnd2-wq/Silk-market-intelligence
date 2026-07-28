@@ -205,6 +205,37 @@ def resolve_all(product_name: str, top_n: int = 3,
     return out
 
 
+@functools.lru_cache(maxsize=1)
+def load_hs_reference(path: str = "data/hs_reference.csv") -> dict:
+    """الوصفُ الرسميُّ الكامل لكل رمز HS6 — the full official HS6 reference.
+
+    بذرتُنا (`data/hs_codes.csv`) نُمِّيت من هذا المرجع لكنّ حقول أوصافها
+    قد تكون مختصرةً أو معرَّبةً بحرّية، بينما **العتباتُ الرقمية** التي
+    تُميِّز بنودَ الترويسة الواحدة (نسبة دهن/سعة/وزن/بريكس) تعيش في النصّ
+    الرسميّ حصراً. أيّ قاعدةٍ تقرأ عتبةً يجب أن تقرأها من هنا لا من البذرة
+    (الدرس ٣٣: **حلِّل المصدر لا النثر** — المصدرُ هنا هو المرجع الرسميّ).
+
+    مقروءٌ مرّة واحدة ومُخزَّن؛ ملفٌّ غائب/تالف => قاموسٌ فارغ (فجوة معلنة،
+    لا وصفٌ مختلَق)."""
+    fp = _abspath(path)
+    out: dict = {}
+    try:
+        with open(fp, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                code = str(row.get("hscode") or "").strip()
+                desc = str(row.get("description") or "").strip()
+                if len(code) == 6 and desc:
+                    out[code] = desc
+    except Exception as exc:  # noqa: BLE001 — مرجعٌ غائب = فجوة، لا انهيار
+        log.warning("failed to load HS reference %s: %s", fp, exc)
+    return out
+
+
+def official_description(hs_code: object) -> str:
+    """الوصف الرسميّ لرمز HS6 من المرجع الكامل — `""` إن لم يوجد (لا اختلاق)."""
+    return load_hs_reference().get(str(hs_code or "").strip(), "")
+
+
 def extend_from_comtrade_rows(rows: list[dict],
                               path: str = "data/hs_codes.csv") -> int:
     """وسّع البذرة من جدول مرجع Comtrade — append official HS reference rows.

@@ -287,6 +287,11 @@ def create_app():
         # hs_confirmed=true بعد مراجعة المستخدم يتجاوز بوّابة تأكيد HS
         # (الموجة ٢ — نفس عقد /research، silk_hs_confirm.preflight_block).
         hs_confirmed: bool = False
+        # سماتُ بطاقة العبوة الرقمية من استخلاص الصورة (بلاغ المُشرِف):
+        # [{name, value, unit}] — تحسم عتبةَ الترويسة (نسبة دهن/سعة/وزن) قبل
+        # عرض أيّ حوارٍ يسأل التاجرَ عن رقمٍ يُجيب عنه المنتجُ نفسُه. غيابها
+        # => المسارُ كما كان (ويبٌ ثم حوار).
+        label_attributes: list[dict] | None = None
 
     class IntakeRequest(BaseModel):
         """طلب استقبال منتج متعدّد الوسائط — {name} أو {image_base64,kind}.
@@ -325,6 +330,9 @@ def create_app():
         year: int | None = None
         # تأكيدُ المستخدم الصريح يتجاوز بوّابةَ HS — نفس عقد المسارين الآخرين.
         hs_confirmed: bool = False
+        # قياساتُ بطاقة العبوة — نفس عقد `/analyze` و`/research` حرفياً
+        # (اللائحة ٦٥): المسارُ المدفوع لا يُترَك خارج نقطة القياس.
+        label_attributes: list[dict] | None = None
         with_trends: bool = False
         with_tariffs: bool = False
         with_faostat: bool = False
@@ -935,10 +943,16 @@ def create_app():
         if not _analyze_hs_code and req.product:
             from silk_hs_resolver import resolve as _resolve_hs_preflight
             _analyze_hs_code = _resolve_hs_preflight(req.product).value
-        from silk_hs_confirm import preflight_block
-        _blocked = preflight_block(
+        # بلاغ المُشرِف («حليب نادك كامل الدسم؟»): البنودُ داخل الترويسة
+        # الواحدة تتمايز بعتبةٍ رقمية — تُقاس قبل أن يُسأل المستخدم عنها
+        # (`silk_hs_confirm.preflight_resolve`: بطاقةُ العبوة ثم استعلامُ
+        # ويبٍ واحد). حُسِمت => يُستعمَل الرمزُ المقيس ويُوسَم بمصدره؛ لم
+        # تُحسَم => نفسُ الـ٤٢٢ السابق مضافاً إليه `attribute_probe`.
+        from silk_hs_confirm import preflight_resolve
+        _analyze_hs_code, _hs_prov, _blocked = preflight_resolve(
             req.product, _analyze_hs_code, req.hs_confirmed,
-            allow_claude=_classify_general_allow_claude())
+            allow_claude=_classify_general_allow_claude(),
+            label_attributes=req.label_attributes)
         if _blocked is not None:
             import silk_ops_log
             silk_ops_log.record_error(
@@ -946,9 +960,20 @@ def create_app():
                 f"رُفض بدءُ تحليلٍ برمز HS غير مؤكَّد لمنتج {req.product!r}: "
                 f"{_blocked['hs_confirmation'].get('reason')}",
                 context={"product": req.product, "hs_code": _analyze_hs_code,
+                         "attribute_probe": _blocked.get("attribute_probe"),
                          "missing_terms":
                              _blocked["hs_confirmation"].get("missing_terms")})
             raise HTTPException(status_code=422, detail=_blocked)
+        if _hs_prov is not None:
+            import silk_ops_log
+            silk_ops_log.record_error(
+                "hs_auto_resolved",
+                f"حُسِم رمزُ HS آلياً لمنتج {req.product!r} => "
+                f"{_analyze_hs_code} ({_hs_prov.get('resolved_from')})",
+                context={"product": req.product, "hs_code": _analyze_hs_code,
+                         "resolved_from": _hs_prov.get("resolved_from"),
+                         "value": _hs_prov.get("value"),
+                         "source_url": _hs_prov.get("source_url")})
         policy = _source_policy()
         ai_ok, ai_note = _free_ai_extras_allowed()
         # P5 (بلاغ المالك: «كلود العادي يتفوق على المنصة»): حكم كلود
@@ -973,10 +998,16 @@ def create_app():
                 trend_span=req.trend_span,
                 product_card=(req.product_card.model_dump()
                               if req.product_card else None),
-                hs_code=req.hs_code,
+                # رمزٌ حُسِم آلياً بالسمة الرقمية يتقدّم على مُحلِّل المحرّك
+                # (وإلا لَعاد المحرّكُ إلى نفس الرمز الملتبِس)؛ بلا حسمٍ آليّ
+                # يبقى السلوكُ حرفياً كما كان.
+                hs_code=(_analyze_hs_code if _hs_prov is not None
+                         else req.hs_code),
                 persist=req.persist, **policy)
         if not ai_ok:
             result["ai_extras_note"] = ai_note   # الغياب مُعلَن لا صامت
+        if _hs_prov is not None:
+            result["hs_provenance"] = _hs_prov   # يعرضه التقريرُ كمصدرٍ للرمز
         result["view"] = _view(result)
         _attach_watchdog(result, result.get("analysis_id"), "analyze")
         return _json(result)
@@ -1113,11 +1144,22 @@ def create_app():
             _dp = _resolve_deepen(req.product)
             _deepen_hs, _deepen_conf = _dp.value, (
                 _dp.confidence if _dp.value is not None else None)
-        from silk_hs_confirm import preflight_block as _preflight_deepen
-        _blocked = _preflight_deepen(
+        from silk_hs_confirm import preflight_resolve as _preflight_deepen
+        _deepen_hs, _deepen_prov, _blocked = _preflight_deepen(
             req.product, _deepen_hs, req.hs_confirmed,
             allow_claude=_classify_general_allow_claude(),
-            hs_confidence=_deepen_conf)
+            hs_confidence=_deepen_conf,
+            label_attributes=req.label_attributes)
+        if _deepen_prov is not None:
+            import silk_ops_log
+            silk_ops_log.record_error(
+                "hs_auto_resolved",
+                f"حُسِم رمزُ HS آلياً على المسار المدفوع لمنتج {req.product!r} "
+                f"=> {_deepen_hs} ({_deepen_prov.get('resolved_from')})",
+                context={"product": req.product, "hs_code": _deepen_hs,
+                         "path": "/deepen",
+                         "resolved_from": _deepen_prov.get("resolved_from"),
+                         "source_url": _deepen_prov.get("source_url")})
         if _blocked is not None:
             import silk_ops_log
             _cd = _blocked.get("hs_confirmation") or {}
@@ -1146,8 +1188,11 @@ def create_app():
                 with_trend=req.with_trend, trend_span=req.trend_span,
                 product_card=(req.product_card.model_dump()
                               if req.product_card else None),
-                hs_code=req.hs_code,
+                hs_code=(_deepen_hs if _deepen_prov is not None
+                         else req.hs_code),
                 persist=req.persist)
+        if _deepen_prov is not None:
+            result["hs_provenance"] = _deepen_prov
         result["view"] = _view(result)
         return _json(result)
 
@@ -1181,6 +1226,9 @@ def create_app():
         # أكبر مصدّري هذا الرمز عالميًا. غيابها + سوقٌ منتِجة + الصمّام مُفعَّل
         # => 422 استشاري قبل أيّ حجز؛ إرسالها بعد موافقة المستخدم يُكمِل التشغيلة.
         producer_ack: bool = False
+        # سماتُ بطاقة العبوة الرقمية من استخلاص الصورة — نفس عقد
+        # `AnalyzeRequest` حرفياً (المسارَان معاً، لا إصلاحَ نصفيّ: الدرس ٣٥).
+        label_attributes: list[dict] | None = None
         # موافقةٌ صريحة موحّدة على أشقّاء استشارات ما قبل التشغيل (Wave 1.5،
         # عائلة A): تصدير إلى بلد المنشأ / سوق تحت عقوبات / فصل مقيَّد قانونيًا.
         # لوحةُ «جاهزية الدراسة» تجمعها؛ زرّ التأكيد الواحد يرسلها true.
@@ -1425,7 +1473,8 @@ def create_app():
                                analysis_id: int | None,
                                resume_reports: dict | None,
                                report_style: str | None = None,
-                               hs_confidence: float | None = None) -> dict:
+                               hs_confidence: float | None = None,
+                               hs_provenance: dict | None = None) -> dict:
         """جسم التشغيلة الثقيل — بعثات + محلل + توليف + كاتب/مراجع + بوابة
         جودة. مستخرَج من مسار /research المتزامن السابق **بلا تغيير سلوكي**
         كي يُستدعى إما مباشرة (وضع متزامن) أو من خيط خلفي (async_run=true)
@@ -1635,6 +1684,11 @@ def create_app():
         }
         if hs_note:
             result["hs_resolution_note"] = hs_note
+        # مصدرُ الرمز حين حُسِم آلياً بالسمة الرقمية (بلاغ المُشرِف) — يعرضه
+        # التقريرُ صراحةً («الرمز محدَّد من صورة العبوة» / «من مصدر ويب: …»)
+        # فلا يظهر رمزٌ حُسِم آلياً بلا إفصاحٍ عن دليله.
+        if isinstance(hs_provenance, dict) and hs_provenance.get("hs6"):
+            result["hs_provenance"] = hs_provenance
         # Wave 1.3: عقد تأكيد الرمز يُخزَّن في النتيجة — تعيد طبقة العرض تأطير
         # أرقام كومتريد وتسقف الثقة عند التعليم (silk_render._deep_research_view).
         if isinstance(hs_conf, dict):
@@ -1644,13 +1698,21 @@ def create_app():
         # بلا نداءٍ جديد، فحجبُها يُفقِد عملاً مدفوعاً اكتمل) — لكنّ المرورَ
         # الصامت يُعيد إنتاج تقريرٍ على رمزٍ ربّما صار خاطئاً. العقد: **يمرّ
         # ويُوسَم**، فتعرضه طبقةُ العرض في «حدود هذا التقرير».
-        try:
-            from silk_hs_confirm import revalidate
-            _reval = revalidate(product, hs_code, hs_confidence)
-            if _reval:
-                result["hs_revalidation"] = _reval
-        except Exception as e:  # noqa: BLE001 — وسمٌ تحسينيّ لا يُسقِط تشغيلة
-            log.warning("hs revalidation skipped: %s", e)
+        # **لا تُعاد المصالحة على رمزٍ حُسِم بقياس** (اللائحة ٦٥، منعاً لعائلة
+        # اللائحة ١٢ «الحدود تناقض المتن»): `revalidate` يقارن الرمزَ بمُحلِّلٍ
+        # **لفظيّ** — وهو بالضبط ما عجز عن التمييز بين بنود الترويسة فاستُدعي
+        # القياسُ أصلاً. تركُه يعمل يُخرِج سطرَ حدٍّ يقول «المُحلِّل اليوم يعيد
+        # رمزاً آخر» بجوار سطرِ إفصاحٍ يقول «الرمز محدَّد من صورة العبوة» —
+        # تناقضٌ صريح، ومقارنةُ دليلٍ مقيسٍ بتطابقٍ حرفيّ. سطرُ الإفصاح وحده
+        # يبقى، وهو يذكر القياسَ ومصدرَه وحدودَ الثقة.
+        if not (isinstance(hs_provenance, dict) and hs_provenance.get("hs6")):
+            try:
+                from silk_hs_confirm import revalidate
+                _reval = revalidate(product, hs_code, hs_confidence)
+                if _reval:
+                    result["hs_revalidation"] = _reval
+            except Exception as e:  # noqa: BLE001 — وسمٌ تحسينيّ لا يُسقِط تشغيلة
+                log.warning("hs revalidation skipped: %s", e)
         if not ai_ok:
             result["ai_extras_note"] = ai_note
         # التدهور الفعلي = عدم الجهوزية (ready=False، بلاغ حي: _free_ai_
@@ -1689,7 +1751,7 @@ def create_app():
                              product_card_dict, ai_ok, ai_note, prefs,
                              ready, ready_reason, analysis_id,
                              resume_reports, report_style=None,
-                             hs_confidence=None) -> None:
+                             hs_confidence=None, hs_provenance=None) -> None:
         """جسم الخيط الخلفي (async_run=true) — يُغلَّف باستثناء شامل عمداً:
         خيط بايثون غير المُمسوك يفشل صامتاً (لا كسر عملية، لا تحديث حالة)
         فتبقى التشغيلة عالقة على 'running' للأبد — بلاغ التحقيق (P0) يمنع
@@ -1699,7 +1761,8 @@ def create_app():
             result = _run_research_pipeline(
                 market_ref, product, hs_code, hs_note, product_card_dict,
                 ai_ok, ai_note, prefs, ready, ready_reason, analysis_id,
-                resume_reports, report_style, hs_confidence=hs_confidence)
+                resume_reports, report_style, hs_confidence=hs_confidence,
+                hs_provenance=hs_provenance)
             _finish_research_run(analysis_id, result)
         except Exception as e:  # noqa: BLE001 — خيط خلفي: هذا آخر حزام أمان
             log.error("background /research run %s failed: %s", analysis_id, e)
@@ -2015,13 +2078,34 @@ def create_app():
         # هنا). رمزٌ محسومٌ لكنه **خاطئ دلالياً** يُوقِف **قبل** أيّ حجز/دولار
         # ويطلب تأكيد المستخدم. فشل-آمن: مفعّلة افتراضياً (`gate_enabled`).
         # تُتخطّى عند الاستئناف وعند تأكيد المستخدم الصريح (hs_confirmed=True).
+        hs_provenance: dict | None = None
         if req.resume is None:
-            from silk_hs_confirm import preflight_block
-            _blocked = preflight_block(
+            # بلاغ المُشرِف: تُقاس العتبةُ الرقمية (بطاقةُ العبوة ثم استعلامُ
+            # ويبٍ واحد) قبل عرض أيّ حوار — نفسُ نقطة الاختناق التي يستدعيها
+            # `/analyze` (لا إصلاحَ على مسارٍ واحد، الدرسان ٣٥/٣٧).
+            from silk_hs_confirm import preflight_resolve
+            _resolved_hs, hs_provenance, _blocked = preflight_resolve(
                 product, hs_code, getattr(req, "hs_confirmed", False),
                 allow_claude=_classify_general_allow_claude(),
                 # بوّابة الثقة تُفحَص هنا أيضاً — **قبل** الحجز والدولار.
-                hs_confidence=hs_confidence)
+                hs_confidence=hs_confidence,
+                label_attributes=req.label_attributes,
+                gl=(market_ref.iso2 or None))
+            if hs_provenance is not None:
+                # رمزٌ مقيسٌ بدليلٍ موسوم يحلّ محلّ الملتبِس، وثقتُه من دليله
+                # لا من مطابقةٍ لفظية (صورةُ عبوةٍ ١٫٠، رابطُ ويبٍ ثانويّ).
+                hs_code = _resolved_hs
+                hs_confidence = hs_provenance.get("confidence")
+                import silk_ops_log
+                silk_ops_log.record_error(
+                    "hs_auto_resolved",
+                    f"حُسِم رمزُ HS آلياً لمنتج {product!r} => {hs_code} "
+                    f"({hs_provenance.get('resolved_from')})",
+                    context={"product": product, "hs_code": hs_code,
+                             "market_iso3": market_ref.iso3,
+                             "resolved_from": hs_provenance.get("resolved_from"),
+                             "value": hs_provenance.get("value"),
+                             "source_url": hs_provenance.get("source_url")})
             if _blocked is not None:
                 import silk_ops_log
                 # البوّابة صارت بوّابتين (ثقة + تطابق دلالي) بشكلَي ردٍّ
@@ -2035,6 +2119,7 @@ def create_app():
                              "market_iso3": market_ref.iso3,
                              "hs_confidence": _blocked.get("hs_confidence"),
                              "min_confidence": _blocked.get("min_confidence"),
+                             "attribute_probe": _blocked.get("attribute_probe"),
                              "missing_terms": _conf_detail.get("missing_terms")})
                 raise HTTPException(status_code=422, detail=_blocked)
 
@@ -2058,25 +2143,49 @@ def create_app():
             _cls = _hsc.classify_general(product or "", allow_claude=False)
             if _cls.get("tier") != "auto" and (_cls.get("candidates") or []):
                 import silk_ops_log
-                silk_ops_log.record_error(
-                    "hs_ambiguous_blocked",
-                    f"رُفض بدءُ بحثٍ لالتباسِ رمز HS لمنتج {product!r} — "
-                    f"مرشّحون: "
-                    f"{[c.get('hs6') for c in _cls['candidates']]}",
-                    context={"product": product, "hs_code": hs_code,
-                             "market_iso3": market_ref.iso3,
-                             "tier": _cls.get("tier")})
-                raise HTTPException(status_code=422, detail={
-                    "error": "hs_ambiguous",
-                    "message": (
-                        f"«{product}» يطابق أكثر من رمزٍ مقبول بفارقٍ غير "
-                        "حاسم — اختر الرمز الصحيح قبل بدء الدراسة (البنود "
-                        "داخل الترويسة الواحدة قد تتمايز بنسبةٍ رقمية لا "
-                        "بكلمة، فالحسمُ التلقائي هنا غير آمن)."),
-                    "hs_code_deterministic": hs_code,
-                    "candidates": _cls.get("candidates") or [],
-                    "candidates_source": _cls.get("source"),
-                })
+                # بلاغ المُشرِف — هذه هي البوّابةُ التي أنتجت السؤالَ حرفياً
+                # («إن كان … كامل الدسم (أكثر من ٦٪)»). العتبةُ التي كانت
+                # تُسأل تُقاس هنا أولاً: بطاقةُ العبوة ثم استعلامُ ويبٍ واحد.
+                from silk_hs_confirm import resolve_or_probe, _probe_public
+                _probe = resolve_or_probe(
+                    product or "", _cls.get("candidates") or [],
+                    label_attributes=req.label_attributes,
+                    gl=(market_ref.iso2 or None))
+                if _probe.get("hs6"):
+                    hs_code = _probe["hs6"]
+                    hs_confidence = _probe.get("confidence")
+                    hs_provenance = _probe
+                    silk_ops_log.record_error(
+                        "hs_auto_resolved",
+                        f"حُسِم التباسُ رمز HS آلياً لمنتج {product!r} => "
+                        f"{hs_code} ({_probe.get('resolved_from')})",
+                        context={"product": product, "hs_code": hs_code,
+                                 "market_iso3": market_ref.iso3,
+                                 "resolved_from": _probe.get("resolved_from"),
+                                 "value": _probe.get("value"),
+                                 "source_url": _probe.get("source_url")})
+                else:
+                    silk_ops_log.record_error(
+                        "hs_ambiguous_blocked",
+                        f"رُفض بدءُ بحثٍ لالتباسِ رمز HS لمنتج {product!r} — "
+                        f"مرشّحون: "
+                        f"{[c.get('hs6') for c in _cls['candidates']]}",
+                        context={"product": product, "hs_code": hs_code,
+                                 "market_iso3": market_ref.iso3,
+                                 "attribute_probe": _probe_public(_probe),
+                                 "tier": _cls.get("tier")})
+                    raise HTTPException(status_code=422, detail={
+                        "error": "hs_ambiguous",
+                        "message": (
+                            f"«{product}» يطابق أكثر من رمزٍ مقبول بفارقٍ غير "
+                            "حاسم — والفارقُ بين البنود قياسٌ رقميّ حاولنا "
+                            "قراءته من صورة العبوة ومن مصادر الويب ولم نجده. "
+                            "أرفِق صورة العبوة أو اختر البند المطابق أدناه."),
+                        "hs_code_deterministic": hs_code,
+                        "candidates": _cls.get("candidates") or [],
+                        "candidates_source": _cls.get("source"),
+                        "attribute_probe": _probe_public(_probe),
+                    })
 
         # بوابة «خارج التغطية» (اتفاق المالك) — تسبق الجهوزية/الحجز: مع تفعيل
         # تغطية العالم، سوقٌ ليس Tier-1 ولا ضمن مجموعة أكبر مستوردي هذا الرمز
@@ -2289,7 +2398,8 @@ def create_app():
                 target=_research_background,
                 args=(market_ref, product, hs_code, hs_note, product_card_dict,
                      ai_ok, ai_note, prefs, ready, ready_reason, analysis_id,
-                     resume_reports, req.report_style, hs_confidence),
+                     resume_reports, req.report_style, hs_confidence,
+                     hs_provenance),
                 daemon=True).start()
             return JSONResponse(status_code=202, content={
                 "analysis_id": analysis_id, "status": "running",
@@ -2300,7 +2410,8 @@ def create_app():
             result = _run_research_pipeline(
                 market_ref, product, hs_code, hs_note, product_card_dict,
                 ai_ok, ai_note, prefs, ready, ready_reason, analysis_id,
-                resume_reports, req.report_style, hs_confidence=hs_confidence)
+                resume_reports, req.report_style, hs_confidence=hs_confidence,
+                hs_provenance=hs_provenance)
         except Exception as e:  # noqa: BLE001 — P0: فشل لا يخسر البعثات المكتملة
             log.error("sync /research run %s failed: %s", analysis_id, e)
             if analysis_id is not None:

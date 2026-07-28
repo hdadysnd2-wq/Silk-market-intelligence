@@ -1630,6 +1630,39 @@ def _tag_stale_years(text: "str | None",
     return "".join(out)
 
 
+def _hs_provenance(result: dict) -> dict | None:
+    """إفصاحُ مصدر رمز HS حين حُسِم آلياً بالسمة الرقمية — أو `None`.
+
+    بلاغ المُشرِف (`silk_hs_attributes`): بنودُ الترويسة الواحدة تتمايز
+    بعتبةٍ رقمية، فيُقاس الرقمُ (بطاقةُ العبوة/مصدرُ ويب) بدل سؤال التاجر
+    عنه. **لا يُعرَض رمزٌ حُسِم آلياً بلا ذكرِ دليله** — القارئُ يرى كيف
+    اختير البندُ لا مجرّد نتيجته (نفس منطق «سطرُ مصدرٍ لكل رقم»). حسمٌ
+    بمسارٍ غير معروف => `None` (لا سطرَ إفصاحٍ مختلَق)."""
+    prov = result.get("hs_provenance")
+    if not isinstance(prov, dict) or not prov.get("hs6"):
+        return None
+    src = prov.get("resolved_from")
+    label = prov.get("label_ar") or prov.get("attribute") or ""
+    measured, unit = prov.get("value"), (prov.get("unit") or "")
+    measured_ar = "" if measured is None else f" ({label} {measured}{unit})"
+    if src == "image":
+        line = (f"الرمز محدَّد من صورة العبوة{measured_ar} — البند "
+                f"{prov.get('hs6')} اختير بمطابقة القياس المقروء على نطاقات "
+                "بنود الترويسة.")
+    elif src == "web":
+        line = (f"الرمز محدَّد من مصدر ويب: {prov.get('source_url') or ''}"
+                f"{measured_ar} — البند {prov.get('hs6')} اختير بمطابقة هذا "
+                "القياس على نطاقات بنود الترويسة (استشهادٌ ثانويّ برابط، "
+                "يُراجَع قبل الاعتماد النهائي).")
+    else:
+        return None
+    return {"resolved_from": src, "hs6": prov.get("hs6"),
+            "attribute": prov.get("attribute"), "label_ar": label,
+            "value": measured, "unit": unit,
+            "source_url": prov.get("source_url"),
+            "confidence": prov.get("confidence"), "note_ar": line}
+
+
 def _deep_research_view(result: dict) -> dict | None:
     """قسم البحث العميق (الموجة ٤، V5) — إضافي بحت، لا يمسّ أي مفتاح قائم.
 
@@ -1812,6 +1845,12 @@ def _deep_research_view(result: dict) -> dict | None:
                       + (f" ({_missing})" if _missing else "")
                       + " — تُقرأ أرقام الاستيراد والتركّز والحصص كمؤشر سياقي "
                       "حتى تأكيد الرمز الصحيح.")
+    # إفصاحُ مصدر الرمز حين حُسِم آلياً بالسمة الرقمية — سطرٌ واحدٌ مشترك
+    # يُبنى في `_hs_provenance` ويُحقَن هنا وفي `build_view` معاً (مسارا
+    # /research و/analyze) بلا نسختين قابلتين للانحراف.
+    _hs_prov_view = _hs_provenance(result)
+    if _hs_prov_view:
+        limits.insert(0, _hs_prov_view["note_ar"])
     # WP-3 §2/§3: ممرّ المصالحة الرقمية (يوسم البنود المستبعدة/السياقية/
     # المسانَدة) + إعلان المصادر التي فشل جمعها كلياً — مصدرٌ كل بنوده
     # أخطاء (value=None) يُستبعَد من سطر «اعتمد هذا التقرير على مصادر…»
@@ -2018,6 +2057,10 @@ def build_view(result: dict) -> dict:
             "segments": _segments(row.get("research")),
             "supplier_directory": _supplier_directory(row.get("research")),
         })
+    # إفصاحُ مصدر الرمز يظهر على مسار /analyze أيضاً لا على /research وحده
+    # (لا إصلاحَ على مسارٍ واحد — الدرسان ٣٥/٣٧). عند وجود بحثٍ عميق يكون
+    # السطرُ محقوناً سلفاً في حدوده، فيُمنَع التكرار أدناه.
+    hs_prov = _hs_provenance(result)
     limits = [f"{m['country']}: {_humanize_gap_note(f)}" for m in markets[:5]
               for f in (m.get("quality_flags") or [])]
     if not result.get("classified"):
@@ -2046,6 +2089,8 @@ def build_view(result: dict) -> dict:
         except Exception:  # noqa: BLE001
             pass
         limits = dr_view["limits"] + limits
+    elif hs_prov:
+        limits.insert(0, hs_prov["note_ar"])
     # ترويسة 2B: التغطية الإجمالية % = مُسهم/مُحاوَل عبر أقسام السوق الأعلى.
     top_cov = _section_coverage(markets[0]) if markets else {}
     att = sum(c["attempted"] for c in top_cov.values())
@@ -2071,6 +2116,9 @@ def build_view(result: dict) -> dict:
         "header": header,
         "product": result.get("product"), "hs_code": result.get("hs_code"),
         "hs_confidence": result.get("hs_confidence"),
+        # مصدرُ الرمز حين حُسِم آلياً (صورةُ عبوة/رابطُ ويب) — `None` حين
+        # حُسِم بالمسار العادي؛ لا حقلَ صامتاً يُفسَّر خطأً.
+        "hs_provenance": hs_prov,
         "year": result.get("year"), "preliminary": True,
         "data_year": result.get("data_year", result.get("year")),
         "year_fell_back": bool(result.get("year_fell_back")),

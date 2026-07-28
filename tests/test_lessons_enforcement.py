@@ -539,6 +539,26 @@ _SYMBOL_ANCHORS_EXTRA = [
       "def test_non_producer_market_still_flagged_qatar"]),
     (64, "tests/test_regression_registry.py",
      ["def _guard_g41_domestic_production"]),
+    # البند ٦٥ — «قِسِ الرقمَ قبل أن تسأل عنه»: الحوارُ كان يسأل التاجرَ عن
+    # عتبةٍ رقمية يُجيب عنها المنتجُ نفسُه (نسبةُ الدهن على العبوة/الويب).
+    (65, "silk_hs_attributes.py",
+     ["def band_of", "def discriminator", "def select_by_value",
+      "def probe_web", "def resolve_by_attribute", "def range_ar"]),
+    (65, "silk_hs_resolver.py", ["def official_description"]),
+    (65, "silk_hs_confirm.py", ["def resolve_or_probe",
+                                "def preflight_resolve"]),
+    (65, "silk_render.py", ["def _hs_provenance",
+                            "الرمز محدَّد من صورة العبوة",
+                            "الرمز محدَّد من مصدر ويب"]),
+    (65, "silk_product_intake.py", ["def _sanitize_attributes"]),
+    (65, "tests/test_hs_attribute_autoresolve.py",
+     ["def test_official_band_parsed_from_reference_not_from_our_seed",
+      "def test_no_band_matches_or_wrong_unit_never_fabricates_a_code",
+      "def test_web_hit_without_the_product_token_is_rejected_not_borrowed"]),
+    (65, "tests/test_hs_attribute_gate_wiring.py",
+     ["def test_view_discloses_how_an_auto_resolved_code_was_determined"]),
+    (65, "tests/test_regression_registry.py",
+     ["def _guard_ask_what_the_product_answers"]),
 ]
 
 

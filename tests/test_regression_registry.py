@@ -774,10 +774,19 @@ def _guard_hs_gate_shared_choke_point_fail_safe():
             os.environ.pop("SILK_HS_CONFIRM_GATE", None)
         else:
             os.environ["SILK_HS_CONFIRM_GATE"] = saved
-    # (٣) كلا المعالجَين يستدعيان preflight_block — لا مسارٌ واحد فقط.
+    # (٣) كلا المعالجَين يستدعيان نقطةَ الاختناق — لا مسارٌ واحد فقط.
+    # يُحتسَب الغلافُ `preflight_resolve` (البوّابة + قياسُ السمة الرقمية،
+    # LESSONS ٦٥) لأنه **يستدعي `preflight_block` نفسها** لا يستبدلها —
+    # وهذا مُتحقَّقٌ منه بنيوياً أدناه كي لا ينحرف الغلافُ لبوّابةٍ موازية.
     api_src = _read("api.py")
-    assert api_src.count("preflight_block(") >= 2, (
-        "preflight_block يجب أن تُستدعى من كلا /analyze و/research")
+    calls = (api_src.count("preflight_block(")
+             + api_src.count("preflight_resolve("))
+    assert calls >= 2, (
+        "نقطةُ اختناق البوّابة يجب أن تُستدعى من كلا /analyze و/research")
+    import inspect
+    wrapper = inspect.getsource(C.preflight_resolve)
+    assert "preflight_block(" in wrapper, (
+        "preflight_resolve لا يستدعي preflight_block — بوّابةٌ موازية")
 
 
 def _guard_cross_market_checkpoint_leak():
@@ -1310,6 +1319,43 @@ def _guard_cross_source_plausibility():
              "def test_plausibility_flags_implausible_market_size")()
 
 
+def _guard_ask_what_the_product_answers():
+    """LESSONS ٦٥ — الحوارُ كان يسأل عن رقمٍ يُجيب عنه المنتجُ نفسُه (نسبةُ
+    دهن). الحارس **سلوكيّ**: يقيس فعلاً على الوصف الرسميّ الحقيقي، ويتحقّق
+    أنّ نقطةَ الاختناق موصولةٌ بمسارَي الدخول معاً (لا إصلاحَ نصفيّ)."""
+    import silk_hs_attributes as A
+    # الترويسةُ التي أنتجت البلاغ — بنودُها من مرجعنا الرسميّ، بلا نموذج.
+    codes = [c for c in sorted(
+        __import__("silk_hs_resolver").load_hs_reference())
+        if c.startswith("0401") and A.band_of(c)]
+    assert len(codes) >= 3, "لم تُقرأ نطاقاتُ الترويسة من الوصف الرسميّ"
+    disc = A.discriminator([{"hs6": c} for c in codes])
+    assert disc and disc["dimension"] == "fat" and disc["unit"] == "%"
+    # (أ) قياسٌ من بطاقة العبوة يحسم بلا أيّ سؤال، وموسومٌ بمصدره.
+    got = A.resolve_by_attribute(
+        "منتجٌ من هذه الترويسة", [{"hs6": c} for c in codes], allow_web=False,
+        label_attributes=[{"name": disc["label_ar"], "value": 3.5,
+                           "unit": "%"}])
+    assert got["hs6"] and got["resolved_from"] == "image"
+    assert "صورة العبوة" in got["note_ar"]
+    # (ب) بلا قياسٍ لا يُحسَم رمزٌ أبداً، والحوارُ يحمل ما نقص وحدودَ البنود.
+    gap = A.resolve_by_attribute("منتجٌ من هذه الترويسة",
+                                 [{"hs6": c} for c in codes], allow_web=False)
+    assert gap["hs6"] is None and gap["missing_ar"] and gap["bands_ar"]
+    # (ج) نقطةُ اختناقٍ واحدة موصولةٌ بكِلا مسارَي الإنفاق + بوّابةِ الالتباس.
+    src = _read("api.py")
+    assert src.count("preflight_resolve") >= 3, (
+        "نقطةُ القياس غير موصولةٍ بمسارَي /analyze و/research معاً")
+    _needles("api.py", "resolve_or_probe", "attribute_probe",
+             "label_attributes", "hs_provenance")()
+    _needles("silk_hs_confirm.py", "def resolve_or_probe",
+             "def preflight_resolve")()
+    _needles("silk_render.py", "hs_provenance",
+             "الرمز محدَّد من صورة العبوة", "الرمز محدَّد من مصدر ويب")()
+    _needles("web/index.html", "attribute_probe", "label_attributes",
+             'd.error==="hs_ambiguous"')()
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1381,6 +1427,7 @@ _LESSONS = {
     62: _guard_cross_source_plausibility,         # بلاغ قطر HF3 — حارسُ معقوليةٍ عبر المصادر
     63: _guard_bloc_list_single_source,           # DEF-2 — عضويةُ الكتلة من مصدرٍ واحد (EU27 كاملة)
     64: _guard_g41_domestic_production,           # DEF-1/G4.1 — مرتكزُ الإنتاج المحليّ (سوقٌ مُنتِجة لا تُوسَم)
+    65: _guard_ask_what_the_product_answers,      # بلاغ المُشرِف — قِسِ الرقمَ قبل أن تسأل عنه
 }
 
 _TRAPS = [

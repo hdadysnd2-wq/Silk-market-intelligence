@@ -134,8 +134,9 @@ def test_research_path_carries_hs_confidence_into_the_result():
         os.path.abspath(__file__))), "api.py"), encoding="utf-8").read()
     assert "hs_confidence = dp.confidence if dp.value is not None else None" in src
     assert '"hs_confidence": hs_confidence,' in src
-    # وتُمرَّر للبوّابة قبل أيّ حجزٍ أو دولار.
-    assert "hs_confidence=hs_confidence)" in src
+    # وتُمرَّر للبوّابة قبل أيّ حجزٍ أو دولار (الغلافُ `preflight_resolve`
+    # يُمرّرها إلى `preflight_block` نفسها — اللائحة ٦٥).
+    assert "hs_confidence=hs_confidence" in src
 
 
 # ── ١ب) ماسحُ الرموز المخزَّنة (tools/audit_stored_hs.py) ────────────────────
@@ -356,8 +357,14 @@ def test_research_ambiguity_gate_is_deterministic_and_valved():
         os.path.abspath(__file__))), "api.py"), encoding="utf-8").read()
     assert "SILK_RESEARCH_AMBIGUITY_GATE" in src
     assert "_research_ambiguity_gate_enabled()" in src
-    block = src.split('"error": "hs_ambiguous"')[0][-1400:]
-    assert "allow_claude=False" in block, "البوّابة يجب ألّا تصرف نداء كلود"
+    # لا نداءَ كلود في هذه البوّابة إطلاقاً — التصنيفُ الحتميّ وحده.
+    assert 'classify_general(product or "", allow_claude=False)' in src, (
+        "البوّابة يجب ألّا تصرف نداء كلود")
+    # وحسمُ السمة الرقمية الذي يسبق الحوار (اللائحة ٦٥) حتميٌّ كذلك: بطاقةُ
+    # العبوة بلا نداء، والويبُ استعلامُ بحثٍ واحد لا نداءَ نموذج.
+    block = src.split('"error": "hs_ambiguous"')[0][-2600:]
+    assert "resolve_or_probe(" in block, (
+        "بوّابةُ الالتباس يجب أن تقيس العتبة قبل أن تسأل عنها")
     # مقصورةٌ على /research: لا ذكرَ لها في معالجَي /analyze و/deepen.
     assert src.count("_research_ambiguity_gate_enabled()") == 2   # التعريف + نداء
 
