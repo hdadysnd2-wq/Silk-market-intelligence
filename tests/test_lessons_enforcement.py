@@ -578,6 +578,19 @@ _SYMBOL_ANCHORS_EXTRA = [
       "def test_query_construction_has_no_literal_term"]),
     (67, "tests/test_regression_registry.py",
      ["def _guard_dimension_terms_not_frozen_in_code"]),
+    # البند ٦٨ (F2) — محورٌ ثانٍ غيرُ رقميّ: تطابقٌ رقميٌّ يجزم خطأً بثقة.
+    (68, "silk_hs_attributes.py", ["def _residual_axis", '"axis"']),
+    (68, "tests/test_hs_attribute_autoresolve.py",
+     ["def test_second_axis_heading_is_refused_not_resolved"]),
+    (68, "tests/test_regression_registry.py",
+     ["def _guard_multi_axis_heading_confident_wrong_code"]),
+    # البند ٦٩ (F3) — أكِّدْ على الأثر المُصيَّر لا على العرض.
+    (69, "silk_reports.py", ["def _hs_provenance_sentence"]),
+    (69, "tests/test_hs_attribute_gate_wiring.py",
+     ["def test_provenance_string_appears_in_the_actually_rendered_document",
+      "def test_no_provenance_sentence_when_the_code_was_not_measured"]),
+    (69, "tests/test_regression_registry.py",
+     ["def _guard_client_operator_document_divergence"]),
 ]
 
 

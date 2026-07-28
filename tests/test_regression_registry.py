@@ -1440,6 +1440,127 @@ def _guard_dimension_terms_not_frozen_in_code():
     assert A.dimension_terms("zzz_x") == ("zzz_x", ("zzz_x",))
 
 
+def _guard_multi_axis_heading_confident_wrong_code():
+    """LESSONS ٦٨ — «تطابقٌ رقميٌّ على ترويسةٍ متعدّدةِ المحاور = رمزٌ خاطئ
+    بثقة». الترويسةُ قد تنقسم بمحورٍ رقميٍّ **وآخرَ غيرِ رقميّ معاً**
+    (0902 = لونُ الشاي أخضر/أسود × وزنُ التعبئة ≤٣كجم/>٣كجم). قياسُ الوزن
+    وحده لا يُحدِّد بنداً — يختار أحدَ اثنين يختلفان في اللون أيضاً، فيخرج
+    رمزٌ **خاطئ** موسومٌ «الرمز محدَّد من صورة العبوة». اختلاقٌ لا فجوة.
+
+    حارسٌ **سلوكيّ** على المرجع الحقيقيّ لا فحصُ وجود: يبني مجموعاتِ مرشّحين
+    فعلية ويؤكّد الرفض. (الصفّ ٦٦ يفحص هذه العائلة ضمن فحصٍ مركّب مع صرامةِ
+    الحدّ؛ هذا الصفُّ يفردها بحارسها الخاصّ بأمر المُشرِف — العائلةُ اكتُشفت
+    خارج قائمة الفجوات المُسمّاة، فتستحقّ قفلاً لا يذوب في غيره.)"""
+    import collections
+    import itertools
+    import silk_hs_attributes as A
+    from silk_hs_resolver import load_hs_reference
+
+    # (١) حادثةُ العائلة بعينها: لونٌ مختلف + وزنٌ مختلف => رفضٌ قاطع.
+    ref = load_hs_reference()
+    tea = [c for c in ("090210", "090220", "090230", "090240") if c in ref]
+    assert len(tea) == 4, f"مرجعُ 0902 ناقص: {tea}"
+    green_light, green_heavy, black_light, black_heavy = tea
+    assert A.discriminator([{"hs6": green_light}, {"hs6": black_heavy}]) is None, (
+        "قُبِل مُميِّزٌ لبندين يختلفان في اللون **والوزن** — وزنٌ يحسم رمزاً "
+        "يختلف في محورٍ آخر: رمزٌ خاطئ بوسمِ مصدرٍ واثق")
+    assert A.discriminator([{"hs6": green_heavy}, {"hs6": black_light}]) is None
+    # (٢) ضابطٌ موجب — نفسُ المحور يمرّ، فالحارسُ ليس رفضاً شاملاً.
+    same_axis = A.discriminator([{"hs6": green_light}, {"hs6": green_heavy}])
+    assert same_axis is not None, (
+        "رُفِض بندان يختلفان بالوزن وحده — الحارسُ يرفض كلَّ شيء (لا قيمة له)")
+    assert len({b["axis"] for b in same_axis["bands"]}) == 1
+
+    # (٣) كنسٌ شاملٌ على المرجع كلِّه: **كلُّ** زوجٍ عابرِ المحور يُرفَض.
+    by_head = collections.defaultdict(list)
+    for code in ref:
+        band = A.band_of(code)
+        if band is not None:
+            by_head[code[:4]].append(band)
+    multi = {h: bs for h, bs in by_head.items() if len(bs) >= 2}
+    assert len(multi) >= 40, f"عيّنةٌ أضعفُ من المتوقَّع: {len(multi)}"
+    cross_pairs = 0
+    for head, bands in multi.items():
+        by_axis = collections.defaultdict(list)
+        for b in bands:
+            by_axis[b["axis"]].append(b["hs6"])
+        if len(by_axis) < 2:
+            continue
+        for g1, g2 in itertools.combinations(list(by_axis.values()), 2):
+            cross_pairs += 1
+            assert A.discriminator([{"hs6": g1[0]}, {"hs6": g2[0]}]) is None, (
+                f"{head}: قُبِل زوجٌ عابرُ المحور {g1[0]}/{g2[0]}")
+    assert cross_pairs >= 100, (
+        f"أزواجٌ عابرةُ المحور أقلُّ من المتوقَّع ({cross_pairs}) — "
+        "الكنسُ لم يعمل فعلياً")
+    # (٤) وأنّ المقبولَ ما يزال موجوداً (لا انهيارَ تغطيةٍ صامت).
+    accepted = sum(
+        1 for bs in multi.values()
+        if A.discriminator([{"hs6": b["hs6"]} for b in bs]) is not None)
+    assert accepted >= 5, f"لم يبقَ مقبولٌ يُذكَر ({accepted})"
+    _needles("silk_hs_attributes.py", "def _residual_axis", '"axis"')()
+
+
+def _guard_client_operator_document_divergence():
+    """LESSONS ٦٩ — «اختبارُ عرضٍ أخضرُ بجوار مُسلَّمِ عميلٍ خاطئ؛ أكِّدْ على
+    الأثر المُصيَّر». سطرُ إفصاحِ مصدر الرمز كان يظهر في مستند **المشغّل**
+    ويغيب عن مستند **العميل** — المُسلَّم الحقيقيّ — لأنّ القالبين يبنيان من
+    مصدرين مختلفين (`deep_research` مقابل `limits`). اختبارُ الوحدة على
+    `view["limits"]` بقي أخضرَ طوال الوقت.
+
+    الحارس **يفتح ملفّ .docx المُصدَّر فعلاً** — لا يقرأ عرضاً ولا يفحص وجودَ
+    رمز."""
+    pytest.importorskip("docx")
+    from docx import Document
+    import silk_render
+    import silk_reports
+    from canonical_netherlands import netherlands_research_blob
+
+    def _doc_text(path: str) -> str:
+        doc = Document(path)
+        parts = [p.text for p in doc.paragraphs]
+        for table in doc.tables:
+            for row in table.rows:
+                parts.extend(cell.text for cell in row.cells)
+        return "\n".join(parts)
+
+    url = "https://example-provenance.test/label"
+    blob = netherlands_research_blob()
+    blob["hs_provenance"] = {
+        "hs6": "040120", "resolved_from": "web", "attribute": "fat",
+        "label_ar": "نسبة الدهن", "value": 3.5, "unit": "%",
+        "source_url": url, "confidence": 0.5}
+
+    saved = os.environ.get("SILK_HERMETIC")
+    os.environ["SILK_HERMETIC"] = "1"
+    try:
+        view = silk_render.build_view(blob)
+        out = tempfile.mkdtemp()
+        # **كِلا** المُسلَّمين — التباعدُ هو العطل، فلا يكفي فحصُ أحدهما.
+        for renderer, label in (("render_client_docx", "العميل"),
+                                ("render_docx", "المشغّل")):
+            path = getattr(silk_reports, renderer)(
+                view, os.path.join(out, f"{renderer}.docx"))
+            assert os.path.exists(path), f"{label}: لم يُنتَج ملفّ"
+            text = _doc_text(path)
+            assert "الرمز محدَّد من مصدر ويب" in text, (
+                f"مستند {label}: سطرُ إفصاح مصدر الرمز غائبٌ عن الملفّ "
+                "المُصدَّر فعلاً (اختبارُ العرض لا يكشف هذا)")
+            assert url in text, f"مستند {label}: الرابطُ المُستشهَد به غائب"
+        # والنفيُ المقابل: بلا حسمٍ آليّ لا جملةَ إفصاحٍ مُقحَمة.
+        plain = silk_render.build_view(netherlands_research_blob())
+        clean_path = silk_reports.render_client_docx(
+            plain, os.path.join(out, "plain.docx"))
+        assert "الرمز محدَّد" not in _doc_text(clean_path), (
+            "جملةُ إفصاحٍ ظهرت على مستندٍ لم يُحسَم رمزُه آلياً")
+    finally:
+        if saved is None:
+            os.environ.pop("SILK_HERMETIC", None)
+        else:
+            os.environ["SILK_HERMETIC"] = saved
+    _needles("silk_reports.py", "def _hs_provenance_sentence")()
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1514,6 +1635,8 @@ _LESSONS = {
     65: _guard_ask_what_the_product_answers,      # بلاغ المُشرِف — قِسِ الرقمَ قبل أن تسأل عنه
     66: _guard_band_boundary_strictness_and_second_axis,  # صرامةُ الحدّ + المحورُ الثاني
     67: _guard_dimension_terms_not_frozen_in_code,        # مصطلحُ بُعدٍ مجمَّد (عودةُ ٣٠)
+    68: _guard_multi_axis_heading_confident_wrong_code,    # F2 — محورٌ ثانٍ غيرُ رقميّ
+    69: _guard_client_operator_document_divergence,        # F3 — تباعدُ مُسلَّمَي العميل/المشغّل
 }
 
 _TRAPS = [
