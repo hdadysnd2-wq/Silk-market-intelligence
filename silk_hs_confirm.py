@@ -394,15 +394,18 @@ def deterministic_candidates(product: str, top_n: int = 3,
     / `reason_ar` / `confidence`) كي تعرضهما الواجهةُ بمكوّنٍ واحد. يُستعمَل في
     ردّ بوّابة الثقة: المستخدمُ يحتاج **خياراتٍ** لا رفضاً عارياً."""
     from silk_hs_resolver import resolve_all
-    out: list[dict] = []
-    for dp in resolve_all(product or "", top_n=top_n, path=path):
-        if dp.value is None:
-            continue
-        row = _find_row(dp.value, path) or {}
-        out.append({"hs6": dp.value, "confidence": dp.confidence,
-                    "description_ar": _code_desc(row),
-                    "reason_ar": dp.note})
-    return out
+    import silk_hs_dialog
+    hits = [dp for dp in resolve_all(product or "", top_n=top_n, path=path)
+            if dp.value is not None]
+    # نفسُ نقطة اختناق العرض: الوصفُ من المرجع الرسميّ لا من البذرة، وأشقّاءُ
+    # المحور الرقميّ كاملون. الثقةُ الحتمية تُنقَل كما هي (حسابٌ لا نصّ).
+    scores = {dp.value: dp.confidence for dp in hits}
+    rows = silk_hs_dialog.build_candidates(
+        product, [dp.value for dp in hits],
+        reasons={dp.value: dp.note for dp in hits})
+    for r in rows:
+        r["confidence"] = scores.get(r["hs6"])
+    return rows
 
 
 # حارسٌ للتمييز بين «لم يمرّر المستدعي ثقةً إطلاقاً» (سلوكٌ قديم — لا بوّابة
@@ -614,8 +617,15 @@ def resolve_or_probe(product: str, candidates: list,
     بلغةٍ مفهومة كي يعرضها الحوارُ بدل عتبةٍ جمركية خام. لا اختلاق: بلا
     رقمٍ مقيسٍ يقع في نطاقٍ **وحيد** لا يُحسَم رمزٌ أبداً."""
     import silk_hs_attributes as _attrs
+    # **مدخلُ المُحلِّل يبقى كما كان حرفياً.** إكمالُ أشقّاء المحور (إصلاحُ
+    # العرض) يُغذّي الحوارَ لا المُحلِّل: قياسٌ على ٦٠٠ منتجٍ أظهر أنّ تمريرَ
+    # المجموعة المكتملة يجعل أربعةَ منتجاتٍ قابلةً للحسم لم تكن كذلك — أي
+    # **توسيعُ تغطية المُحلِّل من بابٍ خلفيّ**، وقد نهى المُشرِف عنه صراحةً.
+    # التوسيعُ إن أُريد فقرارٌ مستقلٌّ بأمرٍ مستقلّ، لا أثرٌ جانبيٌّ لإصلاح عرض.
+    asked = [c for c in (candidates or [])
+             if not (isinstance(c, dict) and c.get("axis_completion"))]
     return _attrs.resolve_by_attribute(
-        product or "", candidates or [], label_attributes=label_attributes,
+        product or "", asked, label_attributes=label_attributes,
         allow_web=allow_web, gl=gl)
 
 

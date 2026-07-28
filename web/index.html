@@ -701,14 +701,24 @@ function showHsCandidates(detail,cb){
       +(probe.missing_ar?('<div style="margin-top:3px">'+esc(probe.missing_ar)+'</div>'):'')
       +(tried?('<div style="margin-top:4px">ما جُرّب:</div><ul style="margin:2px 0 0;padding-inline-start:16px">'+tried+'</ul>'):'')
       +'</div>'}
-  var rows=cands.slice(0,3).map(function(c){
+  /* لا اقتطاعَ للقائمة: الخادمُ يُرسل أشقّاءَ المحور الرقميّ **كاملين**،
+     وقصُّها هنا كان يُخفي البندَ الصحيح (سقط 040140/040150 فلم يجد منتجٌ
+     كامل الدسم خياراً). الاكتمالُ شرطُ صحّةٍ لا تفضيلُ عرض. */
+  var rows=cands.map(function(c){
     var badge=c.verified?'<span style="font-size:10px;color:#2e7d32;margin-inline-start:6px">✓ من مرجعنا</span>'
       :'<span style="font-size:10px;color:var(--muted,#8a8175);margin-inline-start:6px">اقتراح</span>';
-    var rng=ranges[c.hs6]?('<div style="margin-top:2px;font-weight:700;color:var(--accent,#6b4e2e)">'+esc(ranges[c.hs6])+'</div>'):'';
+    /* حدُّ البند من الخادم (مشتقٌّ من الوصف الرسميّ) — `band_ar` هو المصدر،
+       و`ranges` من تقرير القياس احتياطٌ للردود القديمة. */
+    var rtxt=c.band_ar||ranges[c.hs6]||"";
+    var rng=rtxt?('<div style="margin-top:2px;font-weight:700;color:var(--accent,#6b4e2e)">'+esc(rtxt)+'</div>'):'';
     return '<button type="button" class="hsCand" data-hs="'+esc(c.hs6)+'" style="display:block;width:100%;text-align:right;margin-top:7px;padding:9px 11px;border:1px solid var(--line,#e3ddd2);border-radius:9px;background:transparent;cursor:pointer;font-size:12.5px">'
       +'<div style="font-weight:700">HS '+esc(c.hs6)+badge+'</div>'
       +rng
-      +(c.description_ar?('<div style="margin-top:2px">'+esc(c.description_ar)+'</div>'):'')
+      /* بندٌ حقيقيٌّ لا وصفَ رسميّ له في نسختنا (ثلاثةَ عشرَ بنداً تعرفها
+         البذرةُ وحدها) — **فجوةٌ معلَنة** لا سطرٌ فارغٌ صامت، ولا نصٌّ
+         مُختلَقٌ يسدّها. */
+      +(c.description_ar?('<div style="margin-top:2px">'+esc(c.description_ar)+'</div>')
+        :'<div style="margin-top:2px;color:var(--muted,#8a8175)">لا وصفَ رسميّ لهذا البند في مرجعنا</div>')
       +(c.reason_ar?('<div style="margin-top:2px;color:var(--muted,#8a8175)">'+esc(c.reason_ar)+'</div>'):'')
       +'</button>'}).join('');
   var m=modal('<div style="font-weight:700;font-size:14px;margin-bottom:8px">تأكيد رمز HS</div>'

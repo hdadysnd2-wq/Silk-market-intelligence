@@ -150,7 +150,20 @@ def manual(product: str, note: str = "") -> dict:
     نُعيد المرشّحين الحتميّين (إن وُجِدوا بقيمة) كخيارات للمنتقي — لا نخترع
     رمزًا. `hs6=None`، `status="manual"`، والرسالة الموحّدة `MANUAL_MSG`.
     """
-    alts = _candidate_rows((product or "").strip())
+    # المنتقي اليدوي سطحٌ يراه المستخدم أيضاً — نفسُ نقطة الاختناق، فلا
+    # يُعرَض فيه نصُّ بذرةٍ يناقض المرجع (كان `_candidate_rows` يُخرِج
+    # `name_ar`/`name_en` من البذرة مباشرةً).
+    import silk_hs_dialog
+    _seed_rows = _candidate_rows((product or "").strip())
+    _scores = {r["hs6"]: r.get("confidence") for r in _seed_rows}
+    # شكلُ `alternates` يبقى حرفياً `{hs6, label, confidence}` (تقرؤه الواجهة
+    # في `showHsManual` عبر `a.label`) — المتغيّرُ هو **مصدرُ النصّ** فقط:
+    # الوصفُ الرسميّ بدل `name_ar` من البذرة.
+    alts = [{"hs6": r["hs6"],
+             "label": r["description_ar"],
+             "confidence": _scores.get(r["hs6"])}
+            for r in silk_hs_dialog.build_candidates(
+                product, [r["hs6"] for r in _seed_rows])]
     return _proposal(None, 0.0, note or MANUAL_MSG, alts, "manual",
                      status="manual", message=MANUAL_MSG)
 
@@ -460,7 +473,7 @@ def classify_general(product: str, hs_code: str | None = None,
     if top is not None:
         return {"tier": "auto", "hs6": top["hs6"],
                "confidence": top.get("overlap") or 0.0,
-               "candidates": _public_candidates(candidates[:3]),
+               "candidates": _public_candidates(candidates[:3], product),
                "message": "✓ صُنّف تلقائياً", "source": top["source"],
                "used_llm": used_llm}
 
@@ -468,7 +481,7 @@ def classify_general(product: str, hs_code: str | None = None,
                 if (c.get("overlap") or 0.0) >= _CANDIDATE_MIN_OVERLAP]
     if plausible:
         return {"tier": "candidates", "hs6": None, "confidence": 0.0,
-               "candidates": _public_candidates(plausible[:3]),
+               "candidates": _public_candidates(plausible[:3], product),
                "message": "رمزٌ غير محسوم بثقة — اختر من المرشّحين أو أدخل "
                           "رمزاً يدوياً.",
                "source": "llm_general" if used_llm else "deterministic",
@@ -476,19 +489,35 @@ def classify_general(product: str, hs_code: str | None = None,
 
     # لا شيء دفاعي — منتقٍ يدويٌّ خالص، لا اختلاق. نعرض مرشّحي بذرتنا الخام
     # (حتى تحت العتبة) كنقطة انطلاقٍ للمنتقي اليدوي فقط، لا كاقتراحٍ واثق.
+    # المنتقي اليدوي سطحٌ يراه المستخدم كذلك — نفسُ نقطة الاختناق. كان هذا
+    # الفرعُ يُخرِج `_candidate_rows` (نصَّ بذرةٍ خاماً) مباشرةً: **المُنتِجُ
+    # الرابع** للنصّ المعروض، وهو تحديداً الشكلُ الذي تعود منه هذه العائلة.
+    import silk_hs_dialog
+    _rows = _candidate_rows(product)
     return {"tier": "manual", "hs6": None, "confidence": 0.0,
-           "candidates": _candidate_rows(product), "message": MANUAL_MSG,
-           "source": "manual", "used_llm": used_llm}
+           "candidates": silk_hs_dialog.build_candidates(
+               product, [r["hs6"] for r in _rows]),
+           "message": MANUAL_MSG, "source": "manual", "used_llm": used_llm}
 
 
-def _public_candidates(cands: list[dict]) -> list[dict]:
-    """شكلٌ نظيفٌ للواجهة/الـAPI — يُسقط حقول التصحيح الداخلية."""
-    return [{"hs6": c["hs6"], "description_ar": c.get("code_desc") or "",
-            "reason_ar": c.get("reason_ar") or "",
-            "confidence": c.get("overlap") if c.get("overlap") is not None
-                         else c.get("model_confidence"),
-            "verified": bool(c.get("verified"))}
-           for c in cands]
+def _public_candidates(cands: list[dict], product: str = "") -> list[dict]:
+    """شكلٌ نظيفٌ للواجهة/الـAPI — عبر **نقطة الاختناق الوحيدة** للعرض.
+
+    كان هذا يُخرِج `code_desc` كما هو: نصّاً قد يكون بذرةً محلّية أو **نثرَ
+    نموذجٍ وقتَ الطلب** (أيُّهما سجّل تداخلاً لفظياً أعلى) — فعُرِضت للتاجر
+    حدودٌ تناقض المرجع الرسميّ، ورمزٌ لا وجود له فيه، وأشقّاءُ ناقصون.
+    الآن كلُّ نصٍّ يُصيَّر من الوصف الرسميّ عبر `silk_hs_dialog`، وتُضَمّ
+    أشقّاءُ المحور الرقميّ كاملةً. الثقةُ المحسوبة تُنقَل كما هي (حسابٌ لا
+    نصّ)، ولا يُمَسّ منطقُ القبول/الرفض إطلاقاً."""
+    import silk_hs_dialog
+    scores = {c["hs6"]: (c.get("overlap") if c.get("overlap") is not None
+                         else c.get("model_confidence")) for c in cands}
+    reasons = {c["hs6"]: (c.get("reason_ar") or "") for c in cands}
+    rows = silk_hs_dialog.build_candidates(
+        product, [c["hs6"] for c in cands], reasons=reasons)
+    for r in rows:
+        r["confidence"] = scores.get(r["hs6"])
+    return rows
 
 
 def _reserve_llm_call() -> bool:

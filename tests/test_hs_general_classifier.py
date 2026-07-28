@@ -135,20 +135,18 @@ def test_classify_general_llm_candidate_outside_our_csv_still_validated():
     صراحةً، لا اختلاقاً)، ويظهر إن مرّ البوابة."""
     import silk_hs_classifier as hsc
     from silk_hs_confirm import _find_row
-    # اختر رمزاً هيكلياً صحيحاً (فصلٌ حقيقي) لكنه غائبٌ عن مرجعنا فعلياً —
-    # نبحث عنه ديناميكياً بدل تثبيت رقمٍ صلب (عائلة hardcoded-product-rule).
-    from silk_hs_resolver import VALID_HS_CHAPTERS, load_hs_codes
-    present = {r["hs_code"] for r in load_hs_codes()}
-    missing_code = None
-    for ch in sorted(VALID_HS_CHAPTERS):
-        for suffix in range(100, 999):
-            cand = f"{ch}{suffix:04d}"[:6]
-            if len(cand) == 6 and cand not in present:
-                missing_code = cand
-                break
-        if missing_code:
-            break
-    assert missing_code, "تعذّر إيجاد رمزٍ هيكليٍّ صحيح غائبٍ عن المرجع للاختبار"
+    # اختر رمزاً **حقيقياً** (تعرفه إحدى مدوّنتَينا) لكنه غائبٌ عن المدوّنة
+    # الأخرى — ديناميكياً بدل تثبيت رقمٍ صلب (عائلة hardcoded-product-rule).
+    #
+    # قياسٌ يحكم هذا الاختبار: `data/hs_reference.csv` (٥٦١٣ بنداً) **مجموعةٌ
+    # جزئية** من `data/hs_codes.csv` (٥٦٢٦)، فثلاثة عشر بنداً حقيقياً موجودةٌ
+    # في البذرة وحدها. هذه هي الحالةُ التي تُثبِت أنّ لا مدوّنةَ منهما سقفٌ:
+    # بندٌ بلا وصفٍ رسميّ لدينا **يُعرَض** — بلا نصٍّ مُختلَق يسدّ الفراغ.
+    from silk_hs_resolver import load_hs_codes, load_hs_reference
+    seeded = {r["hs_code"] for r in load_hs_codes()}
+    official = set(load_hs_reference())
+    missing_code = next((c for c in sorted(seeded - official)), None)
+    assert missing_code, "تعذّر إيجاد رمزٍ حقيقيٍّ خارج المرجع الرسميّ للاختبار"
     fake = _fake_llm([{"hs6": missing_code,
                        "description_ar": "منتج فريد بلا ترجمة في مرجعنا",
                        "reason_ar": "تطابقٌ دلاليّ من معرفة النموذج",
@@ -161,7 +159,43 @@ def test_classify_general_llm_candidate_outside_our_csv_still_validated():
         r = hsc.classify_general("منتج فريد بلا ترجمة في مرجعنا",
                                  allow_claude=True)
     hits = [c for c in r["candidates"] if c["hs6"] == missing_code]
-    assert hits and hits[0]["verified"] is False
+    assert hits, (f"{missing_code}: بندٌ حقيقيٌّ سقط لأنّ نسختَنا من المرجع "
+                  "تنقصه — نقصُ المرجع صار سقفاً (عودةُ اللائحة ٣٩)")
+    # ولا نصَّ مُختلَقٌ يسدّ فراغَ الوصف الرسميّ (البند ٧٢).
+    assert hits[0]["description_ar"] == "", hits[0]["description_ar"]
+
+
+def test_classify_general_fabricated_code_known_to_neither_codelist_is_dropped():
+    """البند ٧٢ — رمزٌ يقترحه النموذج ولا تعرفه **أيٌّ** من مدوّنتَينا
+    (`hs_reference.csv` ولا `hs_codes.csv`) لا يُعرَض على التاجر إطلاقاً.
+
+    هذه حادثةُ `040190` حرفياً: رمزٌ ظهر في الحوار وهو غيرُ موجودٍ في أيّ
+    مدوّنة — فيختاره التاجر ويخرج برمزٍ جمركيٍّ **مُختلَق**. النفيُ المقابل
+    في نفس التشغيلة: البندُ الحقيقيّ المصاحبُ يمرّ، فالإسقاطُ انتقائيٌّ لا
+    تعطيلٌ للمسار."""
+    import silk_hs_classifier as hsc
+    from silk_hs_resolver import load_hs_codes, load_hs_reference
+    known = {r["hs_code"] for r in load_hs_codes()} | set(load_hs_reference())
+    fabricated = next((f"04{s:04d}" for s in range(100, 9999)
+                       if f"04{s:04d}" not in known), None)
+    assert fabricated, "تعذّر تركيبُ رمزٍ مجهولٍ للمدوّنتين"
+    real = "040110"
+    assert real in known
+    fake = _fake_llm([
+        {"hs6": fabricated, "description_ar": "حليب وقشطة أخرى",
+         "reason_ar": "تطابقٌ دلاليّ", "confidence": 0.8},
+        {"hs6": real, "description_ar": "حليب", "reason_ar": "تطابق",
+         "confidence": 0.7}])
+    with patch.dict(os.environ, {"SILK_HS_CLASSIFIER": "1"}), \
+         patch("silk_ai_judge.available", return_value=True), \
+         patch("silk_ai_judge._call", return_value=fake), \
+         patch("silk_usage.try_reserve_paid_calls", return_value=True), \
+         patch("silk_usage.try_reserve_usd", return_value=True):
+        r = hsc.classify_general("حليب طازج", allow_claude=True)
+    shown = {c["hs6"] for c in r["candidates"]}
+    assert fabricated not in shown, (
+        f"{fabricated}: رمزٌ مجهولٌ للمدوّنتين عُرِض على التاجر — حادثةُ 040190")
+    assert real in shown, "الإسقاطُ ابتلع البندَ الحقيقيَّ معه"
 
 
 # ══════════════ الذاكرة — نداءٌ واحدٌ فقط لكل منتجٍ جديد ═══════════════════
