@@ -402,6 +402,22 @@ def create_app():
             "gmaps_scraper": _gmaps_health_status(),
             "claude": _claude,
         }
+        # أيّ نموذج تناديه هذه النشرة فعلاً — طلب المالك: «SILK_AI_MODEL من
+        # صدفة Railway». اسم النموذج ليس سرّاً (لا مفتاح ولا قيمة حسّاسة)، وهو
+        # لازم للتشخيص عن بُعد: قرار إرسال/إهمال `temperature` مبنيّ عليه
+        # حصراً، فبلا رؤيته يبقى «هل الإصلاح فعّال إنتاجياً؟» تخميناً. القيمة
+        # المحلولة (الافتراضية إن كان المتغيّر غير مضبوط)، لا نصّ المتغيّر.
+        try:
+            import silk_ai_judge as _judge
+            import silk_llm_provider as _llm
+            health["ai_model"] = {
+                "resolved": _judge._MODEL,
+                "env_set": bool(os.environ.get("SILK_AI_MODEL", "").strip()),
+                "sends_temperature": _llm._supports_temperature(_judge._MODEL),
+                "no_temperature_prefixes": list(_llm._no_temperature_prefixes()),
+            }
+        except Exception as _exc:  # noqa: BLE001 — فحص صحّة لا ينهار أبداً
+            health["ai_model"] = {"error": f"{type(_exc).__name__}: {_exc}"}
         # جهوزية البحث العميق (/research) — بلاغ حي: كلود شرط تشغيل هناك لا
         # تحسين اختياري؛ حقل صريح هنا كي يتحقق المشغّل قبل أي طلب حي، لا
         # بعد تسليم هيكل فارغ (نفس فحص _research_readiness دون حجز ميزانية).

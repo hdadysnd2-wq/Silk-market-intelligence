@@ -1098,7 +1098,11 @@ def _guard_quality_gate_is_client_export_delivery_condition():
 def _guard_wp1_verdict_determinism():
     """صفّ ٤٧ — الحكم الحتمي هو المعروض الوحيد + temperature=0 + سُلَّم ثقة واحد."""
     _needles("silk_narrative.py", "def authoritative_verdict")()
-    _needles("silk_llm_provider.py", '"temperature": 0')()
+    _needles("silk_llm_provider.py", "def _supports_temperature",
+             '["temperature"] = 0')()
+    _needles("tests/test_wp1_verdict_determinism.py",
+             "test_complete_pins_temperature_zero_on_legacy_model",
+             "test_complete_omits_temperature_on_deprecating_model")()
     _needles("silk_style_contract.py", "def confidence_band_label")()
     _needles("tests/test_wp1_verdict_determinism.py",
              "test_three_consecutive_renders_are_byte_identical")()

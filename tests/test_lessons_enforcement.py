@@ -452,7 +452,11 @@ _SYMBOL_ANCHORS_EXTRA = [
     # الكاملة في tests/test_regression_registry.py (_guard_wp1…_guard_wp7)
     # وملفات tests/test_wp*.py — هذه مراسي الرموز.
     (47, "silk_narrative.py", ["def authoritative_verdict"]),
-    (47, "silk_llm_provider.py", ['"temperature": 0']),
+    # temperature لم تعد سطراً حرفياً في الحمولة — صارت قراراً واعياً بالنموذج
+    # (تُرسَل صفراً حيث تُقبَل، وتُهمَل حيث يردّ المزوّد 400). المرساة هي الدالة
+    # الحاكمة + موضع الإسناد، فيبقى القانون منفَّذاً بعد تغيّر الآلية.
+    (47, "silk_llm_provider.py", ["def _supports_temperature",
+                                  '["temperature"] = 0']),
     (47, "silk_style_contract.py", ["def confidence_band_label"]),
     (48, "silk_reports.py", ["def _client_prose",
                              "def _client_missing_narrative_heads"]),

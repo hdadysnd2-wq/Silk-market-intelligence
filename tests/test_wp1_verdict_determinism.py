@@ -104,7 +104,8 @@ class _FakeResp:
                 "stop_reason": "end_turn", "usage": {}}
 
 
-def test_complete_pins_temperature_zero(monkeypatch):
+def _capture_complete(monkeypatch, model, *, vision=False):
+    """نفّذ نداءً واحداً والتقط الحمولة المرسَلة فعلاً — أداة الاختبارات أدناه."""
     import requests
     from silk_llm_provider import AnthropicProvider
     captured = {}
@@ -115,10 +116,69 @@ def test_complete_pins_temperature_zero(monkeypatch):
 
     monkeypatch.setattr(requests, "post", fake_post)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    out = AnthropicProvider().complete("s", "u", 100, "claude-x", 30.0)
+    if vision:
+        out = AnthropicProvider().complete_vision(
+            "s", "t", "YWJj", "image/png", 100, model, 30.0)
+    else:
+        out = AnthropicProvider().complete("s", "u", 100, model, 30.0)
     assert out == "ok"
+    return captured
+
+
+def test_complete_pins_temperature_zero(monkeypatch):
+    captured = _capture_complete(monkeypatch, "claude-x")
     assert captured.get("temperature") == 0
     assert "top_p" not in captured   # لا top_p مع temperature (توصية Anthropic)
+
+
+def test_complete_pins_temperature_zero_on_legacy_model(monkeypatch):
+    """نموذج يقبل المعامل (جيل 4) — الحتمية تبقى مثبّتة، الصفّ ٤٧ سليم."""
+    captured = _capture_complete(monkeypatch, "claude-opus-4-8")
+    assert captured.get("temperature") == 0
+
+
+def test_complete_omits_temperature_on_deprecating_model(monkeypatch):
+    """نموذج أزال المعامل (جيل ٥) — يُهمَل تماماً، لا يُرسَل صفراً ولا غيره:
+    إرساله يردّ 400 فيصير النداء كلّه فشلاً (تقرير بلا سرد)."""
+    captured = _capture_complete(monkeypatch, "claude-opus-5")
+    assert "temperature" not in captured
+    # الحمولة الباقية سليمة — الحذف لا يمسّ شيئاً آخر
+    assert captured["model"] == "claude-opus-5"
+    assert captured["max_tokens"] == 100
+
+
+def test_complete_omits_temperature_for_every_default_prefix(monkeypatch):
+    """كل بادئة في القائمة الافتراضية، ومعها لاحقة مؤرَّخة (مطابقة ببادئة)."""
+    from silk_llm_provider import _NO_TEMPERATURE_PREFIXES
+    assert set(_NO_TEMPERATURE_PREFIXES) == {
+        "claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-mythos-5"}
+    for prefix in _NO_TEMPERATURE_PREFIXES:
+        for model in (prefix, f"{prefix}-20260401", prefix.upper()):
+            captured = _capture_complete(monkeypatch, model)
+            assert "temperature" not in captured, model
+
+
+def test_vision_call_follows_the_same_model_aware_decision(monkeypatch):
+    """موضع الرؤية يتبع نفس الحكم — لا موضع ثانٍ يفوت الإصلاح."""
+    assert _capture_complete(
+        monkeypatch, "claude-opus-4-8", vision=True).get("temperature") == 0
+    assert "temperature" not in _capture_complete(
+        monkeypatch, "claude-opus-5", vision=True)
+
+
+def test_no_temperature_list_is_overridable_by_env(monkeypatch):
+    """`SILK_LLM_NO_TEMPERATURE` مخرج تشغيلي بلا نشر — يحلّ محل الافتراضية."""
+    monkeypatch.setenv("SILK_LLM_NO_TEMPERATURE", "claude-opus-4-8, claude-zeta")
+    assert "temperature" not in _capture_complete(monkeypatch, "claude-opus-4-8")
+    assert "temperature" not in _capture_complete(monkeypatch, "claude-zeta-1")
+    # ما ليس في القائمة الجديدة يستعيد المعامل — الاستبدال كامل لا إضافة
+    assert _capture_complete(monkeypatch, "claude-opus-5").get("temperature") == 0
+
+
+def test_empty_env_override_means_no_model_is_exempt(monkeypatch):
+    """قيمة فارغة صريحة = إعادة الإرسال للجميع (مخرج طوارئ إن أخطأت القائمة)."""
+    monkeypatch.setenv("SILK_LLM_NO_TEMPERATURE", "")
+    assert _capture_complete(monkeypatch, "claude-opus-5").get("temperature") == 0
 
 
 def test_complete_tools_keeps_default_temperature(monkeypatch):

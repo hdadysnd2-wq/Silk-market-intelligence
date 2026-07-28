@@ -56,6 +56,42 @@ def last_stop_reason() -> str | None:
     return _last_stop_reason.get()
 
 
+# ── temperature: قرار واعٍ بالنموذج · model-aware temperature ────────────────
+# الصفّ ٤٧ في docs/LESSONS.md ثبّت `temperature=0` على كل نداءات `complete`
+# لأن الافتراضي (1.0) أنتج حكمين مختلفين لنفس المدخلات في يوم واحد (WATCH ثم
+# GO). **القانون قائم ولا يُمَسّ** — الحتمية تبقى مطلوبة حيث يقبلها المزوّد.
+#
+# لكن Anthropic أزالت معاملات المعاينة (`temperature`/`top_p`/`top_k`) من عائلة
+# نماذج الجيل الخامس: إرسالها يردّ **400 invalid_request_error**، فيصير كل نداء
+# توليف/كاتب/مراجع/رؤية فشلاً كاملاً (`complete` → None) — أي تقرير بلا سرد، لا
+# مجرّد حكم غير حتمي. الحذف الشامل يعيد اللاحتمية على النماذج التي تقبلها؛
+# لذا القرار **لكل نموذج**: تُرسَل حيث تُقبَل، وتُهمَل حيث تُرفَض.
+#
+# `SILK_LLM_NO_TEMPERATURE` مخرج تشغيلي بلا نشر: قائمة بادئات مفصولة بفواصل
+# (أو مسافات) تحلّ محل الافتراضية بالكامل — تُضاف بادئة جديدة حين يُرقّى نموذج
+# آخر، أو تُفرَّغ («») لإعادة إرسال temperature لكل النماذج.
+_NO_TEMPERATURE_PREFIXES: tuple[str, ...] = (
+    "claude-opus-5", "claude-sonnet-5", "claude-fable-5", "claude-mythos-5")
+
+
+def _no_temperature_prefixes() -> tuple[str, ...]:
+    """بادئات النماذج التي تُهمَل معها `temperature` — الافتراضية أو ما يضبطه
+    `SILK_LLM_NO_TEMPERATURE`. المتغيّر **مضبوطاً** يحلّ محل الافتراضية كاملةً
+    (قيمة فارغة صريحة = لا نموذج يُستثنى)؛ **غير مضبوط** = الافتراضية."""
+    raw = os.environ.get("SILK_LLM_NO_TEMPERATURE")
+    if raw is None:
+        return _NO_TEMPERATURE_PREFIXES
+    return tuple(p for p in raw.replace(",", " ").split() if p)
+
+
+def _supports_temperature(model: str) -> bool:
+    """هل يقبل هذا النموذج معامل `temperature`؟ (المطابقة ببادئة، بلا حساسية
+    حالة الأحرف — فتغطي اللواحق المؤرَّخة مثل `claude-opus-5-20260401`.)"""
+    m = (model or "").strip().lower()
+    return not any(m.startswith(p.lower().strip())
+                   for p in _no_temperature_prefixes())
+
+
 class LLMProvider(ABC):
     """الواجهة الدنيا — نداء إكمال نصّي، ونداء حلقة استخدام أدوات."""
 
@@ -240,11 +276,14 @@ class AnthropicProvider(LLMProvider):
             # معها — Anthropic توصي بضبط أحدهما لا كليهما. حلقة الأدوات
             # (`complete_tools`) تبقى على افتراضها: مخرجاتها لا تحدّد الحكم
             # المعروض مباشرة (الحكم من المحرّك الحتمي).
+            # تُهمَل — لا تُحذَف — على النماذج التي ترفضها بـ400 (انظر
+            # `_supports_temperature` أعلاه): إرسالها هناك يقتل النداء كلّه.
             payload = {"model": model, "max_tokens": max_tokens,
-                       "temperature": 0,
                        "system": [{"type": "text", "text": system,
                                    "cache_control": {"type": "ephemeral"}}],
                        "messages": [{"role": "user", "content": user}]}
+            if _supports_temperature(model):
+                payload["temperature"] = 0
             resp = self._post(key, payload, timeout)
             data = resp.json()
             self._record_usage(model, data)
@@ -323,8 +362,9 @@ class AnthropicProvider(LLMProvider):
         if not key:
             return None
         try:
+            # WP-1 §1: استخلاص حتمي كالنصّي — ومُهمَلة على النماذج الرافضة
+            # (نفس قرار `complete`؛ `_supports_temperature` هو الحكم الواحد).
             payload = {"model": model, "max_tokens": max_tokens,
-                       "temperature": 0,   # WP-1 §1: استخلاص حتمي كالنصّي
                        "system": [{"type": "text", "text": system,
                                    "cache_control": {"type": "ephemeral"}}],
                        "messages": [{"role": "user", "content": [
@@ -333,6 +373,8 @@ class AnthropicProvider(LLMProvider):
                                        "media_type": media_type,
                                        "data": image_b64}},
                            {"type": "text", "text": text}]}]}
+            if _supports_temperature(model):
+                payload["temperature"] = 0
             resp = self._post(key, payload, timeout)
             data = resp.json()
             self._record_usage(model, data)
