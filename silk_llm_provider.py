@@ -56,6 +56,82 @@ def last_stop_reason() -> str | None:
     return _last_stop_reason.get()
 
 
+# ── معاملات المعاينة: قرار واعٍ بالنموذج · model-aware sampling params ───────
+# الثلاثة (`temperature`/`top_p`/`top_k`) أُزيلت معاً من Claude 4.7 فصاعداً:
+# إرسال أيٍّ منها يردّ **400 invalid_request_error**. والأثر ليس «حكماً غير
+# حتمي» بل **فشل النداء كلّه** — `complete` تعيد None، فيسقط التوليف والكاتب
+# والمراجع: تقرير بلا سرد. **حضور المفتاح وحده كافٍ للرفض**، فالقيمة المحايدة
+# (1.0) ليست علاجاً: المفتاح يُحذف من الحمولة، لا يُضبَط.
+#
+# ما زال يقبلها: `claude-haiku-4-5-*`, `claude-sonnet-4-6` وما قبلها.
+#
+# تصحيح الصفّ ٤٧ (docs/LESSONS.md): `temperature=0` شُحنت لأن الافتراضي 1.0
+# أنتج حكمين مختلفين لنفس المدخلات في يوم واحد (WATCH ثم GO) — لكنها **لم
+# تضمن يوماً مخرجاً متطابقاً**، حتى على النماذج التي تقبلها؛ خفّضت التشتّت لا
+# أكثر. على نماذج 4.7+ لا وجود لهذه الرافعة أصلاً: الحتمية تأتي من **التوجيه**
+# (تثبيت الحقل الحتمي `silk_narrative.authoritative_verdict` مصدراً وحيداً
+# للحكم المعروض، وتضييق المطالبة)، لا من معامل معاينة. القانون الحاكم للصفّ ٤٧
+# يبقى «الحكم المعروض من الحقل الحتمي حصراً» — وهو قائم ولم يُمَسّ هنا.
+#
+# `SILK_LLM_NO_SAMPLING_PARAMS` مخرج تشغيلي بلا نشر: بادئات مفصولة بفواصل (أو
+# مسافات) تحلّ محل الافتراضية بالكامل — تُضاف بادئة حين يُرقّى نموذج آخر،
+# أو تُفرَّغ («») فلا يُستثنى نموذج.
+_NO_SAMPLING_PARAMS_PREFIXES: tuple[str, ...] = (
+    "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5",
+    "claude-sonnet-5", "claude-fable-5", "claude-mythos")
+
+# المفاتيح الثلاثة أُزيلت معاً — تُنزَع معاً (`_scrub_sampling_params`).
+_SAMPLING_PARAM_KEYS: tuple[str, ...] = ("temperature", "top_p", "top_k")
+
+
+def _no_sampling_params_prefixes() -> tuple[str, ...]:
+    """بادئات النماذج التي تُهمَل معها معاملات المعاينة — الافتراضية أو ما
+    يضبطه `SILK_LLM_NO_SAMPLING_PARAMS`. المتغيّر **مضبوطاً** يحلّ محل
+    الافتراضية كاملةً (فارغاً صراحةً = لا نموذج يُستثنى)؛ **غير مضبوط** =
+    الافتراضية."""
+    raw = os.environ.get("SILK_LLM_NO_SAMPLING_PARAMS")
+    if raw is None:
+        return _NO_SAMPLING_PARAMS_PREFIXES
+    return tuple(p for p in raw.replace(",", " ").split() if p)
+
+
+def _supports_sampling_params(model: str) -> bool:
+    """هل يقبل هذا النموذج معاملات المعاينة (temperature/top_p/top_k)؟
+
+    المطابقة ببادئة وبلا حساسية حالة الأحرف، فتغطي اللواحق المؤرَّخة
+    (`claude-opus-4-8-20260115`) وعائلةً كاملة ببادئة واحدة (`claude-mythos`
+    تغطي `claude-mythos-5` و`claude-mythos-preview` معاً)."""
+    m = (model or "").strip().lower()
+    return not any(m.startswith(p.lower().strip())
+                   for p in _no_sampling_params_prefixes())
+
+
+def _scrub_sampling_params(payload: dict, model: str) -> dict:
+    """نقطة الاختناق الوحيدة: تُنقّي الحمولة من معاملات المعاينة قبل الإرسال.
+
+    لماذا هنا لا عند كل موضع بناء: `_post` يمرّ به **كل** نداء (نصّي، أدوات،
+    رؤية، وأي موضع يُضاف لاحقاً)، فالحماية بنيوية لا اتفاقية — موضعٌ جديد
+    ينسى الفحص لا يستطيع إعادة إنتاج الـ400.
+
+    قاعدتان:
+    ١) نموذج لا يقبلها ⇒ تُنزَع الثلاثة كلّها (لا تُضبَط على قيمة محايدة —
+       حضور المفتاح وحده يكفي للرفض).
+    ٢) نموذج يقبلها ⇒ لا يُرسَل `temperature` و`top_p` معاً (توصية Anthropic،
+       وإرسالهما معاً 400 مستقلّ على عائلة Claude 4+). `temperature` هو
+       المثبَّت عمداً في هذه المدوّنة، فيُنزَع `top_p` عند التزاحم."""
+    if not _supports_sampling_params(model):
+        for key in _SAMPLING_PARAM_KEYS:
+            if payload.pop(key, None) is not None:
+                log.warning("dropped %s for model %r — sampling params are "
+                            "rejected (HTTP 400) on this model family",
+                            key, model)
+    elif "temperature" in payload and "top_p" in payload:
+        payload.pop("top_p")
+        log.warning("dropped top_p for model %r — temperature and top_p must "
+                    "not be sent together", model)
+    return payload
+
+
 class LLMProvider(ABC):
     """الواجهة الدنيا — نداء إكمال نصّي، ونداء حلقة استخدام أدوات."""
 
@@ -191,6 +267,8 @@ class AnthropicProvider(LLMProvider):
                 "SILK_LLM_RETRY_BASE_S", "1.0").strip() or "1.0"))
         except ValueError:
             base = 1.0
+        # نقطة الاختناق: كل نداء يمرّ من هنا، فالتنقية بنيوية لا اتفاقية.
+        payload = _scrub_sampling_params(payload, payload.get("model", ""))
         attempt = 0
         while True:
             try:
@@ -234,17 +312,19 @@ class AnthropicProvider(LLMProvider):
         if not key:
             return None
         try:
-            # WP-1 §1: temperature مثبّتة صفراً على كل نداءات `complete`
-            # (التوليف/الكاتب/المراجع/المحلل النصي) — الافتراضي 1.0 أنتج
-            # حكمين مختلفين لنفس المدخلات في يوم واحد (WATCH ثم GO). لا top_p
-            # معها — Anthropic توصي بضبط أحدهما لا كليهما. حلقة الأدوات
-            # (`complete_tools`) تبقى على افتراضها: مخرجاتها لا تحدّد الحكم
-            # المعروض مباشرة (الحكم من المحرّك الحتمي).
+            # WP-1 §1: `temperature=0` على نداءات `complete` (التوليف/الكاتب/
+            # المراجع/المحلل النصي) حيث يقبلها النموذج — تخفّض التشتّت، ولا
+            # تضمن تطابقاً (انظر التصحيح في رأس الملف). على 4.7+ لا تُرسَل
+            # إطلاقاً: حضور المفتاح يردّ 400 فيسقط النداء كلّه، والحتمية هناك
+            # من الحقل الحتمي والتوجيه لا من معامل معاينة. لا `top_p` هنا
+            # بحال. حلقة الأدوات (`complete_tools`) تبقى على افتراض المزوّد:
+            # مخرجاتها لا تحدّد الحكم المعروض (الحكم من المحرّك الحتمي).
             payload = {"model": model, "max_tokens": max_tokens,
-                       "temperature": 0,
                        "system": [{"type": "text", "text": system,
                                    "cache_control": {"type": "ephemeral"}}],
                        "messages": [{"role": "user", "content": user}]}
+            if _supports_sampling_params(model):
+                payload["temperature"] = 0
             resp = self._post(key, payload, timeout)
             data = resp.json()
             self._record_usage(model, data)
@@ -323,8 +403,9 @@ class AnthropicProvider(LLMProvider):
         if not key:
             return None
         try:
+            # WP-1 §1: استخلاص أقلّ تشتّتاً كالنصّي — ومُهمَلة كلّياً على
+            # النماذج الرافضة (`_supports_sampling_params` هو الحكم الواحد).
             payload = {"model": model, "max_tokens": max_tokens,
-                       "temperature": 0,   # WP-1 §1: استخلاص حتمي كالنصّي
                        "system": [{"type": "text", "text": system,
                                    "cache_control": {"type": "ephemeral"}}],
                        "messages": [{"role": "user", "content": [
@@ -333,6 +414,8 @@ class AnthropicProvider(LLMProvider):
                                        "media_type": media_type,
                                        "data": image_b64}},
                            {"type": "text", "text": text}]}]}
+            if _supports_sampling_params(model):
+                payload["temperature"] = 0
             resp = self._post(key, payload, timeout)
             data = resp.json()
             self._record_usage(model, data)
