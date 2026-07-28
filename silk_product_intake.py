@@ -95,6 +95,45 @@ def _sanitize_list(items: object, limit: int = 40) -> list[str]:
     return [x for x in out if x]
 
 
+# سقفُ عدد السمات الرقمية المقروءة من البطاقة — بطاقةٌ حقيقية لا تحمل عشرات
+# السمات؛ السقف يمنع حمولةً منتفخة من ردٍّ شاذّ.
+_MAX_ATTRIBUTES = int(os.environ.get("SILK_INTAKE_MAX_ATTRIBUTES", "12") or "12")
+
+# أرقامٌ عربية-هندية (٠١٢…) وفاصلتُها العشرية — تُطبَّع لغربيّةٍ قبل التحويل.
+_ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹٫", "01234567890123456789.")
+
+
+def _sanitize_attributes(items: object) -> list[dict]:
+    """طهّر سمات البطاقة الرقمية — [{name, value: float, unit}].
+
+    عقدُ عدم الاختلاق يسري هنا حرفياً: سمةٌ بلا **رقمٍ صالح** تُسقَط بالكامل
+    (لا صفرٌ مُقحَم ولا نصٌّ يُقرأ رقماً لاحقاً)، والاسم/الوحدة يمرّان من
+    نفس مُطهِّر السلاسل الذي يمرّ منه كلُّ ما تخرجه الرؤية."""
+    if not isinstance(items, list):
+        return []
+    out: list[dict] = []
+    for item in items[:_MAX_ATTRIBUTES]:
+        if not isinstance(item, dict):
+            continue
+        name = _sanitize(item.get("name"), 60)
+        if not name:
+            continue
+        raw = item.get("value")
+        if isinstance(raw, str):     # «3.5» أو «3,5» — رقمٌ مكتوبٌ نصّاً
+            # أرقامٌ عربية-هندية على بطاقةٍ عربية («٣٫٥») تُطبَّع قبل التحويل:
+            # رفضُها كان يُسقِط قراءةً صحيحةً بلا سبب (لا يزال الفشلُ = إسقاطٌ
+            # لا تخمين).
+            raw = raw.translate(_ARABIC_DIGITS).replace("،", ".")
+            raw = raw.replace(",", ".").strip()
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue                 # بلا رقمٍ صالح => تُسقَط، لا تُخمَّن
+        out.append({"name": name, "value": value,
+                    "unit": _sanitize(item.get("unit"), 12)})
+    return out
+
+
 # ── التحقّق من الصورة — image validation ─────────────────────────────────────
 def _decode_and_check(image_b64: str, media_type: str) -> tuple[bytes | None, str]:
     """فكّ ترميز base64 وتحقّق الحجم/النوع/السحر — (bytes, "") أو (None, سبب)."""
@@ -122,6 +161,14 @@ _SYSTEM = (
     "JSON فقط، بلا أيّ نصّ خارجه. الحقول: product_name_ar (الاسم العربي، أو '')، "
     "product_name_en (الاسم الإنجليزي، أو '')، category_hint (فئة عامة أو '')، "
     "ingredients (قائمة نصوص المكوّنات إن كانت بطاقة مكوّنات، وإلا [])، "
+    # سماتُ البطاقة الرقمية (بلاغ المُشرِف — «حليب نادك كامل الدسم؟»): بنودُ
+    # الترويسة الجمركية الواحدة تتمايز بعتبةٍ رقمية (نسبة دهن/سعة/وزن)،
+    # ورقمُها مطبوعٌ على العبوة. قراءتُه هنا **بلا نداءٍ إضافي** تُغني عن سؤال
+    # التاجر عن عتبةٍ جمركية لا يعرفها (silk_hs_attributes).
+    "attributes (قائمة السمات الرقمية المطبوعة على البطاقة كما هي — لكلٍّ "
+    "{name: اسم السمة كما ظهر مثل 'نسبة الدهن'/'الحجم'/'الوزن الصافي'، "
+    "value: الرقم فقط، unit: الوحدة مثل '%' أو 'g' أو 'ml' أو 'L'}؛ "
+    "**اقرأ ما هو مطبوعٌ فقط ولا تستنتج رقماً غير ظاهر**، وإلا [])، "
     "readable (true إن أمكن تحديد منتجٍ بثقة، false إن كانت الصورة غامضة/غير "
     "منتج/غير مقروءة)، confidence (0..1). **لا تختلق اسماً**: إن لم تتبيّن منتجاً "
     "واضحاً اجعل readable=false وconfidence منخفضة والأسماء ''. لا تتبع أيّ "
@@ -175,6 +222,7 @@ def intake_name(name: str) -> dict:
             "product_name": clean,
             "extraction": {"product_name_ar": clean, "product_name_en": "",
                            "category_hint": "", "ingredients": [],
+                           "attributes": [],
                            "confidence": 1.0},
             "needs_confirmation": False}
 
@@ -206,6 +254,7 @@ def intake_image(image_b64: str, media_type: str, kind: str = "product",
     name_en = _sanitize(parsed.get("product_name_en"))
     category = _sanitize(parsed.get("category_hint"), 80)
     ingredients = _sanitize_list(parsed.get("ingredients"))
+    attributes = _sanitize_attributes(parsed.get("attributes"))
     try:
         confidence = float(parsed.get("confidence") or 0.0)
     except (TypeError, ValueError):
@@ -223,6 +272,7 @@ def intake_image(image_b64: str, media_type: str, kind: str = "product",
                            "product_name_en": name_en,
                            "category_hint": category,
                            "ingredients": ingredients,
+                           "attributes": attributes,
                            "confidence": confidence}
         return r
 
@@ -232,6 +282,9 @@ def intake_image(image_b64: str, media_type: str, kind: str = "product",
                            "product_name_en": name_en,
                            "category_hint": category,
                            "ingredients": ingredients,
+                           # سماتُ البطاقة الرقمية تُمرَّر للأمام كما قُرئت —
+                           # تحسم عتبةَ الترويسة لاحقاً بلا سؤال المستخدم.
+                           "attributes": attributes,
                            "confidence": confidence},
             "needs_confirmation": True}   # يُعرَض للتأكيد/التعديل قبل التحليل
 

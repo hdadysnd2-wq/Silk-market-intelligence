@@ -769,13 +769,24 @@ def test_w2_hs_gate_blocks_on_both_analyze_and_research_by_default():
 
 
 def test_w2_hs_gate_choke_point_is_shared_not_duplicated():
-    """الموجة ٢ — بنيوياً: كلا معالجَي HTTP يستدعيان نفس دالة الاختناق
+    """الموجة ٢ — بنيوياً: كلّ معالجٍ ينفق يستدعي نفس دالة الاختناق
     `silk_hs_confirm.preflight_block` — لا منطق مكرَّر في كل معالج (لو
-    اختفى الاستدعاء من أحدهما بصمت، هذا الحارس يفشل قبل أيّ بلاغ حيّ)."""
+    اختفى الاستدعاء من أحدهم بصمت، هذا الحارس يفشل قبل أيّ بلاغ حيّ).
+
+    اللائحة ٦٥: المعالجاتُ تستدعيها اليوم عبر الغلاف `preflight_resolve`
+    (البوّابةُ نفسُها + قياسُ السمة الرقمية). يُحتسَب الغلافُ **بشرط** أن
+    يُثبَت بنيوياً أنه يستدعي `preflight_block` لا يستبدلها — وإلا لكان
+    بوّابةً موازيةً تُفرِغ الحارس من معناه."""
+    import inspect
+    import silk_hs_confirm
     src = _read_api_source()
-    assert src.count("preflight_block(") >= 2, (
-        "نقطة الاختناق المشتركة preflight_block يجب أن تُستدعى من كلا "
+    calls = src.count("preflight_block(") + src.count("preflight_resolve(")
+    assert calls >= 2, (
+        "نقطة الاختناق المشتركة يجب أن تُستدعى من كلا "
         "معالجَي /analyze و/research")
+    assert "preflight_block(" in inspect.getsource(
+        silk_hs_confirm.preflight_resolve), (
+        "preflight_resolve لا يستدعي preflight_block — بوّابةٌ موازية")
 
 
 def _read_api_source() -> str:

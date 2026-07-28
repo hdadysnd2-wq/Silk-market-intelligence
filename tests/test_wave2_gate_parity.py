@@ -40,10 +40,19 @@ def _read(rel: str) -> str:
 # ══════════════ ١أ) بوّابة HS — كلاهما (البوّابة المُصلَحة) ══════════════
 
 def test_gate1a_hs_preflight_fires_on_both_paths():
-    """كلا معالجَي /analyze و/research يستدعيان preflight_block فعلياً —
-    نقطة اختناق واحدة (silk_hs_confirm.py)، لا نسخة مكرَّرة."""
+    """كلا معالجَي /analyze و/research يستدعيان نقطة الاختناق فعلياً —
+    واحدة (silk_hs_confirm.py)، لا نسخة مكرَّرة.
+
+    اللائحة ٦٥: النداءُ يمرّ اليوم عبر الغلاف `preflight_resolve` (البوّابة
+    + قياسُ السمة الرقمية قبل الحوار). يُحتسَب الغلافُ **بشرط** إثبات أنه
+    يستدعي `preflight_block` لا يستبدلها — وإلا فهو بوّابةٌ موازية."""
+    import inspect
+    import silk_hs_confirm
     api = _read("api.py")
-    assert api.count("preflight_block(") >= 2
+    assert (api.count("preflight_block(")
+            + api.count("preflight_resolve(")) >= 2
+    assert "preflight_block(" in inspect.getsource(
+        silk_hs_confirm.preflight_resolve)
 
 
 # ══════════ ٢) أسبقية الحكم — بنيوياً واحدة لكلا الفرعين ══════════

@@ -57,17 +57,32 @@ async function settleAfterClassification(page) {
   try {
     await page.waitForSelector("#advOk", { timeout: 4000 });
     await page.locator("#advOk").click();
-    await page.waitForFunction(() => !document.querySelector(".prov"), { timeout: 10000 });
+    await page.waitForFunction(
+      () => !document.querySelector(".prov"), undefined, { timeout: 10000 });
   } catch (_) { /* لم تظهر استشارةٌ — طبيعيٌّ لأزواج HS/سوق غير مبذورة */ }
-  await page.waitForFunction(() => {
-    const b = document.querySelector("#researchBtn");
-    return b && !b.disabled;
-  }, { timeout: 15000 }).catch(() => {});
+}
+
+// عزلُ الجولات (سباقٌ سابقٌ لهذا الفرع، أُصلِح هنا): بعد تأكيد الرمز يُطلِق
+// `cb` طلبَ `/research` يمرّ ببوّاباتٍ تضرب مصادرَ حيّة (كومتريد) قبل أن يُردّ
+// بـ409 (لا مفتاح كلود في e2e عمداً) — وقد يتجاوز ذلك ٣٠ ثانية على عدّاءٍ
+// بطيء. الجولةُ التالية كانت تنقر زرّاً ما يزال معطّلاً، ثم تصل لافتةُ الردّ
+// السابق فتعترض النقر. وانتظارُ الزرّ لم يكن ينفع أصلاً: التوقيعُ
+// `waitForFunction(fn, arg, options)` — فـ`{timeout}` المُمرَّر ثانياً كان
+// يُقرأ **وسيطاً** لا خياراً، فبقيت المهلةُ الافتراضية (٣٠ث) دوماً (لذلك
+// ظهرت «Timeout 30000ms» رغم طلبِ ١٥ث ثم ٦٠ث).
+//
+// الحلُّ الحتميّ: **أعِد تحميل الصفحة بين الجولات**. الطلبُ المعلَّق يُهجَر مع
+// السياق، فلا حالةَ تتسرّب ولا لافتةَ تصل متأخّرة — وتسقط معه أيضاً حاجةُ
+// ترتيبِ الحالات (dialog قبل auto) التي كانت تلتفّ حول بقاء الشارة. أبطأُ
+// بثوانٍ، وحتميٌّ بدل مرهونٍ بسرعة الشبكة.
+async function resetPage(page) {
+  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForSelector("#marketBox .mrow", { timeout: 20000 });
 }
 
 async function runCase(page, { product, expect }) {
-  // أعِد الحالة لكلّ جولة (بلا إعادة تحميل الصفحة — أسرع، ونفس نمط
-  // __silkTestSetProduct الذي يصفّر S.hs/hsConfirmed/#pResolved أصلاً).
+  // حالةٌ نظيفةٌ تماماً لكل جولة — لا طلبَ معلَّقاً ولا شارةَ باقية.
+  await resetPage(page);
   await page.evaluate((name) => window.__silkTestSetProduct(name), product);
   ok(`${product}:product_set`);
 
@@ -101,14 +116,15 @@ async function runCase(page, { product, expect }) {
     const candCount = await page.locator(".hsCand").count();
     if (candCount < 1) fail(`${product}:candidates_present`, "no candidate buttons rendered");
     await page.locator(".hsCand").first().click();
-    await page.waitForFunction(() => !document.querySelector(".prov"), { timeout: 15000 });
+    await page.waitForFunction(
+      () => !document.querySelector(".prov"), undefined, { timeout: 15000 });
     ok(`${product}:candidate_selected`);
     await settleAfterClassification(page);
   } else {
     await page.waitForFunction(() => {
       const el = document.querySelector("#pResolved");
       return el && el.classList.contains("on") && /✓/.test(el.textContent || "");
-    }, { timeout: 15000 });
+    }, undefined, { timeout: 15000 });
     const badgeText = await page.locator("#pResolved").innerText();
     if (!/صُنّف تلقائياً/.test(badgeText))
       fail(`${product}:auto_classify`, `resolved badge missing the auto text: ${badgeText}`);

@@ -579,6 +579,80 @@ def preflight_block(product: str, hs_code: str | None,
     }
 
 
+# ══════════════ حسمُ السمة الرقمية قبل الحوار (بلاغ المُشرِف) ════════════════
+#
+# البنودُ داخل الترويسة الواحدة تتمايز بعتبةٍ رقمية (نسبةُ دهنٍ مثلاً) لا
+# بكلمة — وهذا بالضبط ما لا يراه `confirm_hs` (كلاهما «حليب»). كان الحلُّ
+# السابق: أعرِض حواراً واسألِ المستخدمَ عن العتبة. لكنّ العتبة **رقمٌ يُجيب
+# عنه المنتجُ نفسُه**: بطاقةُ العبوة تحمله والويبُ يستشهد به. فالحوارُ
+# احتياطٌ لا افتراض، والقياسُ يسبقه دائماً (`silk_hs_attributes`).
+#
+# نقطةُ اختناقٍ واحدة هنا يستدعيها **كلُّ** معالجٍ ينفق (`/analyze`،
+# `/research`، بوّابةُ الالتباس) — إصلاحٌ على مسارٍ واحد نصفُ إصلاح
+# (الدرسان ٣٥/٣٧).
+
+def _probe_public(report: dict) -> dict:
+    """ما يحتاجه الحوارُ من تقرير القياس — بلا حقولٍ داخلية."""
+    return {
+        "attribute": report.get("attribute"),
+        "label_ar": report.get("label_ar"),
+        "unit": report.get("unit"),
+        "searched": report.get("searched") or [],
+        "missing_ar": report.get("missing_ar") or "",
+        "bands_ar": report.get("bands_ar") or [],
+    }
+
+
+def resolve_or_probe(product: str, candidates: list,
+                     label_attributes: object = None,
+                     allow_web: bool = True,
+                     gl: str | None = None) -> dict:
+    """احسِم الرمزَ بالسمة الرقمية أو أعِد تقريرَ ما نقص — دوماً dict.
+
+    `report["hs6"]` غيرُ `None` => حُسِم بدليلٍ موسوم (صورةُ عبوة أو رابطُ
+    ويب) فلا حوارَ؛ وإلا يحمل التقريرُ ما جُرِّب وما نقص وحدودَ كلّ مرشّح
+    بلغةٍ مفهومة كي يعرضها الحوارُ بدل عتبةٍ جمركية خام. لا اختلاق: بلا
+    رقمٍ مقيسٍ يقع في نطاقٍ **وحيد** لا يُحسَم رمزٌ أبداً."""
+    import silk_hs_attributes as _attrs
+    return _attrs.resolve_by_attribute(
+        product or "", candidates or [], label_attributes=label_attributes,
+        allow_web=allow_web, gl=gl)
+
+
+def preflight_resolve(product: str, hs_code: str | None,
+                      hs_confirmed: bool = False,
+                      path: str = "data/hs_codes.csv",
+                      allow_claude: bool = False,
+                      ingredients: list | None = None,
+                      category: str | None = None,
+                      instruction: str = "",
+                      hs_confidence: object = _UNSET,
+                      label_attributes: object = None,
+                      allow_web: bool = True,
+                      gl: str | None = None
+                      ) -> tuple[str | None, dict | None, dict | None]:
+    """البوّابةُ + القياسُ في نداءٍ واحد — `(hs_code, provenance, block)`.
+
+    - `block` غيرُ `None` => ارفع ٤٢٢ بتفاصيله (تحمل الآن `attribute_probe`).
+    - `provenance` غيرُ `None` => حُسِم الرمزُ آلياً؛ استعمل `hs_code` المُعاد
+      وأرفِق `provenance` بالنتيجة كي يعرض التقريرُ مصدرَ الرمز.
+    - كلاهما `None` => الرمزُ الأصليّ مؤكَّدٌ كما كان (السلوك السابق حرفياً).
+
+    `preflight_block` يبقى بعقده الحرفيّ دون تغيير — هذه الدالةُ تغلّفه، فلا
+    مستدعٍ قائمٌ ينكسر."""
+    block = preflight_block(product, hs_code, hs_confirmed, path,
+                            allow_claude, ingredients, category, instruction,
+                            hs_confidence)
+    if block is None:
+        return hs_code, None, None
+    report = resolve_or_probe(product, block.get("candidates") or [],
+                              label_attributes=label_attributes,
+                              allow_web=allow_web, gl=gl)
+    if report.get("hs6"):
+        return report["hs6"], report, None
+    return hs_code, None, {**block, "attribute_probe": _probe_public(report)}
+
+
 if __name__ == "__main__":  # فحص يدوي — عيّنات صحيحة وخاطئة
     for name, code in [("زبدة الفول السوداني", "040510"),
                        ("تمور", "080410"),

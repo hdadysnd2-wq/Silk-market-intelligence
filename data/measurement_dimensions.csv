@@ -1,0 +1,13 @@
+dimension,label_ar,synonyms_ar,synonyms_en
+fat,نسبة الدهن,دهن|دهون|دسم,fat|butterfat|milkfat
+alcohol,النسبة الكحولية,كحول|كحولي|كحولية,alcohol|alcoholic|abv
+sugar,نسبة السكر,سكر|سكريات,sugar|sucrose|saccharose
+cocoa,نسبة الكاكاو,كاكاو,cocoa|cacao
+protein,نسبة البروتين,بروتين,protein
+moisture,نسبة الرطوبة,رطوبة|رطوبه,moisture|humidity
+starch,نسبة النشا,نشا|نشاء,starch|amylum
+ash,نسبة الرماد,رماد,ash
+brix,درجة بريكس,بريكس,brix
+volume,الحجم أو السعة,حجم|سعة|سعه|محتوى,volume|capacity|content
+weight,الوزن,وزن|كتلة|كتله,weight|weighing|mass
+length,المقاس,طول|عرض|سمك|مقاس|قطر,length|width|thickness|side|diameter|gauge
