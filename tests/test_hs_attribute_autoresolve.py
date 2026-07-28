@@ -469,9 +469,25 @@ def test_web_query_interpolates_the_detected_dimension(monkeypatch):
     ("mm", "length", 1.0), ("cm", "length", 10.0), ("m", "length", 1000.0),
     ("micron", "length", 0.001),
     ("", "scalar", 1.0),
+    # وحداتٌ عربية — بطاقةُ العبوة في سوقنا عربيةٌ أصلاً.
+    ("٪", "percent", 1.0), ("بالمئة", "percent", 1.0),
+    ("جم", "weight", 1.0), ("كجم", "weight", 1000.0),
+    ("مل", "volume", 0.001), ("لتر", "volume", 1.0),
+    ("سم", "length", 10.0),
 ])
 def test_unit_conversion_table_entry(unit, family, factor):
     assert attrs._unit_family(unit) == (family, factor)
+
+
+def test_arabic_label_reading_resolves_like_a_western_one():
+    """«٣٫٥٪» على بطاقةٍ عربية = «3.5%» — لا تُهدَر قراءةٌ صحيحة للحوار."""
+    from silk_product_intake import _sanitize_attributes
+    cleaned = _sanitize_attributes(
+        [{"name": "نسبة الدهن", "value": "٣٫٥", "unit": "٪"}])
+    assert cleaned == [{"name": "نسبة الدهن", "value": 3.5, "unit": "٪"}]
+    d = attrs.discriminator(_cands("040110", "040120", "040140", "040150"))
+    val, unit, _n = attrs.value_from_label(cleaned, d)
+    assert attrs.select_by_value(d, val, unit) == "040120"
 
 
 def test_label_in_g_per_100ml_resolves_like_a_percentage():
@@ -483,7 +499,8 @@ def test_label_in_g_per_100ml_resolves_like_a_percentage():
     assert attrs.select_by_value(d, 3.5, "g/100ml") == "040120"
 
 
-@pytest.mark.parametrize("unit", ["oz", "lb", "cup", "iu", "kcal", "٪", "gal"])
+@pytest.mark.parametrize("unit", ["oz", "fl oz", "lb", "cup", "iu",
+                                 "kcal", "gal", "ppm", "g/l"])
 def test_unconvertible_units_are_rejected_not_guessed(unit):
     """وحدةٌ خارج الجدول => لا تحويل => لا حسم (تُعرَض في الحوار)."""
     assert attrs._unit_family(unit) is None

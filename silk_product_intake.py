@@ -99,6 +99,9 @@ def _sanitize_list(items: object, limit: int = 40) -> list[str]:
 # السمات؛ السقف يمنع حمولةً منتفخة من ردٍّ شاذّ.
 _MAX_ATTRIBUTES = int(os.environ.get("SILK_INTAKE_MAX_ATTRIBUTES", "12") or "12")
 
+# أرقامٌ عربية-هندية (٠١٢…) وفاصلتُها العشرية — تُطبَّع لغربيّةٍ قبل التحويل.
+_ARABIC_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹٫", "01234567890123456789.")
+
 
 def _sanitize_attributes(items: object) -> list[dict]:
     """طهّر سمات البطاقة الرقمية — [{name, value: float, unit}].
@@ -117,6 +120,10 @@ def _sanitize_attributes(items: object) -> list[dict]:
             continue
         raw = item.get("value")
         if isinstance(raw, str):     # «3.5» أو «3,5» — رقمٌ مكتوبٌ نصّاً
+            # أرقامٌ عربية-هندية على بطاقةٍ عربية («٣٫٥») تُطبَّع قبل التحويل:
+            # رفضُها كان يُسقِط قراءةً صحيحةً بلا سبب (لا يزال الفشلُ = إسقاطٌ
+            # لا تخمين).
+            raw = raw.translate(_ARABIC_DIGITS).replace("،", ".")
             raw = raw.replace(",", ".").strip()
         try:
             value = float(raw)
