@@ -514,7 +514,12 @@ def run_all_missions(market: MarketRef, product: str = "",
     """
     reports: dict[str, AgentReport] = dict(resume_reports or {})
     parallel_keys = [k for k in MISSION_ORDER if k != "opportunity_gaps"]
-    to_run = [k for k in parallel_keys if k not in reports]
+    # بلاغ Nadec/اليمن #7: نقطة تفتيش **فاشلة** (429/مهلة — `failed=True`)
+    # ليست إنجازاً — كان `k not in reports` وحده يتخطّاها فيعيد resume صفر
+    # نداء وتبقى البعثة فاشلة للأبد. الفاشلة تُعاد؛ الناجحة تبقى بلا إعادة
+    # دفع (نقطة التفتيش الجديدة تستبدل القديمة عند الاكتمال — upsert).
+    to_run = [k for k in parallel_keys
+              if k not in reports or getattr(reports[k], "failed", False)]
     card_ctx = _product_card_context(product_card)
 
     def _run_one(key: str) -> AgentReport:
@@ -576,7 +581,8 @@ def run_all_missions(market: MarketRef, product: str = "",
                 _checkpoint(analysis_id, key, reports[key],
                            getattr(market, "iso3", None))
 
-    if "opportunity_gaps" not in reports:
+    if ("opportunity_gaps" not in reports
+            or getattr(reports["opportunity_gaps"], "failed", False)):
         prior_findings = [dp for k in parallel_keys for dp in reports[k].findings]
         gaps_agent = LLMMissionAgent(MISSIONS["opportunity_gaps"])
         reports["opportunity_gaps"] = gaps_agent.run({

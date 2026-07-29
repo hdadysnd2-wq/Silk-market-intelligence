@@ -45,9 +45,25 @@ def _fake_call(system, user, max_tokens=1600, model=None, timeout=None):
 
 def test_mid_run_crash_then_resume_skips_completed_missions():
     import silk_market_analyst
+    from silk_agents import AgentReport
 
     tool_calls: list[str] = []
     fake_call_tools = _fake_call_tools_factory(tool_calls)
+    missions_ran: list[str] = []
+
+    class _CompletedMission:
+        """بعثة مكتملة فعلاً (failed=False) — فكس «الاستئناف يعيد الفاشلة»
+        (بلاغ Nadec/اليمن #7) جعل علمَ الفشل فيصلَ التخطّي: المموّه القديم
+        (صفر نتائج مستشهدة عبر _call_tools) كان يُخزَّن failed=True فتُعاد
+        بعثاته شرعاً على الاستئناف — عكس مقصد هذا الاختبار (بعثات ناجحة
+        لا يُعاد دفعها). الآن تُموَّه البعثة الناجحة صراحةً."""
+
+        def __init__(self, spec):
+            self._key = spec["key"]
+
+        def run(self, task):
+            missions_ran.append(self._key)
+            return AgentReport(f"LLMMissionAgent:{self._key}", [], False, "ok")
 
     real_analyze_market = silk_market_analyst.analyze_market
     state = {"n": 0}
@@ -67,6 +83,7 @@ def test_mid_run_crash_then_resume_skips_completed_missions():
          patch("silk_synthesis._call", side_effect=_fake_call), \
          patch("silk_ai_judge._call", side_effect=_fake_call), \
          patch("silk_storage._db_path", return_value=db), \
+         patch("silk_missions.LLMMissionAgent", _CompletedMission), \
          patch("silk_market_analyst.analyze_market",
               side_effect=flaky_analyze_market):
         client = _client()
@@ -81,8 +98,9 @@ def test_mid_run_crash_then_resume_skips_completed_missions():
         analysis_id = detail["analysis_id"]
         assert analysis_id is not None
         # كل الاثنتي عشرة بعثة اكتملت وخُزِّنت قبل العطل المحاكى في المحلل.
-        assert len(tool_calls) == 12
+        assert len(missions_ran) == 12
 
+        missions_ran.clear()
         tool_calls.clear()
         r2 = client.post("/research", headers=hdr,
                          json={"resume": analysis_id})
@@ -90,8 +108,10 @@ def test_mid_run_crash_then_resume_skips_completed_missions():
         data = r2.json()
         assert data["analysis_id"] == analysis_id
         assert len(data["deep_research"]["missions"]) == 12
-        # الاستئناف لا يعيد نداء أي بعثة مكتملة — نداء واحد فقط (المحلل،
-        # الذي لا يُخزَّن كنقطة تفتيش عمداً وفق التوجيه: "أعد المحلل/الكاتب").
+        # الاستئناف لا يعيد نداء أي بعثة **مكتملة** — صفر بعثة تُعاد، ونداء
+        # واحد فقط (المحلل، الذي لا يُخزَّن كنقطة تفتيش عمداً وفق التوجيه:
+        # "أعد المحلل/الكاتب").
+        assert missions_ran == []
         assert len(tool_calls) == 1
 
 
