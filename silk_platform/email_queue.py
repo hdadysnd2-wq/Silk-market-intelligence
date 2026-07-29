@@ -147,6 +147,8 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
         # key at the SMTP layer — deferred to PR-5.)
         verbatim = f"Subject: {email['subject']}\n\n{email['body']}"
         try:
+            conn.commit()                       # اطوِ المعلّق قبل BEGIN الصريح
+            conn.execute("BEGIN IMMEDIATE")     # قفل كتابة فوري للقسم الحرج
             conn.execute(
                 "INSERT INTO consent_registry (prospect_email, study_id, "
                 "sending_account_id, approving_user_id, message_verbatim, sent_at, "

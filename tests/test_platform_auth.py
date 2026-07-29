@@ -203,3 +203,65 @@ def test_reset_token_never_exposed_without_flag(monkeypatch):
     r = cl.post("/platform/auth/password-reset/request",
                 json={"email": info["admin"]["email"]})
     assert r.status_code == 200 and "reset_token" not in r.json()
+
+
+def test_bcrypt_used_at_cost_12_when_available(monkeypatch):
+    """عند توفّر bcrypt (المسار الإنتاجي بعد التثبيت) يُستخدَم بعامل ١٢."""
+    import silk_platform.passwords as p
+    if p._bcrypt is None:
+        import pytest
+        pytest.skip("bcrypt not importable in this environment (scrypt fallback)")
+    h = p.hash_password("Abcd1234")
+    assert h.startswith("$2b$12$")   # bcrypt, work factor 12 (spec §11)
+    assert p.verify_password("Abcd1234", h) and not p.verify_password("xxxx1234", h)
+
+
+def test_boot_guard_requires_secret_in_production(monkeypatch):
+    """حارس الإقلاع: إشارة إنتاج بلا سرّ ⇒ رفض إقلاع بصوت عالٍ (لا سرّ عابر صامت)."""
+    from silk_platform.api import boot_config_guard
+    monkeypatch.delenv("SILK_PLATFORM_SECRET", raising=False)
+    monkeypatch.setenv("SILK_PLATFORM_SECURE_COOKIES", "1")   # production signal
+    with pytest.raises(RuntimeError):
+        boot_config_guard()
+    monkeypatch.setenv("SILK_PLATFORM_SECRET", "a-real-secret")
+    boot_config_guard()   # secret present ⇒ no raise
+    # وضع التطوير (بلا إشارة إنتاج وبلا سرّ) مسموح · dev mode is allowed.
+    monkeypatch.delenv("SILK_PLATFORM_SECRET", raising=False)
+    monkeypatch.delenv("SILK_PLATFORM_SECURE_COOKIES", raising=False)
+    boot_config_guard()   # no raise
+
+
+def test_admin_issued_reset_stopgap(monkeypatch):
+    """إعادة تعيين مساعدة من الأدمِن (سدّ ثغرة PR-5) — يصدر رمزاً يُستهلَك عادةً."""
+    info = seed(monkeypatch)
+    cl = client()
+    tadmin = login(cl, info["admin"]["email"], info["admin"]["password"])
+    fuid = info["factory_a"]["user_id"]
+    r = cl.post(f"/platform/admin/users/{fuid}/reset", headers=hdr(tadmin))
+    assert r.status_code == 200
+    token = r.json()["reset_token"]
+    assert cl.post("/platform/auth/password-reset/confirm",
+                   json={"token": token, "new_password": "NewFactory1"}
+                   ).status_code == 200
+    assert cl.post("/platform/auth/login",
+                   json={"email": info["factory_a"]["email"],
+                         "password": "NewFactory1"}).status_code == 200
+    conn = pdb.connect()
+    try:
+        assert conn.execute("SELECT 1 FROM audit_log WHERE action = "
+                           "'admin_password_reset_issued' AND user_id = ?",
+                           (info["admin"]["id"],)).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def test_admin_reset_endpoint_is_admin_only(monkeypatch):
+    info = seed(monkeypatch)
+    cl = client()
+    tfa = login(cl, info["factory_a"]["email"], info["factory_a"]["password"])
+    tan = login(cl, info["analyst"]["email"], info["analyst"]["password"])
+    fuid = info["factory_b"]["user_id"]
+    assert cl.post(f"/platform/admin/users/{fuid}/reset",
+                   headers=hdr(tfa)).status_code == 403
+    assert cl.post(f"/platform/admin/users/{fuid}/reset",
+                   headers=hdr(tan)).status_code == 403

@@ -44,19 +44,23 @@ def _account(conn: sqlite3.Connection, account_id: int) -> sqlite3.Row:
 def _roll_period_if_needed(conn: sqlite3.Connection, acc: sqlite3.Row) -> int:
     """صفّر العدّاد الشهري كسولاً عند دخول شهر جديد — lazy monthly roll.
 
-    يضمن صحّة العدّاد حتى لو لم تُشغَّل مهمّة التصفير بعد. لا يمسّ Basic.
-    Returns the effective current_month_study_count after any roll.
+    تصفير **ذرّي مشروط** بتعليمة UPDATE واحدة: يعيد الضبط فقط حين يختلف الشهر
+    المخزَّن (أو كان NULL)، فتشغيلات متزامنة على حساب حديث لا تصفّر العدّاد
+    مراراً وتُفسِد السقف (خلل التقطه تدقيق التزامن). لا يمسّ Basic.
+    Atomic conditional roll — a single guarded UPDATE, so concurrent first
+    launches can't each reset the counter and break the cap.
     """
     if Tier(acc["tier"]) == Tier.BASIC:
         return int(acc["current_month_study_count"])
     period = current_period()
-    if acc["quota_period"] != period:
-        conn.execute("UPDATE accounts SET current_month_study_count = 0, "
-                     "quota_period = ?, updated_at = ? WHERE id = ?",
-                     (period, now_iso(), acc["id"]))
-        conn.commit()
-        return 0
-    return int(acc["current_month_study_count"])
+    conn.execute(
+        "UPDATE accounts SET current_month_study_count = 0, quota_period = ?, "
+        "updated_at = ? WHERE id = ? AND (quota_period IS NULL OR quota_period != ?)",
+        (period, now_iso(), acc["id"], period))
+    conn.commit()
+    row = conn.execute("SELECT current_month_study_count FROM accounts WHERE id = ?",
+                       (acc["id"],)).fetchone()
+    return int(row["current_month_study_count"])
 
 
 def evaluate(conn: sqlite3.Connection, account_id: int) -> QuotaDecision:

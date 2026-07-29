@@ -19,9 +19,11 @@
 - طبقة SaaS الجديدة معزولة في حزمة `silk_platform/` بقاعدة بيانات **خاصّة**
   (`SILK_PLATFORM_DB`، تُشتَقّ من `SILK_DATA_DIR`) فلا تمسّ `data/silk.db` أبداً.
 - SQL محمول (SQLite الآن، Postgres لاحقاً بلا إعادة عمل منطقي).
-- كلمات المرور: `bcrypt(cost=12)` حين يتوفّر (المواصفة)، وإلا `hashlib.scrypt`
-  القياسي — فتبقى الحزمة الهرمتية خضراء بلا اعتمادية غير مثبَّتة. الهاش يحمل
-  بادئته المميّزة فيوجّه التحقّق.
+- كلمات المرور: `bcrypt(cost=12)` — المسار الإنتاجي (مثبَّت `bcrypt==4.2.1` في
+  `requirements.txt`، عجلة Rust مستقلّة)؛ ويرجع الكود إلى `hashlib.scrypt` القياسي
+  إن غاب bcrypt فتبقى الوحدة تستورد بلا انهيار. الهاش يحمل بادئته المميّزة
+  (`$2b$12$` أو `$scrypt$`) فيوجّه التحقّق. اختبار `test_bcrypt_used_at_cost_12_when_available`
+  يقفل عامل ١٢ حين يتوفّر bcrypt.
 - المال **سنتات صحيحة** من الطرف للطرف (لا عائم).
 
 ## ٢) البنية · module map
@@ -102,26 +104,29 @@ python3 -m silk_platform.seed                       # هيّئ + ابذر قاع
 | `SILK_PLATFORM_SECRET` | سرّ التوقيع/التعمية (KMS/Vault في الإنتاج) | سرّ عابر لكل عملية (تطوير) |
 | `SILK_SEED_{ADMIN,ANALYST,FACTORY_A,FACTORY_B}_PASSWORD` | كلمات مرور البذر | افتراضيات تطوير — استبدلها |
 | `SILK_PLATFORM_EXPOSE_RESET_TOKEN` | كشف رمز إعادة التعيين في الردّ (اختبار فقط) | غير مضبوط — الإنتاج لا يكشفه أبداً |
-| `SILK_PLATFORM_SECURE_COOKIES` | علم `secure` لكوكي الجلسة (HTTPS) | غير مضبوط (تطوير http) |
+| `SILK_PLATFORM_SECURE_COOKIES` | علم `secure` لكوكي الجلسة (HTTPS) + إشارة إنتاج | غير مضبوط (تطوير http) |
+| `SILK_PLATFORM_REQUIRE_SECRET` | إشارة إنتاج تُلزِم ضبط السرّ (حارس إقلاع يفشل بدونه) | غير مضبوط |
 
 ## ٨·١) المراجعة الخصامية ومخاطر متبقية · adversarial review & residual risks
 
-مراجعة مستقلّة (§58) على العزل/المصادقة/المال: **لا عيوب high**. أُصلِحت ملاحظات
-MEDIUM/LOW التالية بأقفال اختبار:
-- **TOCTOU الحصّة** — الزيادة صارت `UPDATE … WHERE count < limit` ذرّية
-  (`test_quota_guarded_increment_never_exceeds_cap`).
-- **نافذة خصم مزدوج في عامل البريد** — الموافقة + الخصم + الحالة في التزام واحد.
-- **جلسة حساب معطّل** — تُرفَض الآن (`test_deactivated_account_session_rejected`).
-- **تصادم بريد عميل** — 422 لا 500 (`test_prospect_duplicate_email_returns_422_not_500`).
+مراجعة مستقلّة (§58) على العزل/المصادقة/المال: **لا عيوب high**. عولجت ملاحظات
+MEDIUM/LOW، وأُثبِت أمان التزامن **باختبارات خيوط حقيقية** (لا متسلسلة) —
+`tests/test_platform_concurrency.py` تُطلق خيوطاً متزامنة عبر Barrier على نفس
+الحساب:
 
-مخاطر متبقية **موثّقة ومقبولة لـPR-1** (طوبولوجيا العامل الأحادي + كاتب SQLite
-الوحيد تخفّفها؛ تُعالَج لاحقاً):
-- تسليم «مرّة على الأقل»: تعطّل بعد إرسال SMTP وقبل الالتزام قد يعيد الإرسال مرّة
-  — التسليم الحتمي يحتاج مفتاح idempotency في طبقة SMTP (PR-5).
-- `wallet.post_entry` لا يستخدم `BEGIN IMMEDIATE` (خصومات متزامنة على محفظة
-  واحدة)؛ `fund_wallet` يستخدمه. مخفّف بمسار العامل الأحادي.
-- `SILK_PLATFORM_SECRET` غير مضبوط في الإنتاج ⇒ سرّ عابر يجعل اعتماد SMTP غير
-  قابل للفكّ بعد إعادة التشغيل — **متغيّر إنتاج مطلوب** (موثّق في `.env.example`).
+| الملاحظة | الإصلاح | القفل |
+|---|---|---|
+| TOCTOU الحصّة | `UPDATE … WHERE count < limit` ذرّي + تصفير شهري **مشروط ذرّي** | ١٢ إطلاقاً متزامناً ⇒ ٢ بالضبط (Silver) |
+| فقدان تحديث في التمويل/الخصم | `BEGIN IMMEDIATE` في `fund_wallet` **و**`post_entry` + `busy_timeout=30s` | ٨ تمويلات/١٠ خصومات متزامنة ⇒ رصيد دقيق |
+| نافذة خصم مزدوج في عامل البريد | الموافقة + الخصم + الحالة في التزام IMMEDIATE واحد | — |
+| جلسة حساب معطّل | `resolve_session` يفحص `accounts.is_active` | `test_deactivated_account_session_rejected` |
+| تصادم بريد عميل | 422 لا 500 | `test_prospect_duplicate_email_returns_422_not_500` |
+| سرّ غائب في الإنتاج | **حارس إقلاع يفشل بصوت عالٍ** (`boot_config_guard`) | `test_boot_guard_requires_secret_in_production` |
+
+خطر متبقٍّ **واحد موثّق** (لا يمكن حلّه بلا طبقة SMTP): تسليم «مرّة على الأقل» —
+تعطّل بعد إرسال SMTP وقبل الالتزام قد يعيد الإرسال مرّة (لا خصماً مزدوجاً، فالخصم
+ذرّي مع الحالة)؛ التسليم الحتمي **مرّة واحدة** يحتاج مفتاح idempotency في طبقة
+SMTP — يُنفَّذ في PR-5.
 
 ## ٩) الحدود المعلنة · declared limits (ما ليس في PR-1)
 

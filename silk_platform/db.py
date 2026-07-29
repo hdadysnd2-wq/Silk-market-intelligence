@@ -48,9 +48,12 @@ def connect(path: str | None = None) -> sqlite3.Connection:
     parent = os.path.dirname(p)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    conn = sqlite3.connect(p)
+    conn = sqlite3.connect(p, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # انتظر القفل بدل رمي «database is locked» فوراً — كاتب SQLite وحيد،
+    # فالمعاملات المتزامنة تتسلسل بانتظار مهلة بدل الفشل. Serialize writers.
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 

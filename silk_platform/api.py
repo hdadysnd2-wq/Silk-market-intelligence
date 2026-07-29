@@ -46,6 +46,26 @@ def _client_ip(request) -> str | None:
     return request.client.host if request.client else None
 
 
+def boot_config_guard() -> None:
+    """حارس إقلاع — fail fast if the signing secret is missing in production.
+
+    غير مضبوط في التطوير = وضع مفتوح (سرّ عابر لكل عملية). لكن مع أي إشارة
+    إنتاج (`SILK_PLATFORM_REQUIRE_SECRET=1` أو `SILK_PLATFORM_SECURE_COOKIES=1`)
+    يجب أن يكون `SILK_PLATFORM_SECRET` مضبوطاً — وإلا نرفض الإقلاع بصوت عالٍ بدل
+    الخدمة بسرّ عابر يجعل اعتماد SMTP غير قابل للفكّ بعد إعادة التشغيل ويُبطل
+    الروابط الموقّعة. Fail-fast in prod; never silently serve with an ephemeral
+    secret. (Mirrors the engine's SILK_REQUIRE_PERSISTENT_DATA_DIR pattern.)
+    """
+    secret = os.environ.get("SILK_PLATFORM_SECRET", "").strip()
+    prod_signal = (os.environ.get("SILK_PLATFORM_REQUIRE_SECRET") == "1"
+                   or os.environ.get("SILK_PLATFORM_SECURE_COOKIES") == "1")
+    if not secret and prod_signal:
+        raise RuntimeError(
+            "SILK_PLATFORM_SECRET must be set when a production signal is active "
+            "(SILK_PLATFORM_REQUIRE_SECRET=1 or SILK_PLATFORM_SECURE_COOKIES=1); "
+            "refusing to boot with an ephemeral per-process secret.")
+
+
 def create_platform_app():
     """أنشئ تطبيق المنصّة المستقلّ — standalone FastAPI app for tests/dev."""
     from fastapi import FastAPI
@@ -56,6 +76,7 @@ def create_platform_app():
 
 def mount(app) -> bool:
     """ركّب كل نقاط المنصّة على `app` تحت /platform — returns True on success."""
+    boot_config_guard()   # افشل بصوت عالٍ على سوء تهيئة الإنتاج · fail fast
     try:
         from fastapi import Request, Response
         from fastapi.responses import JSONResponse
@@ -683,6 +704,30 @@ def mount(app) -> bool:
         finally:
             conn.close()
         return {"audit": rows}
+
+    @app.post(_PREFIX + "/admin/users/{user_id}/reset")
+    async def admin_issue_reset(user_id: int, request: Request):
+        """إعادة تعيين مساعدة من الأدمِن — PR-5 stopgap until email delivery lands.
+
+        يُصدر رمزاً أحادي الاستخدام (٣٠ دقيقة) لمستخدم، يوصله الأدمِن للمستخدم
+        عبر قناة دعم؛ ثم يُستهلَك بنقطة confirm العادية. مدقَّق (من أعاد تعيين مَن).
+        Admin-only, audit-logged; the raw token goes to the authenticated admin.
+        """
+        ctx = _require(request, Role.SILK_ADMIN)
+        conn = _open()
+        try:
+            raw = auth.issue_reset_token_for_user(conn, user_id)
+            if raw is None:
+                raise HTTPException(status_code=404, detail="user not found")
+            audit.record(conn, action="admin_password_reset_issued",
+                         user_id=ctx.user_id, account_id=ctx.account_id,
+                         resource_type="user", resource_id=user_id,
+                         ip_address=_client_ip(request))
+            conn.commit()
+        finally:
+            conn.close()
+        return {"ok": True, "user_id": user_id, "reset_token": raw,
+                "note": "single-use, 30-min expiry; convey to the user via support"}
 
     # ══════════════════════════ ANALYST ═════════════════════════════════════
     @app.get(_PREFIX + "/analyst/aggregates")

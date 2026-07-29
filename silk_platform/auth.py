@@ -121,13 +121,13 @@ def destroy_session(conn: sqlite3.Connection, session_id: int) -> None:
 
 
 # ── إعادة تعيين كلمة المرور · password reset (single-use, time-limited) ───────
-def issue_reset_token(conn: sqlite3.Connection, email: str) -> str | None:
-    """أصدر رمز إعادة تعيين — returns raw token, or None if no such user.
+def issue_reset_token_for_user(conn: sqlite3.Connection, user_id: int) -> str | None:
+    """أصدر رمز إعادة تعيين لمستخدم بمعرّفه — returns raw token, None if no user.
 
-    النقطة النهائية لا تفصح عن وجود المستخدم؛ ترجع 200 دائماً بصرف النظر.
+    يستعمله مسار الأدمِن المساعد (POST /admin/users/{id}/reset) قبل تجهيز
+    توصيل البريد في PR-5. نفس دلالات الأحادية والزمن. Admin-assisted stopgap.
     """
-    row = conn.execute("SELECT id FROM users WHERE email = ?",
-                       ((email or "").strip().lower(),)).fetchone()
+    row = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
     if not row:
         return None
     raw = tokens.new_token()
@@ -139,6 +139,18 @@ def issue_reset_token(conn: sqlite3.Connection, email: str) -> str | None:
          _fmt(now + datetime.timedelta(minutes=RESET_TTL_MINUTES))))
     conn.commit()
     return raw
+
+
+def issue_reset_token(conn: sqlite3.Connection, email: str) -> str | None:
+    """أصدر رمز إعادة تعيين بالبريد — returns raw token, or None if no such user.
+
+    النقطة النهائية لا تفصح عن وجود المستخدم؛ ترجع 200 دائماً بصرف النظر.
+    """
+    row = conn.execute("SELECT id FROM users WHERE email = ?",
+                       ((email or "").strip().lower(),)).fetchone()
+    if not row:
+        return None
+    return issue_reset_token_for_user(conn, int(row["id"]))
 
 
 def consume_reset_token(conn: sqlite3.Connection, raw_token: str,

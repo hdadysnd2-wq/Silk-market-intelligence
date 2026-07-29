@@ -110,7 +110,14 @@ def post_entry(conn: sqlite3.Connection, *, account_id: int,
 
     الاستخدام العام لكل العمليات المدفوعة (إرسال بريد، تقرير، …). Exactly
     one ledger row per call.
+
+    يلفّ القراءة-التعديل-الكتابة بـ`BEGIN IMMEDIATE` كي تتسلسل الخصومات
+    المتزامنة على محفظة واحدة فلا تُفقَد تحديثات (قفل كتابة فوري لا مؤجَّل).
+    Wraps the read-modify-write in BEGIN IMMEDIATE so concurrent debits on one
+    wallet can't lose an update.
     """
+    conn.commit()  # اطوِ أي معاملة معلّقة قبل BEGIN الصريح · clear pending txn
+    conn.execute("BEGIN IMMEDIATE")
     try:
         eid = _apply(conn, account_id, actor_user_id, operation, amount,
                      description, metadata, allow_negative=allow_negative)
