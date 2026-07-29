@@ -211,6 +211,79 @@ def test_stale_is_a_fail_trigger():
     assert "stale_year_driving_conclusion" in G.FAIL_TRIGGER_CHECKS
 
 
+# ════════════════ سنةُ الأساس تقلب إشارةَ CAGR (بلاغ المالك، مِجَسّ /trend) ════════════════
+
+def test_cagr_sign_flip_real_lock_fires_on_analysis7():
+    """قفلُ انحدار: سلسلةُ 040110 الحقيقية (2018=0.88M، ذروة 2019=5.59M،
+    2023=2.09M) — أساس 2018 نموّ، أساس 2019 انكماش (‑22.08% كما في التقرير).
+    الادّعاءُ الأحاديّ يُفشِل."""
+    from silk_quality_gate import _check_cagr_sign_flips_under_base_year as chk
+    out = chk(_nadec_dr())
+    assert any(f["check"] == "cagr_sign_flips_under_base_year" for f in out)
+    note = " ".join(f["note"] for f in out)
+    assert "2018" in note and "2019" in note   # كلا سنتَي الأساس مُسمّاتان
+
+
+def test_cagr_sign_flip_synthetic_fires_on_interior_peak():
+    from silk_quality_gate import _check_cagr_sign_flips_under_base_year as chk
+    dr = {"report": {"text": "شهدت السوق انكماشاً سنوياً مركّباً (CAGR)."},
+          "missions": {"th": {"findings": [
+              {"value": 880_000, "data_year": 2018,
+               "note": "إجمالي استيراد السوق من العالم 2018, USD"},
+              {"value": 5_590_000, "data_year": 2019,
+               "note": "إجمالي استيراد السوق من العالم 2019, USD"},
+              {"value": 2_090_000, "data_year": 2023,
+               "note": "إجمالي استيراد السوق من العالم 2023, USD"}]}},
+          "analyst": {}}
+    assert any(f["check"] == "cagr_sign_flips_under_base_year" for f in chk(dr))
+
+
+def test_cagr_sign_flip_no_fire_on_monotonic_series():
+    """سلسلةٌ رتيبةٌ صاعدة — كلّ الأسس تعطي نموّاً، لا قلبَ إشارة."""
+    from silk_quality_gate import _check_cagr_sign_flips_under_base_year as chk
+    dr = {"report": {"text": "نموٌّ مركّب مطّرد (CAGR)."},
+          "missions": {"th": {"findings": [
+              {"value": 1_000_000, "data_year": 2019,
+               "note": "إجمالي استيراد السوق 2019, USD"},
+              {"value": 2_000_000, "data_year": 2021,
+               "note": "إجمالي استيراد السوق 2021, USD"},
+              {"value": 3_000_000, "data_year": 2023,
+               "note": "إجمالي استيراد السوق 2023, USD"}]}},
+          "analyst": {}}
+    assert chk(dr) == []
+
+
+def test_cagr_sign_flip_no_fire_without_directional_claim():
+    """سلسلةٌ إشارتُها تنقلب لكن بلا ادّعاء اتجاهٍ في المتن — لا شيء يُقلَب."""
+    from silk_quality_gate import _check_cagr_sign_flips_under_base_year as chk
+    dr = {"report": {"text": "لمحةٌ عامة عن حجم السوق وقيمته الإجمالية بالدولار."},
+          "missions": {"th": {"findings": [
+              {"value": 880_000, "data_year": 2018, "note": "استيراد 2018, USD"},
+              {"value": 5_590_000, "data_year": 2019, "note": "استيراد 2019, USD"},
+              {"value": 2_090_000, "data_year": 2023, "note": "استيراد 2023, USD"}]}},
+          "analyst": {}}
+    assert chk(dr) == []
+
+
+def test_cagr_sign_flip_suppressed_when_base_year_disclosed():
+    """إفصاحٌ صحيح (§3.6): تقريرٌ يذكر «سنة الأساس» ويعرض القراءتين لا يُعاقَب —
+    القاعدة تُفشِل التثبيتَ المُختار الصامت لا الإفصاح."""
+    from silk_quality_gate import _check_cagr_sign_flips_under_base_year as chk
+    dr = {"report": {"text": "الاتجاه غير محسوم لحساسيته لسنة الأساس: من أساس "
+                             "2018 نموّ ومن أساس 2019 انكماش."},
+          "missions": {"th": {"findings": [
+              {"value": 880_000, "data_year": 2018, "note": "استيراد 2018, USD"},
+              {"value": 5_590_000, "data_year": 2019, "note": "استيراد 2019, USD"},
+              {"value": 2_090_000, "data_year": 2023, "note": "استيراد 2023, USD"}]}},
+          "analyst": {}}
+    assert chk(dr) == []
+
+
+def test_cagr_sign_flip_is_a_fail_trigger():
+    import silk_quality_gate as G
+    assert "cagr_sign_flips_under_base_year" in G.FAIL_TRIGGER_CHECKS
+
+
 # ════════════════════ الحكم الكلّي: تحليل ٧ يُفشِل، والعيّنات النظيفة لا ════════════════════
 
 def test_full_gate_fails_analysis7_view():
@@ -223,11 +296,12 @@ def test_full_gate_fails_analysis7_view():
     fired = {f["check"] for f in out["findings"]}
     assert {"tam_below_single_country_flow",
             "mirror_divergence_contraction_narrative",
-            "stale_year_driving_conclusion"} <= fired
+            "stale_year_driving_conclusion",
+            "cagr_sign_flips_under_base_year"} <= fired
 
 
 def test_full_gate_does_not_regress_kuwait_canonical():
-    """المدوّنة القانونية النظيفة (الكويت) لا تُطلِق أياً من البوّابات الثلاث."""
+    """المدوّنة القانونية النظيفة (الكويت) لا تُطلِق أياً من البوّابات الأربع."""
     import silk_render as R
     import silk_quality_gate as QG
     from canonical_kuwait_peanut_butter import kuwait_research_blob
@@ -235,4 +309,5 @@ def test_full_gate_does_not_regress_kuwait_canonical():
     fired = {f["check"] for f in out["findings"]}
     assert not ({"tam_below_single_country_flow",
                  "mirror_divergence_contraction_narrative",
-                 "stale_year_driving_conclusion"} & fired)
+                 "stale_year_driving_conclusion",
+                 "cagr_sign_flips_under_base_year"} & fired)

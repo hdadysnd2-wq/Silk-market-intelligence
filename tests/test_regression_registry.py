@@ -1819,16 +1819,20 @@ def _guard_gate_passes_synthetic_but_silent_on_real():
     from tools.canonical_kuwait_peanut_butter import kuwait_research_blob
     view = R.build_view(nadec_yemen_research_blob())
     dr = view["deep_research"]
-    # (١) البوّابات الثلاث تُطلِق + FAIL كلّي.
+    # (١) البوّابات الأربع تُطلِق + FAIL كلّي (بلاغ المالك: قلبُ إشارة CAGR
+    # بسنة الأساس المرصودة أُضيف بعد مِجَسّ /trend الحيّ — أساس 2018 نموّ مقابل
+    # أساس 2019 انكماش على نفس سلسلة 040110).
     assert QG._check_tam_below_single_country_flow(dr)
     assert QG._check_mirror_divergence_contraction_narrative(dr)
     assert QG._check_stale_year_driving_conclusion(dr)
+    assert QG._check_cagr_sign_flips_under_base_year(dr)
     out = QG.run_quality_gate(view)
     assert out["verdict"] == QG.FAIL
     fired = {f["check"] for f in out["findings"]}
     assert {"tam_below_single_country_flow",
             "mirror_divergence_contraction_narrative",
-            "stale_year_driving_conclusion"} <= fired
+            "stale_year_driving_conclusion",
+            "cagr_sign_flips_under_base_year"} <= fired
     # (٢) صيغةُ الرمز `$` محفوظةٌ بعد التطهير + المستخلِص يلتقطها.
     txt = (dr.get("report") or {}).get("text") or ""
     assert "2,090,000$" in txt
@@ -1841,7 +1845,8 @@ def _guard_gate_passes_synthetic_but_silent_on_real():
     # (٤) الثلاث بنودُ فشلٍ حاجبة + قفلُ الانحدار موجود.
     for c in ("tam_below_single_country_flow",
               "mirror_divergence_contraction_narrative",
-              "stale_year_driving_conclusion"):
+              "stale_year_driving_conclusion",
+              "cagr_sign_flips_under_base_year"):
         assert c in QG.FAIL_TRIGGER_CHECKS
     assert _exists("tests/test_gate_regression_locks_analysis7.py")
     assert _exists("tools/canonical_nadec_yemen_dairy.py")
