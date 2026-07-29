@@ -235,30 +235,38 @@ def test_5b_price_fix_still_fires_within_the_same_table_block():
 # ══════════ ٦ — سقف الملحق التقني: رسالة القطع نظيفة ══════════
 
 def test_6_audit_coverage_message_is_clean_and_matches_counts():
-    """رسالة سقف الملحق التقني تذكر الإجمالي الصحيح (٩٨) والسقف (٨٠) بلا أي
-    مصطلح داخلي مسرَّب — «معلَناً هنا لا صامتاً» صراحةً (لا حذف صامت)."""
+    """رسالة سقف الملحق التقني تذكر الإجمالي الصحيح والسقف بلا أي مصطلح
+    داخلي مسرَّب — «معلَناً هنا لا صامتاً» صراحةً (لا حذف صامت). السقف
+    ارتفع 80 ← 150 (بلاغ 102 استشهاداً) فمدوّنة DZA (98) لم تعد تتجاوزه —
+    يُختبَر التجاوز بمدوّنة اصطناعية فوق السقف الجديد."""
+    from silk_quality_gate import _check_audit_coverage, AUDIT_APPENDIX_CAP
     out = _dza_gate()
-    findings = [f for f in out["findings"] if f["check"] == "audit_coverage"]
+    assert not [f for f in out["findings"]
+                if f["check"] == "audit_coverage"]      # 98 ≤ 150 الآن
+    total = AUDIT_APPENDIX_CAP + 18
+    findings = _check_audit_coverage(
+        {"missions": {"m": {"findings": [{}] * total}}})
     assert len(findings) == 1
     note = findings[0]["note"]
-    assert "98" in note
-    assert "80" in note
+    assert str(total) in note
+    assert str(AUDIT_APPENDIX_CAP) in note
     assert findings[0]["repairable"] is False
     for leaked in ("LLMAgent", "LLMMissionAgent", "pricing_scout",
                   "trade_flow", "dp1", "Claude", "كلود"):
         assert leaked not in note
-    assert note in out["methodology_notes"]
 
 
 def test_6_docx_technical_appendix_truncates_to_the_same_cap():
-    """جدول الملحق الفعلي (docx) يُقصّ لنفس السقف (٨٠) — لا انحراف بين رسالة
-    البوّابة وحجم الجدول المُسلَّم فعلياً."""
+    """جدول الملحق الفعلي (docx) يُقصّ لنفس سقف البوّابة — ثابت واحد مشترك
+    (`AUDIT_APPENDIX_CAP`)، لا 80 حرفية — فلا انحراف بين رسالة البوّابة
+    وحجم الجدول المُسلَّم فعلياً."""
     import silk_reports as RP
     import inspect
     src = inspect.getsource(RP._docx_technical_appendix)
-    assert "rows[:80]" in src
-    from silk_quality_gate import _AUDIT_APPENDIX_CAP
-    assert _AUDIT_APPENDIX_CAP == 80
+    assert "rows[:80]" not in src
+    assert "AUDIT_APPENDIX_CAP" in src
+    from silk_quality_gate import AUDIT_APPENDIX_CAP
+    assert AUDIT_APPENDIX_CAP >= 102   # بلاغ حي: 102 استشهاداً كانت تُقصّ
 
 
 # ══════════ التحقّق الشامل — البوّابة تنتقل من FAIL إلى غير-FAIL ══════════

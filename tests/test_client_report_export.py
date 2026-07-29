@@ -517,6 +517,11 @@ def test_client_docx_export_blocked_409_when_gate_fails(tmp_path):
             assert body["error"] == "quality_gate_fail"
             assert body["findings"]
             assert any(f["check"] == "section_structure" for f in body["findings"])
+            # قفل انحدار (رسالة 409 القديمة): كانت تعِد بأن ?override=1 يكفي
+            # بمفتاح API العادي بينما WP-7 §1 يرفضه 403 بلا X-Owner-Key —
+            # الرسالة يجب أن تذكر سلطة المالك، لا أن تَعِد بما يرفضه الخادم.
+            assert "X-Owner-Key" in body["message"]
+            assert "مسؤولية من يملك مفتاح API" not in body["message"]
 
             # WP-7 §1: ?override=1 يتطلّب سلطة المالك المنفصلة — مفتاح API
             # العادي وحده يُرفَض 403؛ ومع X-Owner-Key المطابقة يمرّ.
