@@ -23,7 +23,8 @@ _SCRYPT_P = 1
 
 try:  # اختياري: bcrypt الحقيقي حين يتوفّر · optional real bcrypt
     import bcrypt as _bcrypt
-except Exception:  # noqa: BLE001 — الغياب متوقّع في CI الهرمتي
+except BaseException:  # noqa: BLE001 — الغياب متوقّع؛ وBaseException كي لا ينهار
+    # الاستيراد لو كانت خلفية bcrypt الـcffi مكسورة (PanicException كـcryptography).
     _bcrypt = None
 
 
