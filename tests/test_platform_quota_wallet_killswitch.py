@@ -56,6 +56,41 @@ def test_silver_blocked_at_third_monthly_launch(monkeypatch):
     assert r3.status_code == 403 and r3.json()["detail"]["reason"] == "monthly_quota_exceeded"
 
 
+def test_quota_guarded_increment_never_exceeds_cap(monkeypatch):
+    """الزيادة المحروسة لا تتجاوز الحدّ — a blocked reserve does NOT increment.
+
+    يقفل إصلاح TOCTOU: reserve عند الحدّ يرجع محجوباً والعدّاد يبقى عند الحدّ
+    (لا يتخطّاه)، لأن الزيادة والشرط `< limit` في UPDATE ذرّي واحد.
+    """
+    seed(monkeypatch)
+    f = make_factory("silver", "atomic@f.local", fund_cents=0)
+    conn = pdb.connect()
+    try:
+        d1 = quota.reserve_launch(conn, f["account_id"], actor_user_id=f["user_id"])
+        d2 = quota.reserve_launch(conn, f["account_id"], actor_user_id=f["user_id"])
+        d3 = quota.reserve_launch(conn, f["account_id"], actor_user_id=f["user_id"])
+        assert d1.allowed and d2.allowed and not d3.allowed
+        cnt = conn.execute("SELECT current_month_study_count FROM accounts WHERE id=?",
+                           (f["account_id"],)).fetchone()[0]
+        assert cnt == 2  # never incremented past the Silver cap of 2
+    finally:
+        conn.close()
+
+
+def test_prospect_duplicate_email_returns_422_not_500(monkeypatch):
+    """تصادم بريد عميل مكرّر يرجع 422 لا 500 — UNIQUE(owner_id,email) → clean 422."""
+    seed(monkeypatch)
+    f = make_factory("gold", "dup@f.local")
+    cl = client()
+    tok = login(cl, f["email"], f["password"])
+    cl.post("/platform/prospects", headers=hdr(tok), json={"email": "x@a.local"})
+    p2 = cl.post("/platform/prospects", headers=hdr(tok),
+                 json={"email": "y@a.local"}).json()
+    r = cl.patch(f"/platform/prospects/{p2['id']}", headers=hdr(tok),
+                 json={"email": "x@a.local"})  # collide with the first
+    assert r.status_code == 422
+
+
 def test_counter_increments_only_on_launch(monkeypatch):
     seed(monkeypatch)
     f = make_factory("silver", "s2@f.local", fund_cents=100_000)

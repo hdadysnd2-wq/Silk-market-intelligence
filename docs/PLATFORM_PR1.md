@@ -104,6 +104,25 @@ python3 -m silk_platform.seed                       # هيّئ + ابذر قاع
 | `SILK_PLATFORM_EXPOSE_RESET_TOKEN` | كشف رمز إعادة التعيين في الردّ (اختبار فقط) | غير مضبوط — الإنتاج لا يكشفه أبداً |
 | `SILK_PLATFORM_SECURE_COOKIES` | علم `secure` لكوكي الجلسة (HTTPS) | غير مضبوط (تطوير http) |
 
+## ٨·١) المراجعة الخصامية ومخاطر متبقية · adversarial review & residual risks
+
+مراجعة مستقلّة (§58) على العزل/المصادقة/المال: **لا عيوب high**. أُصلِحت ملاحظات
+MEDIUM/LOW التالية بأقفال اختبار:
+- **TOCTOU الحصّة** — الزيادة صارت `UPDATE … WHERE count < limit` ذرّية
+  (`test_quota_guarded_increment_never_exceeds_cap`).
+- **نافذة خصم مزدوج في عامل البريد** — الموافقة + الخصم + الحالة في التزام واحد.
+- **جلسة حساب معطّل** — تُرفَض الآن (`test_deactivated_account_session_rejected`).
+- **تصادم بريد عميل** — 422 لا 500 (`test_prospect_duplicate_email_returns_422_not_500`).
+
+مخاطر متبقية **موثّقة ومقبولة لـPR-1** (طوبولوجيا العامل الأحادي + كاتب SQLite
+الوحيد تخفّفها؛ تُعالَج لاحقاً):
+- تسليم «مرّة على الأقل»: تعطّل بعد إرسال SMTP وقبل الالتزام قد يعيد الإرسال مرّة
+  — التسليم الحتمي يحتاج مفتاح idempotency في طبقة SMTP (PR-5).
+- `wallet.post_entry` لا يستخدم `BEGIN IMMEDIATE` (خصومات متزامنة على محفظة
+  واحدة)؛ `fund_wallet` يستخدمه. مخفّف بمسار العامل الأحادي.
+- `SILK_PLATFORM_SECRET` غير مضبوط في الإنتاج ⇒ سرّ عابر يجعل اعتماد SMTP غير
+  قابل للفكّ بعد إعادة التشغيل — **متغيّر إنتاج مطلوب** (موثّق في `.env.example`).
+
 ## ٩) الحدود المعلنة · declared limits (ما ليس في PR-1)
 
 - لا واجهة/لوحات (PR-6) — نقاط REST فقط.

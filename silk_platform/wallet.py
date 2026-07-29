@@ -89,6 +89,19 @@ def _apply(conn: sqlite3.Connection, account_id: int, actor_user_id: int | None,
     return int(cur.lastrowid)
 
 
+def apply_entry(conn: sqlite3.Connection, *, account_id: int,
+                actor_user_id: int | None, operation: Operation, amount: int,
+                description: str = "", metadata: dict | None = None,
+                allow_negative: bool = False) -> int:
+    """طبّق حركة ضمن معاملة المُنادي **بلا** commit — for multi-step atomic ops.
+
+    يستعمله عامل البريد كي يلتزم الموافقة + الخصم + الحالة معاً (لا نافذة خصم
+    مزدوج). المُنادي مسؤول عن commit/rollback. Post one entry without committing.
+    """
+    return _apply(conn, account_id, actor_user_id, operation, amount,
+                  description, metadata, allow_negative=allow_negative)
+
+
 def post_entry(conn: sqlite3.Connection, *, account_id: int,
                actor_user_id: int | None, operation: Operation, amount: int,
                description: str = "", metadata: dict | None = None,

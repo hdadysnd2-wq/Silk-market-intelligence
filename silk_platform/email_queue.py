@@ -138,25 +138,41 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
             summary["failed"].append(eid)
             processed += 1
             continue
-        # نجح الإرسال · sent — record consent (verbatim), then debit the ledger.
+        # نجح الإرسال — الموافقة + الخصم + الحالة في **معاملة واحدة** كي لا يقع
+        # خصم مزدوج عند تعطّل بين التزامين (ملاحظة مراجعة خصامية). الالتزام
+        # الذرّي: إمّا تُثبَت الثلاثة أو يبقى الصفّ مصفوفاً (يُعاد إرساله نظيفاً).
+        # Atomic: consent + debit + status='sent' commit together — no
+        # double-charge window. (Residual: a crash after transport but before
+        # commit can re-send once; exactly-once delivery needs an idempotency
+        # key at the SMTP layer — deferred to PR-5.)
         verbatim = f"Subject: {email['subject']}\n\n{email['body']}"
-        conn.execute(
-            "INSERT INTO consent_registry (prospect_email, study_id, "
-            "sending_account_id, approving_user_id, message_verbatim, sent_at, "
-            "consent_granted_at) VALUES (?,?,?,?,?,?,?)",
-            (email["prospect_email"], email["study_id"], email["account_id"],
-             email["actor_user_id"], verbatim, now_iso(), now_iso()))
-        wallet.post_entry(conn, account_id=email["account_id"],
-                          actor_user_id=email["actor_user_id"],
-                          operation=Operation.EMAIL_SENT,
-                          amount=-PRICE_EMAIL_SENT_CENTS,
-                          description="email sent",
-                          metadata={"study_id": email["study_id"],
-                                    "prospect_id": email["prospect_id"],
-                                    "email_queue_id": eid})
-        conn.execute("UPDATE email_queue SET status = 'sent', sent_at = ? WHERE id = ?",
-                     (now_iso(), eid))
-        conn.commit()
+        try:
+            conn.execute(
+                "INSERT INTO consent_registry (prospect_email, study_id, "
+                "sending_account_id, approving_user_id, message_verbatim, sent_at, "
+                "consent_granted_at) VALUES (?,?,?,?,?,?,?)",
+                (email["prospect_email"], email["study_id"], email["account_id"],
+                 email["actor_user_id"], verbatim, now_iso(), now_iso()))
+            wallet.apply_entry(conn, account_id=email["account_id"],
+                               actor_user_id=email["actor_user_id"],
+                               operation=Operation.EMAIL_SENT,
+                               amount=-PRICE_EMAIL_SENT_CENTS,
+                               description="email sent",
+                               metadata={"study_id": email["study_id"],
+                                         "prospect_id": email["prospect_id"],
+                                         "email_queue_id": eid})
+            conn.execute("UPDATE email_queue SET status = 'sent', sent_at = ? "
+                         "WHERE id = ?", (now_iso(), eid))
+            conn.commit()
+        except Exception as exc:  # noqa: BLE001 — الفشل يُسجَّل، لا خصم جزئي
+            conn.rollback()
+            conn.execute("UPDATE email_queue SET status = 'failed', attempts = "
+                         "attempts + 1, last_error = ? WHERE id = ?",
+                         (str(exc)[:300], eid))
+            conn.commit()
+            summary["failed"].append(eid)
+            processed += 1
+            continue
         summary["sent"].append(eid)
         processed += 1
     summary["remaining"] = int(conn.execute(

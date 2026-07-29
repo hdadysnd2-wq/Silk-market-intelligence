@@ -180,6 +180,22 @@ def test_unknown_email_reset_does_not_reveal_absence(monkeypatch):
     assert "reset_token" in known.json() and "reset_token" not in ghost.json()
 
 
+def test_deactivated_account_session_rejected(monkeypatch):
+    """جلسة مستخدم في حساب معطّل تُرفض — a deactivated account's sessions die."""
+    info = seed(monkeypatch)
+    cl = client()
+    token = login(cl, info["factory_a"]["email"], info["factory_a"]["password"])
+    assert cl.get("/platform/me", headers=hdr(token)).status_code == 200
+    conn = pdb.connect()
+    try:
+        conn.execute("UPDATE accounts SET is_active = 0 WHERE id = ?",
+                     (info["factory_a"]["account_id"],))
+        conn.commit()
+    finally:
+        conn.close()
+    assert cl.get("/platform/me", headers=hdr(token)).status_code == 401
+
+
 def test_reset_token_never_exposed_without_flag(monkeypatch):
     """أمنيّاً: الرمز الخام لا يُعاد في الردّ افتراضياً — no takeover vector."""
     info = seed(monkeypatch)  # flag NOT set → production default

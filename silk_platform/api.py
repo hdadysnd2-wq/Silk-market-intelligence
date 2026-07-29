@@ -453,7 +453,10 @@ def mount(app) -> bool:
         conn = _open()
         try:
             repo = repository.prospects(conn)
-            updated = repo.update(ctx.account_id, prospect_id, body)
+            try:
+                updated = repo.update(ctx.account_id, prospect_id, body)
+            except Exception as exc:  # تصادم UNIQUE(owner_id,email) => 422 لا 500
+                raise HTTPException(status_code=422, detail=str(exc))
             if updated is None:
                 if repo.exists_anywhere(prospect_id):
                     audit.record_denied(conn, action="cross_tenant_write",

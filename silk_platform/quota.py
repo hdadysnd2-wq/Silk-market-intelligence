@@ -82,26 +82,38 @@ def reserve_launch(conn: sqlite3.Connection, account_id: int, *,
     يُستدعى مرّة واحدة عند draft→in_progress. عند المنع يكتب قيد تدقيق
     (over-quota launch attempt) ولا يزيد شيئاً.
     """
-    decision = evaluate(conn, account_id)
-    if not decision.allowed:
+    # زيادة ذرّية محروسة بالسقف — atomic guarded increment closes the
+    # check-then-increment TOCTOU (ملاحظة مراجعة خصامية): تشغيلان متزامنان لا
+    # يتجاوزان الحدّ لأن الشرط `< limit` والزيادة في تعليمة UPDATE واحدة.
+    acc = _account(conn, account_id)
+    tier = Tier(acc["tier"])
+    limits = tier_limits(tier)
+    if tier == Tier.BASIC:
+        cur = conn.execute(
+            "UPDATE accounts SET lifetime_study_count = lifetime_study_count + 1, "
+            "updated_at = ? WHERE id = ? AND lifetime_study_count < ?",
+            (now_iso(), account_id, limits.lifetime_studies))
+        conn.commit()
+        used = int(_account(conn, account_id)["lifetime_study_count"])
+        reason, limit = "lifetime_quota_exceeded", limits.lifetime_studies
+    else:
+        _roll_period_if_needed(conn, acc)   # صفّر كسولاً عند شهر جديد أولاً
+        cur = conn.execute(
+            "UPDATE accounts SET current_month_study_count = "
+            "current_month_study_count + 1, quota_period = ?, updated_at = ? "
+            "WHERE id = ? AND current_month_study_count < ?",
+            (current_period(), now_iso(), account_id, limits.monthly_studies))
+        conn.commit()
+        used = int(_account(conn, account_id)["current_month_study_count"])
+        reason, limit = "monthly_quota_exceeded", limits.monthly_studies
+    if cur.rowcount == 0:   # الشرط لم يتحقّق ⇒ عند/فوق الحدّ · at/over the cap
         audit.record(conn, action="quota_exceeded", user_id=actor_user_id,
                      account_id=account_id, resource_type="study",
-                     changes={"reason": decision.reason, "tier": decision.tier,
-                              "limit": decision.limit, "used": decision.used})
+                     changes={"reason": reason, "tier": tier.value,
+                              "limit": limit, "used": used})
         conn.commit()
-        return decision
-    acc = _account(conn, account_id)
-    if Tier(acc["tier"]) == Tier.BASIC:
-        conn.execute("UPDATE accounts SET lifetime_study_count = "
-                     "lifetime_study_count + 1, updated_at = ? WHERE id = ?",
-                     (now_iso(), account_id))
-    else:
-        conn.execute("UPDATE accounts SET current_month_study_count = "
-                     "current_month_study_count + 1, quota_period = ?, "
-                     "updated_at = ? WHERE id = ?",
-                     (current_period(), now_iso(), account_id))
-    conn.commit()
-    return dataclasses.replace(decision, used=decision.used + 1)
+        return QuotaDecision(False, reason, limit, used, tier.value)
+    return QuotaDecision(True, "", limit, used, tier.value)
 
 
 def monthly_reset(conn: sqlite3.Connection) -> int:

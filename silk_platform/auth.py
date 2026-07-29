@@ -91,10 +91,13 @@ def resolve_session(conn: sqlite3.Connection, raw_token: str) -> AuthContext | N
         return None
     row = conn.execute(
         "SELECT s.*, u.account_id AS account_id, u.role AS role, u.email AS email, "
-        "u.language_preference AS lang, u.is_active AS user_active "
-        "FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?",
+        "u.language_preference AS lang, u.is_active AS user_active, "
+        "a.is_active AS account_active "
+        "FROM sessions s JOIN users u ON u.id = s.user_id "
+        "JOIN accounts a ON a.id = u.account_id WHERE s.token_hash = ?",
         (tokens.hash_token(raw_token),)).fetchone()
-    if not row or not row["user_active"]:
+    # ارفض جلسة مستخدم أو **حساب** معطّل — reject deactivated user OR account.
+    if not row or not row["user_active"] or not row["account_active"]:
         return None
     now = _now()
     if _parse(row["expires_at"]) <= now:
