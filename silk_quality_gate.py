@@ -584,13 +584,18 @@ _HHI_DECIMAL_RE = re.compile(r"HHI[^0-9]{0,10}(\d{3,5}\.\d+)")
 
 
 def _check_hhi_false_precision(text: str) -> list[dict]:
-    """§C-1 — قيمة HHI (مقياس 0-10000 بعد الضرب) بدقّة عشرية مختلَقة."""
+    """§C-1 — قيمة HHI (مقياس 0-10000 بعد الضرب) بدقّة عشرية مختلَقة.
+
+    PR B §B9: صار **قابلاً للإصلاح** — `silk_render._fix_hhi_false_precision`
+    يقرّبها إلى صحيحٍ قبل وصول النص (نفس نطاق regex هذا الفحص)؛ فظهورها هنا
+    يعني فشلَ الإصلاح تحديداً في هذه التشغيلة (وصلت الدقّة الوهميّة المُسلَّم)
+    — لذا هي ضمن `_REGRESSION_GUARD_FIRED` تُفشِل الحكم لا مجرّد تحذير."""
     if not text:
         return []
     findings = []
     for m in _HHI_DECIMAL_RE.finditer(text):
         findings.append({
-            "check": "hhi_false_precision", "repairable": False,
+            "check": "hhi_false_precision", "repairable": True,
             "note": f"قيمة HHI «{m.group(1)}» بدقّة عشرية على مقياس 0-10000 "
                    "— يجب أن تكون رقماً صحيحاً مقرَّباً (وهم دقّة غير محسوب "
                    "فعلياً بهذا التفصيل)"})
@@ -1138,6 +1143,81 @@ def _check_tam_below_single_country_flow(dr: dict) -> list[dict]:
                       "رمز HS، وفسّر التباين صراحةً أو صحّحه قبل التسليم")}]
 
 
+# PR B §B3 (بلاغ تحليل ٧): تلوّثُ العملة — §3.9 اقتبس سعراً بالريال العُماني
+# داخل دراسةِ اليمن. الأسعار تُعرَض بالدولار (عملة الإبلاغ) أو بعملة السوق
+# المرصودة؛ عملةُ دولةٍ **أخرى** (خليجية/إقليمية) في متن التقرير = تلوّثٌ
+# مضلِّل. خريطةٌ محدودةٌ لأسماء العملات العربية المميِّزة → الدولة (لا «ريال»
+# وحدها — مشتركةٌ بين SAR/QAR/YER/OMR؛ ولا «دينار» وحدها). USD/EUR/GBP عملاتُ
+# إبلاغٍ عالمية لا تُبلَّغ. يُفحَص فقط حين تكون دولةُ السوق معروفة (لا إيجاب كاذب).
+_CURRENCY_COUNTRY_PHRASES = {
+    "ريال عماني": "OMN", "ريال قطري": "QAT", "ريال سعودي": "SAU",
+    "ريال يمني": "YEM", "دينار كويتي": "KWT", "دينار بحريني": "BHR",
+    "درهم إماراتي": "ARE", "درهم مغربي": "MAR", "دينار أردني": "JOR",
+    "جنيه مصري": "EGY", "دينار عراقي": "IRQ", "ليرة تركية": "TUR",
+    "دينار جزائري": "DZA", "دينار تونسي": "TUN", "دينار ليبي": "LBY",
+    "ريال إيراني": "IRN", "ليرة لبنانية": "LBN",
+}
+
+
+# PR B §B5 (بلاغ تحليل ٧): بعثة «demand_trends» تُبلَّغ «مكتملة» (`failed=not
+# findings` تَعُدّ أيّ نتيجة من أدواتها الأربع نجاحاً — faostat/openalex يُغطّيان
+# غياب Trends)، بينما §3.3/§6 يعلنان بيانات Trends/الموسمية مفقودةً فتبقى ذروة
+# رمضان مجهولة. «بعثةٌ بلا بيانات صالحة لغرضها لا تُعَدّ مكتملة»: نُبرِز التناقض
+# ملاحظةً منهجية (لا حكماً حاجباً — كـagent_empty) حين تُعلن البعثةُ نفسها في
+# ملخّصها فجوةَ الاتجاهات/الموسمية رغم عدم فشلها.
+_TRENDS_GAP_RE = re.compile(
+    r"(?:اتجاهات|Trends|تريندز|موسمي|رمضان|seasonal)", re.I)
+
+
+def _check_trends_hollow_completion(dr: dict) -> list[dict]:
+    """PR B §B5 — بعثةُ الاتجاهات/الطلب «مكتملة» لكنها تُعلن فجوةَ الاتجاهات/
+    الموسمية في ملخّصها نفسه (بياناتها الأساسية غائبة) — تُبرَز لا تُخفى."""
+    findings = []
+    for key, m in (dr.get("missions") or {}).items():
+        if not isinstance(m, dict):
+            continue
+        if "trend" not in key and "demand" not in key:
+            continue
+        if m.get("failed"):
+            continue   # فشلٌ صريح محكومٌ أصلاً (agent_failed)
+        summary = str(m.get("summary") or "")
+        gm = _GAPS_TRIGGER_RE.search(summary) or ("فجوات" in summary)
+        if gm and _TRENDS_GAP_RE.search(summary):
+            findings.append({
+                "check": "trends_hollow_completion", "repairable": False,
+                "note": (f"بعثةُ «{_mission_label(key)}» مُبلَّغةٌ غيرَ فاشلة "
+                         "لكنها تُعلن فجوةَ بيانات الاتجاهات/الموسمية في "
+                         "ملخّصها — لم تُنتِج بياناتٍ صالحةً لغرضها الأساسي "
+                         "(موسمية/ذروة الطلب)؛ تُقرأ كتغطيةٍ ناقصة لا اكتمالاً")})
+    return findings
+
+
+def _check_off_market_currency(dr: dict) -> list[dict]:
+    """PR B §B3 — عملةُ دولةٍ غير سوق الدراسة (وليست عملةَ إبلاغٍ عالمية)
+    مذكورةٌ في متن التقرير = تلوّثُ عملةٍ مضلِّل يجب تصحيحه قبل التسليم."""
+    text = ((dr.get("report") or {}).get("text") or "")
+    if not text:
+        return []
+    market = dr.get("market") or {}
+    market_iso3 = str(market.get("iso3") or "").upper()
+    if not market_iso3:
+        return []   # سوق مجهول — لا فحص (تفادي إيجاب كاذب)
+    findings = []
+    seen: set[str] = set()
+    for phrase, iso3 in _CURRENCY_COUNTRY_PHRASES.items():
+        if iso3 == market_iso3:
+            continue   # عملةُ السوق نفسها مشروعة (رصدٌ محليّ)
+        if phrase in text and phrase not in seen:
+            seen.add(phrase)
+            findings.append({
+                "check": "off_market_currency", "repairable": False,
+                "note": (f"عملةٌ خارج السوق «{phrase}» ({iso3}) مذكورةٌ في "
+                         f"دراسةِ سوقٍ مختلف ({market_iso3}) — الأسعار تُعرَض "
+                         "بالدولار أو بعملة السوق المرصودة؛ صحّح العملة "
+                         "المتسرّبة قبل التسليم")})
+    return findings
+
+
 # Master Prompt Part 2 §D — تغطية المصادر: كل مؤشرٍ يحمل مصدراً مسمّى
 # حقيقياً أو وسم «تقدير استرشادي» صريح؛ عتبة القبول ≥٨٥٪. دون العتبة =
 # ضيّق نطاق التقرير وأعلن الفجوة، لا تشحن مؤشرات بلا مصدر (البند ٩).
@@ -1180,7 +1260,10 @@ _REGRESSION_GUARD_FIRED = {"internal_plumbing_leak", "english_field_leak",
                            # يُنجَز تحويلها بلاغٌ مضلِّل حقيقي (لا مجرّد أسلوب)
                            # — الإصلاح الفعلي في silk_render._fix_price_
                            # column_currency_label؛ ظهوره يعني فشل الإصلاح.
-                           "currency_label_mismatch"}
+                           "currency_label_mismatch",
+                           # PR B §B9: HHI بدقّة عشرية — يُصلَح في العرض
+                           # (_fix_hhi_false_precision)؛ ظهوره = فشل الإصلاح.
+                           "hhi_false_precision"}
 
 
 # WP-7 §3 — النصوص النائبة الصلبة التي لا يجوز أن تبلغ **المستند النهائي
@@ -1248,6 +1331,8 @@ FAIL_TRIGGER_CHECKS = frozenset({
     # PR A (بلاغ تحليل ٧): تعارض ثقة/تسمية حكم، وTAM أصغر من تدفّق دولة واحدة.
     "confidence_value_conflict", "verdict_label_conflict",
     "tam_below_single_country_flow",
+    # PR B (بلاغ تحليل ٧): تلوّثُ عملةٍ خارج السوق يصل العميل مضلِّلاً.
+    "off_market_currency",
 })
 
 
@@ -1309,6 +1394,10 @@ def run_quality_gate(view: dict) -> dict:
     findings += _check_confidence_value_conflict(text)
     findings += _check_verdict_label_conflict(dr)
     findings += _check_tam_below_single_country_flow(dr)
+    # PR B (بلاغ تحليل ٧): تلوّث عملةٍ خارج السوق (§B3، حاجب)، وبعثةُ اتجاهاتٍ
+    # «مكتملة» بلا بياناتها الأساسية (§B5، ملاحظة منهجية لا حاجبة).
+    findings += _check_off_market_currency(dr)
+    findings += _check_trends_hollow_completion(dr)
 
     non_repairable = [f for f in findings if not f["repairable"]]
     guard_fired = [f for f in findings if f["check"] in _REGRESSION_GUARD_FIRED]

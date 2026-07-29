@@ -473,8 +473,11 @@ class JuryCommittee:
             "agents_total": len(reports),
             "data_gaps": data_gaps,
             "contributing_findings": contributing,
-            "note": ("Preliminary only; missing sources flagged, not estimated. "
-                     "تنبيه: قرار مبدئي والنواقص معلّمة لا مُخمّنة."),
+            # PR B §B8 (بلاغ تحليل ٧/قطر): النصفُ الإنجليزيّ داخليٌّ لا يصل
+            # العميل — كان يُسرَّب إلى §5 حين يُعيد الكاتبُ صياغته بشكلٍ يفلت
+            # من مُنظِّف `_PRELIM_EN_NOTE_RE`. حُذف من المصدر (عربيّ فقط)؛
+            # المُنظِّف يبقى حارسَ انحدارٍ للمدوّنات المخزَّنة القديمة.
+            "note": "تنبيه: قرار مبدئي والنواقص معلّمة لا مُخمّنة.",
         }
 
 

@@ -22,7 +22,7 @@
           "source": "UN Comtrade",
           "confidence": 0.9,
           "note": "total imports HS080410 2023 (USD)",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": 2023,
           "source_ids": []
@@ -32,7 +32,7 @@
           "source": "UN Comtrade",
           "confidence": 0.9,
           "note": "Saudi share 30.0%",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -42,7 +42,7 @@
           "source": "World Bank",
           "confidence": 0.0,
           "note": "no income data for CHN 2023",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -52,7 +52,7 @@
           "source": "UN Comtrade",
           "confidence": 0.9,
           "note": "supplier HHI over 3 suppliers",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -90,7 +90,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.0,
           "note": "سوق CHN (موثّق جزئياً) غير مغطى بالمرجع الثابت بعد — تحقق محلياً (verify locally)",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -106,7 +106,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.8,
           "note": "مرجع طبقة ١ (اتجاه الخروج) — مطلوبة لأغلب الأسواق لإثبات المنشأ والتفضيلات",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -122,7 +122,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.7,
           "note": "مرجع طبقة ١ (اتجاه الخروج) — بعض أسواق الوجهة تشترط شهادة صحية/حلال من المصدر؛ اعتماد المنشأة أوروبياً يمر عبر SFDA",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -138,7 +138,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.6,
           "note": "مرجع طبقة ١ (اتجاه الخروج) — اختياري داعم لا إلزامي جمركياً",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -149,8 +149,8 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-          "retrieved_at": "2026-07-28",
+          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -159,8 +159,8 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-          "retrieved_at": "2026-07-28",
+          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -169,8 +169,8 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-          "retrieved_at": "2026-07-28",
+          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -180,7 +180,7 @@
           "source": "World Bank",
           "confidence": 0.0,
           "note": "تقلب العملة يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -204,7 +204,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -220,7 +220,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -236,7 +236,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -250,8 +250,8 @@
             ],
             "rejected": [],
             "coverage": 0.6,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:04:58+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:20+00:00"
           },
           "competitor": {
             "agent": "competitor",
@@ -268,7 +268,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -284,7 +284,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -300,7 +300,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -335,7 +335,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -348,8 +348,8 @@
             ],
             "rejected": [],
             "coverage": 0.8,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:01+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:21+00:00"
           },
           "regulatory": {
             "agent": "regulatory",
@@ -388,7 +388,7 @@
                 "sources": [
                   {
                     "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.8,
                     "url": null
                   }
@@ -404,7 +404,7 @@
                 "sources": [
                   {
                     "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.8,
                     "url": null
                   }
@@ -420,7 +420,7 @@
                 "sources": [
                   {
                     "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.8,
                     "url": null
                   }
@@ -433,8 +433,8 @@
             ],
             "rejected": [],
             "coverage": 0.75,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:04:58+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:20+00:00"
           },
           "pricing": {
             "agent": "pricing",
@@ -451,7 +451,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -467,7 +467,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.85,
                     "url": null
                   }
@@ -482,8 +482,8 @@
             ],
             "rejected": [],
             "coverage": 0.4,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:06+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:27+00:00"
           },
           "risk": {
             "agent": "risk",
@@ -500,7 +500,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -509,15 +509,15 @@
               }
             ],
             "gaps": [
-              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
               "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
             ],
             "rejected": [],
             "coverage": 0.2,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:05+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:28+00:00"
           },
           "consumer_demand": {
             "agent": "consumer_demand",
@@ -559,15 +559,15 @@
               }
             ],
             "gaps": [
-              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-              "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
+              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+              "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))"
             ],
             "rejected": [],
             "coverage": 0.33,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:03+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:25+00:00"
           },
           "supplier": {
             "agent": "supplier",
@@ -581,8 +581,8 @@
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:04:58+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:20+00:00"
           },
           "logistics": {
             "agent": "logistics",
@@ -591,16 +591,16 @@
             "status": "failed",
             "findings": [],
             "gaps": [
-              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
               "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
               "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
               "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:06+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:27+00:00"
           }
         },
         "coverage": 0.39,
@@ -689,7 +689,7 @@
             "missing": [
               "named_density"
             ],
-            "basis": "متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
+            "basis": "متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
           },
           "regulatory": {
             "value": 0.375,
@@ -749,7 +749,7 @@
         ],
         "conditions": [
           "عمود أمان السوق (المخاطر) غائب (political_stability, regulatory_quality, logistics, fx_stability) — أكمل مصادره قبل قرار نهائي",
-          "عمود شدة المنافسة ضعيف (37%) — متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)",
+          "عمود شدة المنافسة ضعيف (37%) — متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)",
           "عمود الملاءمة التنظيمية ضعيف (38%) — متوسط المتاح من: (1 − تعريفة/30%)، وضوح القائمة (بنود/8)"
         ],
         "first_steps": [
@@ -807,7 +807,7 @@
           2023
         ],
         "source": "UN Comtrade",
-        "retrieved_at": "2026-07-28",
+        "retrieved_at": "2026-07-29",
         "note": "بيانات غير كافية لخط الاتجاه — 0/5 سنة مرصودة (insufficient data for a trend)"
       },
       "jury": {
@@ -824,8 +824,8 @@
             "value": 60000000.0,
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
-            "note": "HS080410 total imports (World) to market 156 2023, USD — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T09:04:41+00:00",
+            "note": "HS080410 total imports (World) to market 156 2023, USD — من المخزن، جُلبت أصلاً 2026-07-29",
+            "retrieved_at": "2026-07-29T10:41:03+00:00",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -839,8 +839,8 @@
             },
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
-            "note": "HS080410 imports to CHN 2023; share 50.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T09:04:41+00:00",
+            "note": "HS080410 imports to CHN 2023; share 50.0% — من المخزن، جُلبت أصلاً 2026-07-29",
+            "retrieved_at": "2026-07-29T10:41:03+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
@@ -854,8 +854,8 @@
             },
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
-            "note": "HS080410 imports to CHN 2023; share 30.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T09:04:41+00:00",
+            "note": "HS080410 imports to CHN 2023; share 30.0% — من المخزن، جُلبت أصلاً 2026-07-29",
+            "retrieved_at": "2026-07-29T10:41:03+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
@@ -869,14 +869,14 @@
             },
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
-            "note": "HS080410 imports to CHN 2023; share 20.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T09:04:41+00:00",
+            "note": "HS080410 imports to CHN 2023; share 20.0% — من المخزن، جُلبت أصلاً 2026-07-29",
+            "retrieved_at": "2026-07-29T10:41:03+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
           }
         ],
-        "note": "Preliminary only; missing sources flagged, not estimated. تنبيه: قرار مبدئي والنواقص معلّمة لا مُخمّنة.",
+        "note": "تنبيه: قرار مبدئي والنواقص معلّمة لا مُخمّنة.",
         "synthesis_stage": 1
       },
       "recommendation": "China: score=0.733 conf=0.75 (3/4 comps) [PRELIMINARY / INCONCLUSIVE] — preliminary.",
@@ -897,7 +897,7 @@
           "source": "UN Comtrade",
           "confidence": 0.9,
           "note": "total imports HS080410 2023 (USD)",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": 2023,
           "source_ids": []
@@ -907,7 +907,7 @@
           "source": "UN Comtrade",
           "confidence": 0.9,
           "note": "Saudi share 100.0%",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -917,7 +917,7 @@
           "source": "World Bank",
           "confidence": 0.0,
           "note": "no income data for ARE 2023",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -927,7 +927,7 @@
           "source": "UN Comtrade",
           "confidence": 0.9,
           "note": "supplier HHI over 1 suppliers",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -959,7 +959,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.7,
           "note": "مرجع طبقة ١ — تحقق من الجهة المعتمدة بالسوق قبل الشحن؛ مزامنة ربع سنوية",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -975,7 +975,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.6,
           "note": "مرجع طبقة ١ — الفئات الخاضعة تتغير؛ تحقق من اللائحة الفنية للفئة",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -991,7 +991,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.6,
           "note": "مرجع طبقة ١ — راجع متطلبات البطاقة المحدثة للفئة",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1007,7 +1007,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.6,
           "note": "مرجع طبقة ١ — الإجراء يختلف بين الإمارات (دبي: منتجي)؛ تحقق محلياً",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1023,7 +1023,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.8,
           "note": "مرجع طبقة ١ (اتجاه الخروج) — مطلوبة لأغلب الأسواق لإثبات المنشأ والتفضيلات",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1039,7 +1039,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.7,
           "note": "مرجع طبقة ١ (اتجاه الخروج) — بعض أسواق الوجهة تشترط شهادة صحية/حلال من المصدر؛ اعتماد المنشأة أوروبياً يمر عبر SFDA",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1055,7 +1055,7 @@
           "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
           "confidence": 0.6,
           "note": "مرجع طبقة ١ (اتجاه الخروج) — اختياري داعم لا إلزامي جمركياً",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1066,8 +1066,8 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-          "retrieved_at": "2026-07-28",
+          "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1076,8 +1076,8 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-          "retrieved_at": "2026-07-28",
+          "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1086,8 +1086,8 @@
           "value": null,
           "source": "World Bank",
           "confidence": 0.0,
-          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-          "retrieved_at": "2026-07-28",
+          "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1097,7 +1097,7 @@
           "source": "World Bank",
           "confidence": 0.0,
           "note": "تقلب العملة يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "status": "",
           "data_year": null,
           "source_ids": []
@@ -1121,7 +1121,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1137,7 +1137,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1153,7 +1153,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1167,8 +1167,8 @@
             ],
             "rejected": [],
             "coverage": 0.6,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:04:58+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:20+00:00"
           },
           "competitor": {
             "agent": "competitor",
@@ -1185,7 +1185,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1201,7 +1201,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1217,7 +1217,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1240,7 +1240,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1253,8 +1253,8 @@
             ],
             "rejected": [],
             "coverage": 0.8,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:03+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:26+00:00"
           },
           "regulatory": {
             "agent": "regulatory",
@@ -1321,7 +1321,7 @@
                 "sources": [
                   {
                     "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.7,
                     "url": null
                   }
@@ -1337,7 +1337,7 @@
                 "sources": [
                   {
                     "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.7,
                     "url": null
                   }
@@ -1353,7 +1353,7 @@
                 "sources": [
                   {
                     "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.7,
                     "url": null
                   }
@@ -1369,7 +1369,7 @@
                 "sources": [
                   {
                     "source": "GCC secretariat",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.75,
                     "url": null
                   }
@@ -1380,8 +1380,8 @@
             "gaps": [],
             "rejected": [],
             "coverage": 1.0,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:04:58+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:20+00:00"
           },
           "pricing": {
             "agent": "pricing",
@@ -1398,7 +1398,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1414,7 +1414,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade (مخزن الحقائق)",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.85,
                     "url": null
                   }
@@ -1429,8 +1429,8 @@
             ],
             "rejected": [],
             "coverage": 0.4,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:05+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:28+00:00"
           },
           "risk": {
             "agent": "risk",
@@ -1447,7 +1447,7 @@
                 "sources": [
                   {
                     "source": "UN Comtrade",
-                    "retrieved_at": "2026-07-28",
+                    "retrieved_at": "2026-07-29",
                     "confidence": 0.9,
                     "url": null
                   }
@@ -1456,15 +1456,15 @@
               }
             ],
             "gaps": [
-              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
               "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
             ],
             "rejected": [],
             "coverage": 0.2,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:05+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:28+00:00"
           },
           "consumer_demand": {
             "agent": "consumer_demand",
@@ -1506,15 +1506,15 @@
               }
             ],
             "gaps": [
-              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-              "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
+              "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+              "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+              "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+              "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))"
             ],
             "rejected": [],
             "coverage": 0.33,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:03+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:26+00:00"
           },
           "supplier": {
             "agent": "supplier",
@@ -1528,8 +1528,8 @@
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:04:58+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:20+00:00"
           },
           "logistics": {
             "agent": "logistics",
@@ -1538,16 +1538,16 @@
             "status": "failed",
             "findings": [],
             "gaps": [
-              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+              "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
               "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
               "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
               "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
             ],
             "rejected": [],
             "coverage": 0.0,
-            "started_at": "2026-07-28T09:04:58+00:00",
-            "finished_at": "2026-07-28T09:05:06+00:00"
+            "started_at": "2026-07-29T10:41:20+00:00",
+            "finished_at": "2026-07-29T10:41:28+00:00"
           }
         },
         "coverage": 0.42,
@@ -1636,7 +1636,7 @@
             "missing": [
               "named_density"
             ],
-            "basis": "متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
+            "basis": "متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
           },
           "regulatory": {
             "value": 0.938,
@@ -1694,7 +1694,7 @@
         ],
         "conditions": [
           "عمود أمان السوق (المخاطر) غائب (political_stability, regulatory_quality, logistics, fx_stability) — أكمل مصادره قبل قرار نهائي",
-          "عمود شدة المنافسة ضعيف (0%) — متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
+          "عمود شدة المنافسة ضعيف (0%) — متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
         ],
         "first_steps": [
           "سوق مركّز: ادخل عبر موزّع قائم من مرشّحي التوريد المرصودين بدل البناء المباشر"
@@ -1750,7 +1750,7 @@
           2023
         ],
         "source": "UN Comtrade",
-        "retrieved_at": "2026-07-28",
+        "retrieved_at": "2026-07-29",
         "note": "بيانات غير كافية لخط الاتجاه — 0/5 سنة مرصودة (insufficient data for a trend)"
       },
       "jury": {
@@ -1767,8 +1767,8 @@
             "value": 20000000.0,
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
-            "note": "HS080410 total imports (World) to market 784 2023, USD — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T09:04:41+00:00",
+            "note": "HS080410 total imports (World) to market 784 2023, USD — من المخزن، جُلبت أصلاً 2026-07-29",
+            "retrieved_at": "2026-07-29T10:41:03+00:00",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -1782,14 +1782,14 @@
             },
             "source": "UN Comtrade (مخزن الحقائق)",
             "confidence": 0.9,
-            "note": "HS080410 imports to ARE 2023; share 100.0% — من المخزن، جُلبت أصلاً 2026-07-28",
-            "retrieved_at": "2026-07-28T09:04:41+00:00",
+            "note": "HS080410 imports to ARE 2023; share 100.0% — من المخزن، جُلبت أصلاً 2026-07-29",
+            "retrieved_at": "2026-07-29T10:41:03+00:00",
             "status": "",
             "data_year": 2023,
             "source_ids": []
           }
         ],
-        "note": "Preliminary only; missing sources flagged, not estimated. تنبيه: قرار مبدئي والنواقص معلّمة لا مُخمّنة.",
+        "note": "تنبيه: قرار مبدئي والنواقص معلّمة لا مُخمّنة.",
         "synthesis_stage": 1
       },
       "recommendation": "United Arab Emirates: score=0.267 conf=0.75 (3/4 comps) [PRELIMINARY / INCONCLUSIVE] — preliminary.",
@@ -1798,7 +1798,7 @@
       ]
     }
   ],
-  "note": "نتيجة مبدئية مبنية على بيانات عامة حقيقية؛ النواقص معلّمة لا مُخمّنة. Preliminary, real public data only; gaps flagged, not estimated.",
+  "note": "نتيجة مبدئية مبنية على بيانات عامة حقيقية؛ النواقص معلّمة لا مُخمّنة.",
   "product_card_hint": "أضف بطاقة منتجك (product_card) للحصول على تحليل تنافسي مخصص — موقعك ضد منافسين مرصودين بالاسم",
   "data_economics": {
     "store_hits": 4,
@@ -1829,7 +1829,7 @@
       "hs_code": "080410",
       "origin": "SAU",
       "target_market": "China",
-      "date": "2026-07-28",
+      "date": "2026-07-29",
       "coverage_pct": 42.1
     },
     "product": "تمور",
@@ -1894,7 +1894,7 @@
             "value": 60000000.0,
             "source": "UN Comtrade",
             "confidence": 0.9,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "total imports HS080410 2023 (USD)",
             "status": ""
           },
@@ -1903,7 +1903,7 @@
             "value": 30.0,
             "source": "UN Comtrade",
             "confidence": 0.9,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "Saudi share 30.0%",
             "status": ""
           },
@@ -1912,7 +1912,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "no income data for CHN 2023",
             "status": ""
           },
@@ -1921,7 +1921,7 @@
             "value": 0.38,
             "source": "UN Comtrade",
             "confidence": 0.9,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "supplier HHI over 3 suppliers",
             "status": ""
           }
@@ -1979,7 +1979,7 @@
             2023
           ],
           "source": "UN Comtrade",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "note": "بيانات غير كافية لخط الاتجاه — 0/5 سنة مرصودة (insufficient data for a trend)"
         },
         "prices": [],
@@ -2010,8 +2010,8 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-            "retrieved_at": "2026-07-28",
+            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2020,8 +2020,8 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-            "retrieved_at": "2026-07-28",
+            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2030,8 +2030,8 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-            "retrieved_at": "2026-07-28",
+            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2041,7 +2041,7 @@
             "source": "World Bank",
             "confidence": 0.0,
             "note": "تقلب العملة يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)",
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2172,7 +2172,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2188,7 +2188,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2204,7 +2204,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2218,8 +2218,8 @@
               ],
               "rejected": [],
               "coverage": 0.6,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:04:58+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:20+00:00"
             },
             "competitor": {
               "agent": "competitor",
@@ -2236,7 +2236,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2252,7 +2252,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2268,7 +2268,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2303,7 +2303,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2316,8 +2316,8 @@
               ],
               "rejected": [],
               "coverage": 0.8,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:01+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:21+00:00"
             },
             "regulatory": {
               "agent": "regulatory",
@@ -2356,7 +2356,7 @@
                   "sources": [
                     {
                       "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.8,
                       "url": null
                     }
@@ -2372,7 +2372,7 @@
                   "sources": [
                     {
                       "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.8,
                       "url": null
                     }
@@ -2388,7 +2388,7 @@
                   "sources": [
                     {
                       "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.8,
                       "url": null
                     }
@@ -2401,8 +2401,8 @@
               ],
               "rejected": [],
               "coverage": 0.75,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:04:58+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:20+00:00"
             },
             "pricing": {
               "agent": "pricing",
@@ -2419,7 +2419,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2435,7 +2435,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.85,
                       "url": null
                     }
@@ -2450,8 +2450,8 @@
               ],
               "rejected": [],
               "coverage": 0.4,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:06+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:27+00:00"
             },
             "risk": {
               "agent": "risk",
@@ -2468,7 +2468,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -2477,15 +2477,15 @@
                 }
               ],
               "gaps": [
-                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
               ],
               "rejected": [],
               "coverage": 0.2,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:05+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:28+00:00"
             },
             "consumer_demand": {
               "agent": "consumer_demand",
@@ -2527,15 +2527,15 @@
                 }
               ],
               "gaps": [
-                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-                "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
+                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+                "population: SP.POP.TOTL fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for CHN/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=351&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))"
               ],
               "rejected": [],
               "coverage": 0.33,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:03+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:25+00:00"
             },
             "supplier": {
               "agent": "supplier",
@@ -2549,8 +2549,8 @@
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:04:58+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:20+00:00"
             },
             "logistics": {
               "agent": "logistics",
@@ -2559,16 +2559,16 @@
               "status": "failed",
               "findings": [],
               "gaps": [
-                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for CHN: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/CHN/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
                 "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
                 "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:06+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:27+00:00"
             }
           },
           "coverage": 0.39,
@@ -2657,7 +2657,7 @@
               "missing": [
                 "named_density"
               ],
-              "basis": "متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
+              "basis": "متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
             },
             "regulatory": {
               "value": 0.375,
@@ -2717,7 +2717,7 @@
           ],
           "conditions": [
             "عمود أمان السوق (المخاطر) غائب (political_stability, regulatory_quality, logistics, fx_stability) — أكمل مصادره قبل قرار نهائي",
-            "عمود شدة المنافسة ضعيف (37%) — متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)",
+            "عمود شدة المنافسة ضعيف (37%) — متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)",
             "عمود الملاءمة التنظيمية ضعيف (38%) — متوسط المتاح من: (1 − تعريفة/30%)، وضوح القائمة (بنود/8)"
           ],
           "first_steps": [
@@ -2777,7 +2777,7 @@
             "value": 20000000.0,
             "source": "UN Comtrade",
             "confidence": 0.9,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "total imports HS080410 2023 (USD)",
             "status": ""
           },
@@ -2786,7 +2786,7 @@
             "value": 100.0,
             "source": "UN Comtrade",
             "confidence": 0.9,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "Saudi share 100.0%",
             "status": ""
           },
@@ -2795,7 +2795,7 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "no income data for ARE 2023",
             "status": ""
           },
@@ -2804,7 +2804,7 @@
             "value": 1.0,
             "source": "UN Comtrade",
             "confidence": 0.9,
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "note": "supplier HHI over 1 suppliers",
             "status": ""
           }
@@ -2862,7 +2862,7 @@
             2023
           ],
           "source": "UN Comtrade",
-          "retrieved_at": "2026-07-28",
+          "retrieved_at": "2026-07-29",
           "note": "بيانات غير كافية لخط الاتجاه — 0/5 سنة مرصودة (insufficient data for a trend)"
         },
         "prices": [],
@@ -2881,8 +2881,8 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-            "retrieved_at": "2026-07-28",
+            "note": "الاستقرار السياسي (WGI) — PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2891,8 +2891,8 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-            "retrieved_at": "2026-07-28",
+            "note": "جودة التنظيم (WGI) — RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2901,8 +2901,8 @@
             "value": null,
             "source": "World Bank",
             "confidence": 0.0,
-            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-            "retrieved_at": "2026-07-28",
+            "note": "الأداء اللوجستي (LPI) — LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -2912,7 +2912,7 @@
             "source": "World Bank",
             "confidence": 0.0,
             "note": "تقلب العملة يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)",
-            "retrieved_at": "2026-07-28",
+            "retrieved_at": "2026-07-29",
             "status": "",
             "data_year": null,
             "source_ids": []
@@ -3043,7 +3043,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3059,7 +3059,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3075,7 +3075,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3089,8 +3089,8 @@
               ],
               "rejected": [],
               "coverage": 0.6,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:04:58+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:20+00:00"
             },
             "competitor": {
               "agent": "competitor",
@@ -3107,7 +3107,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3123,7 +3123,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3139,7 +3139,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3162,7 +3162,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3175,8 +3175,8 @@
               ],
               "rejected": [],
               "coverage": 0.8,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:03+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:26+00:00"
             },
             "regulatory": {
               "agent": "regulatory",
@@ -3243,7 +3243,7 @@
                   "sources": [
                     {
                       "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.7,
                       "url": null
                     }
@@ -3259,7 +3259,7 @@
                   "sources": [
                     {
                       "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.7,
                       "url": null
                     }
@@ -3275,7 +3275,7 @@
                   "sources": [
                     {
                       "source": "Silk L1 requirements reference (official portals / EUR-Lex)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.7,
                       "url": null
                     }
@@ -3291,7 +3291,7 @@
                   "sources": [
                     {
                       "source": "GCC secretariat",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.75,
                       "url": null
                     }
@@ -3302,8 +3302,8 @@
               "gaps": [],
               "rejected": [],
               "coverage": 1.0,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:04:58+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:20+00:00"
             },
             "pricing": {
               "agent": "pricing",
@@ -3320,7 +3320,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3336,7 +3336,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade (مخزن الحقائق)",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.85,
                       "url": null
                     }
@@ -3351,8 +3351,8 @@
               ],
               "rejected": [],
               "coverage": 0.4,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:05+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:28+00:00"
             },
             "risk": {
               "agent": "risk",
@@ -3369,7 +3369,7 @@
                   "sources": [
                     {
                       "source": "UN Comtrade",
-                      "retrieved_at": "2026-07-28",
+                      "retrieved_at": "2026-07-29",
                       "confidence": 0.9,
                       "url": null
                     }
@@ -3378,15 +3378,15 @@
                 }
               ],
               "gaps": [
-                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "political_stability_wgi: الاستقرار السياسي (WGI) غير متاح (مخزن بارد + PV.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/PV.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "regulatory_quality_wgi: جودة التنظيم (WGI) غير متاح (مخزن بارد + RQ.EST fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/RQ.EST?format=json&per_page=100&source=3 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "logistics_lpi: الأداء اللوجستي (LPI) غير متاح (مخزن بارد + LP.LPI.OVRL.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.OVRL.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "fx_volatility_pct: يتطلب سلسلة PA.NUS.FCRF (٣+ سنوات) — شغّل جامع worldbank (tools/refresh.py)"
               ],
               "rejected": [],
               "coverage": 0.2,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:05+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:28+00:00"
             },
             "consumer_demand": {
               "agent": "consumer_demand",
@@ -3428,15 +3428,15 @@
                 }
               ],
               "gaps": [
-                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-                "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))",
-                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
-                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\")))"
+                "gdp_per_capita_usd: NY.GDP.PCAP.CD fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/NY.GDP.PCAP.CD?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+                "population: SP.POP.TOTL fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/SP.POP.TOTL?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))",
+                "percapita_supply_kg: FAOSTAT unavailable: fetch failed for ARE/تمور: HTTPSConnectionPool(host='faostatservices.fao.org', port=443): Max retries exceeded with url: /api/v1/en/data/FBS?area=225&element=645&show_codes=true&show_unit=true&output_type=objects&year=2023 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))) (may require auth)",
+                "search_interest: pytrends unavailable / no network: HTTPSConnectionPool(host='trends.google.com', port=443): Max retries exceeded with url: /trends/explore/?geo=US (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\")))"
               ],
               "rejected": [],
               "coverage": 0.33,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:03+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:26+00:00"
             },
             "supplier": {
               "agent": "supplier",
@@ -3450,8 +3450,8 @@
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:04:58+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:20+00:00"
             },
             "logistics": {
               "agent": "logistics",
@@ -3460,16 +3460,16 @@
               "status": "failed",
               "findings": [],
               "gaps": [
-                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
-                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=39889): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_timeliness: توقيت وصول الشحنات (LPI) غير متاح (مخزن بارد + LP.LPI.TIME.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.TIME.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
+                "lpi_intl_shipments: سهولة ترتيب شحنات دولية تنافسية (LPI) غير متاح (مخزن بارد + LP.LPI.ITRN.XQ fetch failed for ARE: HTTPSConnectionPool(host='api.worldbank.org', port=443): Max retries exceeded with url: /v2/country/ARE/indicator/LP.LPI.ITRN.XQ?format=json&per_page=100 (Caused by ProxyError('Unable to connect to proxy', NewConnectionError(\"HTTPSConnection(host='127.0.0.1', port=35263): Failed to establish a new connection: network disabled for sample generation\"))))",
                 "lead_time_days: زمن امتثال الحدود (IC.IMP.TMBC) غير متاح — شغّل جامع worldbank (tools/refresh.py)",
                 "freight_cost_usd_kg: سعر الشحن الفعلي $/كغ يتطلب سجلاتِ شحنٍ حقيقية (Volza/Explee عبر /deepen) — لا يُقدَّر بلا مصدر",
                 "landed_cost_usd_kg: التكلفة حتى الوصول = سعر الحدود + الشحن؛ تُحسب بعد رصد الشحن (الطبقة المدفوعة) وبطاقة المنتج"
               ],
               "rejected": [],
               "coverage": 0.0,
-              "started_at": "2026-07-28T09:04:58+00:00",
-              "finished_at": "2026-07-28T09:05:06+00:00"
+              "started_at": "2026-07-29T10:41:20+00:00",
+              "finished_at": "2026-07-29T10:41:28+00:00"
             }
           },
           "coverage": 0.42,
@@ -3558,7 +3558,7 @@
               "missing": [
                 "named_density"
               ],
-              "basis": "متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
+              "basis": "متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
             },
             "regulatory": {
               "value": 0.938,
@@ -3616,7 +3616,7 @@
           ],
           "conditions": [
             "عمود أمان السوق (المخاطر) غائب (political_stability, regulatory_quality, logistics, fx_stability) — أكمل مصادره قبل قرار نهائي",
-            "عمود شدة المنافسة ضعيف (0%) — متوسط المتاح من: HHI/0.5، حصة الأكبر/100، عدد المرشّحين بالاسم/10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
+            "عمود شدة المنافسة ضعيف (0%) — متوسط المتاح من: HHI مقسوماً على 0.5، وحصة المورّد الأكبر مقسومةً على 100، وعدد المرشّحين بالاسم مقسوماً على 10 — الدرجة المستهلكة في المجموع هي (1 − الشدة)"
           ],
           "first_steps": [
             "سوق مركّز: ادخل عبر موزّع قائم من مرشّحي التوريد المرصودين بدل البناء المباشر"

@@ -259,8 +259,8 @@ def analyze(product_name: str, countries: list[dict] | None = None,
         "year_fell_back": result_year_fell_back,
         "preliminary": True, "classified": True,
         "markets": ranked,
-        "note": "نتيجة مبدئية مبنية على بيانات عامة حقيقية؛ النواقص معلّمة لا مُخمّنة. "
-                "Preliminary, real public data only; gaps flagged, not estimated."
+        # PR B §B8: عربيّ فقط — النصفُ الإنجليزيّ داخليٌّ كان يُسرَّب للعميل.
+        "note": "نتيجة مبدئية مبنية على بيانات عامة حقيقية؛ النواقص معلّمة لا مُخمّنة."
                 + (f" · اعتُمدت بيانات {data_year} (أحدث سنة منشورة؛ {year} لم "
                    "تُنشر بعد)" if result_year_fell_back else ""),
     }

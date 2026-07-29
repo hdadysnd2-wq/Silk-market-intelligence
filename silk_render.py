@@ -1389,6 +1389,29 @@ def _fix_stray_percent_punctuation(text: str) -> str:
     return _STRAY_PERCENT_RE.sub(r"\1%.", text)
 
 
+# PR B §B9 (بلاغ تحليل ٧): HHI يُعرَض «7743.7» بدقّة عشرية مختلَقة رغم أن
+# المقياس (0-10000 بعد الضرب) رقمٌ صحيح. القيمةُ المخزَّنة صحيحةٌ (نسبة 0.774
+# أو عدد صحيح 7743)، لكنّ الكاتب يُعيد اشتقاقها من حصص المورّدين الخام فيُنتِج
+# عشريةً وهميّة. حارس البوابة `hhi_false_precision` كان يرصدها بلا إصلاح؛ هذا
+# مُصلِحُ عرضٍ حتميّ يقرّبها إلى صحيحٍ قبل وصول النص، فتُصبح النتيجةُ قابلةً
+# للإصلاح فعلاً (نفس نمط `_fix_price_column_currency_label`).
+_HHI_DECIMAL_FIX_RE = re.compile(r"(HHI[^0-9\n]{0,10})(\d{3,5}\.\d+)")
+
+
+def _fix_hhi_false_precision(text: str) -> str:
+    """قرِّب أيّ «HHI … NNNN.d» إلى عددٍ صحيح (المقياس 0-10000 لا يحمل عشرية)."""
+    if not text:
+        return text
+
+    def _round(m: "re.Match") -> str:
+        try:
+            return m.group(1) + str(round(float(m.group(2))))
+        except ValueError:
+            return m.group(0)
+
+    return _HHI_DECIMAL_FIX_RE.sub(_round, text)
+
+
 # §D-1 (حزمة الفكس v2.1) — «CAGR (متوسط النمو السنوي المركب) — معدل نمو
 # سنوي مركب»: الفحص القديم اكتفى بحرف "(" الفوري، ففاته شرح الكاتب بشرطة
 # ("CAGR — معدل نمو سنوي مركب") فحقن تعريفاً ثانياً مكرَّراً بالمعنى فوراً.
@@ -1881,6 +1904,8 @@ def _deep_research_view(result: dict) -> dict | None:
     # البند ٥ (تدقيق «تحليل #1» DZA): عنوِن عمود السعر بالعملة المرصودة
     # فعلاً قبل التخزين في النموذج القانوني — راجع تعليق الدالة أعلاه.
     _report_text_glossed = _fix_price_column_currency_label(_report_text_glossed)
+    # PR B §B9: قرِّب دقّةَ HHI العشرية الوهميّة إلى صحيح قبل التخزين/العرض.
+    _report_text_glossed = _fix_hhi_false_precision(_report_text_glossed)
     # القاعدة العامة (قرار المالك): سنوات الحقائق المتقادِمة تُحسَب من **مصدرها
     # البنيوي** (silk_staleness) لا من النثر، فتُوسَم أينما وردت بأيّ صياغة، ولا
     # يُوسَم رمزُ HS. ثم تحقّقٌ: أيّ سنة حقيقة متقادِمة بلا وسمٍ في السرد
