@@ -1304,6 +1304,12 @@ def _verdict_tone(vtxt: object) -> str:
     # إلى unknown. فشلُ نداءٍ واحد يُنقِص التغطية؛ لا يمحو الحكم.
     if "INCONCLUSIVE" in t:
         return "inconclusive"
+    # PR A §A2 (بلاغ تحليل ٧): «PRELIMINARY GO» نغمةٌ مستقلّة لا تنهار إلى go —
+    # وإلا عرض الغلاف «التوصية بالدخول» بينما الكاتب (verdict_ar) استلم «توصية
+    # أولية بالدخول»، فتناقضت الصفحة الأولى مع المتن. قرار المالك: «توصية
+    # أولية بالدخول» على كل سطح. تُفحَص قبل فرع «GO» المجرّد (الرمز يحوي GO).
+    if "PRELIMINARY" in t and "GO" in t and "NO-GO" not in t and "NO GO" not in t:
+        return "preliminary"
     if "CONDITIONAL" in t:
         return "conditional"
     if "WATCH" in t:
@@ -1325,6 +1331,10 @@ def _verdict_tone(vtxt: object) -> str:
         return "inconclusive"
     if "مشروط" in s:
         return "conditional"
+    # PR A §A2: تسميةُ «توصية أولية بالدخول» العربية مباشرةً (مسارٌ يضع التسمية
+    # بدل الرمز) — تُصنَّف preliminary لا go، فلا تنهار «أولية» فيتناقض الغلاف.
+    if "أولية" in s and ("دخول" in s):
+        return "preliminary"
     if "مراقبة" in s:
         return "watch"
     # مراجعة الشيفرة: «دخول» المجرّدة بلا سياق نفي تُصنَّف go افتراضياً —
@@ -1342,6 +1352,9 @@ def _verdict_tone(vtxt: object) -> str:
 # (المترجم القانوني الواحد): conditional=«دخول مشروط» تحديداً، لا «مراقبة
 # السوق» (بلاغ مراجعة المالك: الشارة كانت تخالف المتن).
 _VERDICT_LABELS_AR = {"go": "التوصية بالدخول", "conditional": "دخول مشروط",
+                      # PR A §A2: حكمٌ إيجابيٌّ مبدئيّ بتغطيةٍ ناقصة — تسميةٌ
+                      # مستقلّة يتّفق عليها الغلاف والكاتب (قرار المالك).
+                      "preliminary": "توصية أولية بالدخول",
                       "watch": "مراقبة السوق", "nogo": "عدم الدخول حالياً",
                       # حكمٌ حتميٌّ صادر بتغطيةٍ ناقصة — ليس غيابَ حكم.
                       "inconclusive": "نتيجة مبدئية — غير محسومة",
@@ -1816,7 +1829,8 @@ def _deep_research_view(result: dict) -> dict | None:
     # 4.1)، وثقة الحكم تُسقَف (1.3)، وHHI يخرج من مدخلات تسجيل الحكم (3.2).
     # العقد يُحسَب مرة إن غاب من المدوّنة (نتائج مخزّنة قديمة) — لا اختلاق:
     # confirmed=None (غير قابل للتأكيد) لا يُعامَل تعليماً.
-    from silk_hs_confirm import confirm_hs, is_flagged, CONTEXTUAL_TAG
+    from silk_hs_confirm import (confirm_hs, is_flagged, CONTEXTUAL_TAG,
+                                 cap_confidence_for_flagged_hs)
     hs_conf = result.get("hs_confirmation")
     if not isinstance(hs_conf, dict) and result.get("hs_code"):
         try:
@@ -1826,18 +1840,10 @@ def _deep_research_view(result: dict) -> dict | None:
             hs_conf = None
     hs_flagged = is_flagged(hs_conf)
     if hs_flagged:
-        # سقف ثقة الحكم عند تعليم الرمز — config-driven، لا يرفع ثقة قط.
-        try:
-            _cap = float(os.environ.get("SILK_HS_FLAGGED_CONF_CAP", "0.5"))
-        except (TypeError, ValueError):
-            _cap = 0.5
-        _c = verdict.get("confidence")
-        if isinstance(_c, (int, float)) and _c > _cap:
-            verdict = {**verdict, "confidence": _cap}
-        _ai = verdict.get("ai")
-        if isinstance(_ai, dict) and isinstance(_ai.get("confidence"), (int, float)) \
-                and _ai["confidence"] > _cap:
-            verdict = {**verdict, "ai": {**_ai, "confidence": _cap}}
+        # PR A §A1: نفس المُسقِّف الواحد المستعمَل قبل الكاتب (المسار الرئيسي +
+        # إعادة التوليد) — idempotent هنا: لو مرّ الكاتب على قيمةٍ مسقوفة أصلاً
+        # لم يتغيّر شيء، وإلا سُقِّف الغلاف كما كان. لا نسخة سقفٍ محلّية تتباعد.
+        verdict = cap_confidence_for_flagged_hs(verdict, hs_conf)
         # ملاحظة منهجية واحدة (4.1) — تُضاف مرة واحدة إلى الحدود، لا في كل قسم.
         _missing = "، ".join((hs_conf or {}).get("missing_terms") or [])
         limits.insert(0, f"{CONTEXTUAL_TAG}: رمز HS {hs_conf.get('hs_code')} "

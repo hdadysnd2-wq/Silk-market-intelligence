@@ -66,6 +66,46 @@ def _check_raw_confidence(text: str) -> list[dict]:
     return []
 
 
+# PR A §A1 (بلاغ تحليل ٧): تعارض قيمة الثقة — الملخّص «ثقة منخفضة (50%)»
+# والقسم ٤ «الثقة متوسطة (73%)». رقمٌ واحد (`verdict["confidence"]`) سُقِّف في
+# طبقة العرض (سقف رمز HS المُعلَّم) **بعد** أن جمّد الكاتب النسخة غير المسقوفة
+# في المتن. الفكس الجذري تمريرُ القيمة المسقوفة نفسها للكاتب؛ هذه بوابة حتمية
+# تُفشِل حين تفلت نسبتا ثقة مختلفتان إلى المتن — تلتقط نسب الثقة حصراً (شكل
+# «عالية/متوسطة/منخفضة (NN%)» أو نسبة تجاور لفظَ ثقة)، لا نسب الحصص/النمو.
+# الشكل ١: تسمية نطاقٍ + نسبة («منخفضة (50%)») — مخرَج `confidence_phrase`
+# القياسيّ، يغطّي كلّ عرضٍ مشروع للثقة. الشكل ٢: لفظُ ثقةٍ **ملاصقٌ** للنسبة
+# («درجة الثقة 73%») — نافذةٌ ضيّقة (فاصل/قوس فقط) كي لا تُلتقَط نسبةُ حصّة/
+# نموٍّ تصادف قربَ كلمة «ثقة» في جملةٍ أخرى (إيجابٌ كاذب).
+_CONF_PCT_RES = [
+    re.compile(r"(?:عالية|متوسطة|منخفضة)\s*\(\s*(\d{1,3})\s*%\s*\)"),
+    re.compile(r"(?:درجة\s+الثقة|الثقة|بثقة|ثقة)\s*[:(]?\s*(\d{1,3})\s*%"),
+]
+
+
+def _check_confidence_value_conflict(text: str) -> list[dict]:
+    """PR A §A1 — نسبتا ثقة مختلفتان في التقرير نفسه = تعارض حاجب. الثقة
+    قيمةٌ واحدة تُشتقّ من مصدر واحد (`silk_narrative.confidence_phrase` فوق
+    `verdict["confidence"]` المسقوفة)؛ ظهور رقمين مختلفين يعني أن الكاتب حمل
+    نسخةً غير مسقوفة بينما سقّفت طبقة العرض الغلاف — يجب توحيدهما قبل التسليم."""
+    if not text:
+        return []
+    pcts: set[int] = set()
+    for rex in _CONF_PCT_RES:
+        for m in rex.finditer(text):
+            try:
+                pcts.add(int(m.group(1)))
+            except ValueError:
+                continue
+    if len(pcts) >= 2:
+        shown = "، ".join(f"{p}%" for p in sorted(pcts))
+        return [{"check": "confidence_value_conflict", "repairable": False,
+                 "note": (f"نسبتا ثقة مختلفتان في التقرير ({shown}) — درجة "
+                          "الثقة قيمةٌ واحدة من مصدر واحد؛ التعارض يعني أن "
+                          "الكاتب حمل نسخة غير مسقوفة بينما سُقِّف الغلاف. "
+                          "وحِّد الثقة من مصدرها الواحد قبل التسليم")}]
+    return []
+
+
 def _check_mid_word_truncation(text: str) -> list[dict]:
     """تقطيع منتصف كلمة — آخر سطر في كل **فقرة** (كتلة أسطر متتالية بين
     سطرين فارغين) ينتهي بحرف/رقم بلا علامة ترقيم ختامية، مع طول كافٍ
@@ -447,6 +487,53 @@ def _check_recommendation_tier_label_consistency(dr: dict) -> list[dict]:
             "note": "الحكم القانوني الحالي «دخول مشروط» لكن المتن يذكر "
                    "تسمية درجة أعلى «التوصية بالدخول» — صف الترقية كشرطٍ "
                    "مستقبلي («يتحول إلى X إذا تحقق كذا») لا حكماً حالياً"}]
+    return []
+
+
+# PR A §A2 (بلاغ تحليل ٧): تعارض تسمية الحكم — الغلاف/§5 «التوصية بالدخول»
+# بينما §4 «توصية أولية بالدخول» تُعامَل حالةً مستقبلية. سلّم التسميات مُوحَّد
+# الآن (`silk_render._VERDICT_LABELS_AR`، نغمة `preliminary` مستقلة يتّفق
+# عليها الكاتب والغلاف)؛ هذه بوابة انحدار: تسميتا حكمٍ حاسمتان مختلفتان
+# مذكورتان **إثباتاً** (لا كشرط قلبٍ مستقبليّ) في نفس المتن = تعارض حاجب.
+# جذرُ «تحوّل» يلتقط كل تصريفاته (يتحوّل/تتحوّل/التحوّل) — البلاغ الحيّ في
+# نموذج إسبانيا كان «تتحوّل … إلى التوصية بالدخول» (مؤنّث) فأفلت من «يتحول».
+_VERDICT_FLIP_MARKER_RE = re.compile(
+    r"تحوّل|تحول|إذا|إن\s|لو\s|بشرط|شرط|حين|متى|سيناريو|في\s+حال|احتمال")
+
+
+def _check_verdict_label_conflict(dr: dict) -> list[dict]:
+    """PR A §A2 — تسميتا حكمٍ حاسمتان مختلفتان مذكورتان إثباتاً في المتن.
+    كلّ تسمية يسبقها ضمن نافذة قصيرة مؤشّرُ شرطٍ مستقبليّ («يتحوّل إلى…
+    إذا…») تُستثنى (شرط قلبٍ مشروع لا تعارض). ≥٢ تسمية حاسمة مؤكَّدة معاً =
+    التقرير يعرض حكمين — يجب حكمٌ واحد من مصدر واحد."""
+    text = ((dr.get("report") or {}).get("text") or "")
+    if not text:
+        return []
+    from silk_render import _VERDICT_LABELS_AR
+    # التسميات الحاسمة فقط (لا «تعذّر إصدار توصية»/«غير محسومة» — قد تتعايش
+    # مع تسميةٍ حاسمة كإعلان تغطيةٍ ناقصة لا كحكمٍ ثانٍ متعارض).
+    decisive = {_VERDICT_LABELS_AR[k] for k in
+                ("go", "preliminary", "conditional", "watch", "nogo")
+                if k in _VERDICT_LABELS_AR}
+    asserted: set[str] = set()
+    for label in decisive:
+        start = 0
+        while True:
+            idx = text.find(label, start)
+            if idx < 0:
+                break
+            start = idx + len(label)
+            pre = text[max(0, idx - 45):idx]
+            if _VERDICT_FLIP_MARKER_RE.search(pre):
+                continue   # شرط قلبٍ مستقبليّ صريح — لا إثبات
+            asserted.add(label)
+    if len(asserted) >= 2:
+        shown = "» و«".join(sorted(asserted))
+        return [{"check": "verdict_label_conflict", "repairable": False,
+                 "note": (f"تسميتا حكمٍ حاسمتان متعارضتان مذكورتان إثباتاً: "
+                          f"«{shown}» — التقرير يعرض حكمين بينما الحكم قيمةٌ "
+                          "واحدة من مصدر واحد؛ أيّ ترقية/بديل يُصاغ شرطاً "
+                          "مستقبلياً صريحاً، لا حكماً حالياً موازياً")}]
     return []
 
 
@@ -1007,6 +1094,50 @@ def _check_evidence_body_numeric_consistency(dr: dict) -> list[dict]:
     return findings
 
 
+# PR A §A3 (بلاغ تحليل ٧): TAM أصغر من تدفّق دولة واحدة — §3.1 يضع TAM =
+# 2.09M بينما يذكر تدفّق السعودية وحدها 22.14M لنفس السوق/السنة. TAM (إجمالي
+# واردات السوق) يجب أن يكون ≥ تدفّق أيّ دولةٍ واحدة إليه تعريفاً؛ تدفّقٌ مفردٌ
+# يتجاوز TAM المذكورة = تعارضٌ منطقيّ (تباين منظور استيراد↔تصدير المرآة، أو
+# رمز HS ضيّق) — تعارضٌ حاجب يجب تفسيره/تصحيحه قبل التسليم. فحصٌ نصّيّ (يعمل
+# على تقريرٍ مخزَّن/مُعاد التوليد) لا يعتمد على شكل حقلٍ بعينه.
+_TAM_MARKER_RE = re.compile(
+    r"TAM|إجمالي\s+(?:ال)?واردات|حجم\s+السوق|السوق\s+الكلّ?ي|الطلب\s+الكلّ?ي")
+_FLOW_VERB_RE = re.compile(r"صادرات|تصدير|يصدّر|تصدّر|تدفّق|واردات\s+من")
+_SINGLE_COUNTRY_RE = re.compile(
+    r"وحده|وحدها|دولة\s+واحدة|مورّد\s+واحد|شريك\s+واحد|السعودية|سعودي")
+
+
+def _check_tam_below_single_country_flow(dr: dict) -> list[dict]:
+    """PR A §A3 — TAM مذكورة أصغر من تدفّق دولةٍ واحدة مذكور لنفس السوق."""
+    text = ((dr.get("report") or {}).get("text") or "")
+    if not text:
+        return []
+    tam_amounts: list[float] = []
+    flow_amounts: list[float] = []
+    for pm in _USD_AMOUNT_RE.finditer(text):
+        amt = _usd_amount_to_float(pm.group(1), pm.group(2) or "")
+        if amt is None or amt <= 0:
+            continue
+        ctx = text[max(0, pm.start() - 70):pm.end() + 70]
+        if _TAM_MARKER_RE.search(ctx):
+            tam_amounts.append(amt)
+        elif _FLOW_VERB_RE.search(ctx) and _SINGLE_COUNTRY_RE.search(ctx):
+            flow_amounts.append(amt)
+    if not tam_amounts or not flow_amounts:
+        return []
+    tam = min(tam_amounts)                 # أصغر إجماليٍّ مذكور (الأكثر تحفّظاً)
+    worst = max(f for f in flow_amounts if f > tam) if any(
+        f > tam for f in flow_amounts) else None
+    if worst is None:
+        return []
+    return [{"check": "tam_below_single_country_flow", "repairable": False,
+             "note": (f"إجمالي واردات السوق المذكور (TAM ≈ {tam:,.0f}$) أصغر "
+                      f"من تدفّق دولةٍ واحدة مذكور لنفس السوق ({worst:,.0f}$) "
+                      "— مستحيلٌ منطقياً (تدفّق دولةٍ واحدة ≤ إجمالي الواردات "
+                      "دائماً). راجع منظور المصدر (استيراد↔مرآة تصدير) وصحّة "
+                      "رمز HS، وفسّر التباين صراحةً أو صحّحه قبل التسليم")}]
+
+
 # Master Prompt Part 2 §D — تغطية المصادر: كل مؤشرٍ يحمل مصدراً مسمّى
 # حقيقياً أو وسم «تقدير استرشادي» صريح؛ عتبة القبول ≥٨٥٪. دون العتبة =
 # ضيّق نطاق التقرير وأعلن الفجوة، لا تشحن مؤشرات بلا مصدر (البند ٩).
@@ -1098,6 +1229,28 @@ def run_client_artifact_text_gate(text: str) -> list[dict]:
     return findings
 
 
+# البنود غير القابلة للإصلاح التي تُفشِل الحكم (FAIL لا WARN) — ثابتٌ واحد
+# على مستوى الوحدة كي تُثبِّته الاختبارات وتُضاف إليه البوابات الجديدة بلا
+# نسخٍ للمنطق داخل `run_quality_gate`. (البنود القابلة للإصلاح التي أفلتت
+# فعلاً تُفشِل عبر `_REGRESSION_GUARD_FIRED` — مسارٌ منفصل.)
+FAIL_TRIGGER_CHECKS = frozenset({
+    "section_structure", "agent_failed", "analyst_layer_failed",
+    "evidence_body_numeric_contradiction", "source_coverage_below_threshold",
+    # §B (حزمة الفكس v2.1): بتر/إحالة معلَّقة/قسم عميل بلا محتوى فعلي.
+    "orphan_short_token", "dangling_cross_reference",
+    "client_section_placeholder",
+    # WP-1 §4: تسمية نطاق ثقة لا تطابق رقمها = خطأ يصل وجه التقرير.
+    "confidence_band_mismatch",
+    # WP-2 §6: سقالة «إذن ماذا»/نصّ نائب تقني/بتر «…» غير اقتباسي.
+    "client_scaffold_leak", "placeholder_leak", "trailing_ellipsis",
+    # WP-4 §3: ختامٌ ينفي الفجوات بينما المتن يعلنها.
+    "gaps_closing_contradiction",
+    # PR A (بلاغ تحليل ٧): تعارض ثقة/تسمية حكم، وTAM أصغر من تدفّق دولة واحدة.
+    "confidence_value_conflict", "verdict_label_conflict",
+    "tam_below_single_country_flow",
+})
+
+
 def run_quality_gate(view: dict) -> dict:
     """شغّل بوابة الجودة على `view["deep_research"]` — يعيد
     {"verdict": PASS|WARN|FAIL, "findings": [...], "methodology_notes": [...]}.
@@ -1151,31 +1304,18 @@ def run_quality_gate(view: dict) -> dict:
     findings += _check_agent_health(dr)
     findings += _check_audit_coverage(dr)
     findings += _check_analyst_layer_failure(dr)
+    # PR A (بلاغ تحليل ٧) — ثلاث بوابات حاجبة جديدة: تعارض قيمة الثقة (§A1)،
+    # تعارض تسمية الحكم (§A2)، وTAM أصغر من تدفّق دولة واحدة (§A3).
+    findings += _check_confidence_value_conflict(text)
+    findings += _check_verdict_label_conflict(dr)
+    findings += _check_tam_below_single_country_flow(dr)
 
     non_repairable = [f for f in findings if not f["repairable"]]
     guard_fired = [f for f in findings if f["check"] in _REGRESSION_GUARD_FIRED]
     severe = non_repairable + guard_fired
     if not findings:
         verdict = PASS
-    elif any(f["check"] in ("section_structure", "agent_failed",
-                            "analyst_layer_failed",
-                            "evidence_body_numeric_contradiction",
-                            "source_coverage_below_threshold",
-                            # §B (حزمة الفكس v2.1): بتر/إحالة معلَّقة/قسم
-                            # عميل بلا محتوى فعلي — كل هذه تصل العميل
-                            # كأخطاء بنيوية، لا ملاحظات أسلوبية.
-                            "orphan_short_token", "dangling_cross_reference",
-                            "client_section_placeholder",
-                            # WP-1 §4: تسمية نطاق ثقة لا تطابق رقمها = خطأ
-                            # يصل وجه التقرير — FAIL لا تحذير.
-                            "confidence_band_mismatch",
-                            # WP-2 §6: سقالة «إذن ماذا»/نصّ نائب تقني/بتر
-                            # «…» غير اقتباسي — كلها وصلت عملاء فعلاً.
-                            "client_scaffold_leak", "placeholder_leak",
-                            "trailing_ellipsis",
-                            # WP-4 §3: ختامٌ ينفي الفجوات بينما المتن يعلنها.
-                            "gaps_closing_contradiction")
-            for f in non_repairable) \
+    elif any(f["check"] in FAIL_TRIGGER_CHECKS for f in non_repairable) \
             or guard_fired:
         verdict = FAIL
     else:

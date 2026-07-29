@@ -386,6 +386,41 @@ def is_flagged(confirmation: object) -> bool:
     return isinstance(confirmation, dict) and confirmation.get("confirmed") is False
 
 
+def flagged_conf_cap() -> float:
+    """سقفُ ثقةِ الحكم عند تعليم رمز HS — `SILK_HS_FLAGGED_CONF_CAP` (0.5)."""
+    try:
+        return float(os.environ.get("SILK_HS_FLAGGED_CONF_CAP", "0.5"))
+    except (TypeError, ValueError):
+        return 0.5
+
+
+def cap_confidence_for_flagged_hs(verdict: "dict | None",
+                                  confirmation: object) -> "dict | None":
+    """PR A §A1 (بلاغ تحليل ٧): مصدرٌ واحدٌ لثقةٍ مسقوفة عند تعليم الرمز.
+
+    كان السقف يُطبَّق في طبقة العرض وحدها (`silk_render._deep_research_view`)
+    **بعد** أن جمّد الكاتب النسخة غير المسقوفة (0.73) في المتن — فظهر الغلاف
+    «ثقة منخفضة (50%)» بينما §4 «الثقة متوسطة (73%)». الحلّ تمريرُ القيمة
+    المسقوفة نفسها للكاتب: هذا المُسقِّف الواحد يُستدعى قبل الكاتب (المسار
+    الرئيسي + إعادة التوليد) **و** في طبقة العرض (فيبقى idempotent). ينغّم إلى
+    الأدنى فقط ولا يرفع ثقةً قط؛ رمزٌ مؤكَّد/غير قابلٍ للتأكيد (None) لا يُسقَّف
+    (عقد عدم الاختلاق: لا نُطأطئ ثقةً على مجهول). يعيد القاموس كما هو إن لم
+    ينطبق شيء (لا نسخة زائدة)."""
+    if not isinstance(verdict, dict) or not is_flagged(confirmation):
+        return verdict
+    cap = flagged_conf_cap()
+    out = verdict
+    c = out.get("confidence")
+    if isinstance(c, (int, float)) and not isinstance(c, bool) and c > cap:
+        out = {**out, "confidence": cap}
+    ai = out.get("ai")
+    if isinstance(ai, dict) and isinstance(ai.get("confidence"), (int, float)) \
+            and not isinstance(ai.get("confidence"), bool) \
+            and ai["confidence"] > cap:
+        out = {**out, "ai": {**ai, "confidence": cap}}
+    return out
+
+
 def deterministic_candidates(product: str, top_n: int = 3,
                              path: str = "data/hs_codes.csv") -> list[dict]:
     """مرشّحو الرمز من البذرة الحتميّة — بلا نداء كلود وبلا شبكة وبلا تكلفة.

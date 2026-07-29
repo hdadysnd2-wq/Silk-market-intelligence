@@ -234,7 +234,9 @@ def test_research_docx_leads_with_exec_summary_and_synthesis_verdict(
     assert heads[toc_idx + 1] == "١. الخلاصة التنفيذية"
     text = docx_all_text(path)
     exec_idx = text.find("١. الخلاصة التنفيذية")
-    exec_section = text[exec_idx:exec_idx + 400]
+    # PR A §A2: الحكم المعتمد «توصية أولية بالدخول» (أطول من «التوصية بالدخول»
+    # السابقة) دفع سطر القراءة الاستشارية «مراقبة السوق» أبعد — نافذةٌ أوسع.
+    exec_section = text[exec_idx:exec_idx + 600]
     # الحكم يصل مُعرَّباً بالكامل — لا رمز آلة WATCH خام على وجه العميل
     # (سدّ تسريب: نفس تصنيف الشارة عبر _VERDICT_LABELS_AR/_verdict_tone).
     assert "مراقبة السوق" in exec_section

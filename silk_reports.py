@@ -708,10 +708,14 @@ def _add_page_header_footer(doc, title: str) -> None:
 
 # لون شارة الحكم بالـtone — conditional (دخول مشروط) لون مستقل (أخضر مزرقّ)
 # يميّزه عن go الأخضر وwatch الكهرماني (بلاغ مراجعة المالك على النموذج).
+# PR A §A2: نغمة «preliminary» (توصية أولية بالدخول) — أخضرُ زيتونيّ يميّزها
+# عن go الأخضر الصريح، إشارةً بصريةً إلى «إيجابيٌّ لكن مبدئيّ» (تغطية ناقصة).
 _VERDICT_TEXT_COLORS = {"go": (0x1E, 0x7D, 0x32), "conditional": (0x00, 0x69, 0x5C),
+                        "preliminary": (0x55, 0x6B, 0x2F),
                         "watch": (0xB8, 0x86, 0x0B),
                         "nogo": (0xC0, 0x00, 0x00), "unknown": (0x60, 0x60, 0x60)}
 _VERDICT_HIGHLIGHTS = {"go": "BRIGHT_GREEN", "conditional": "TEAL",
+                       "preliminary": "BRIGHT_GREEN",
                        "watch": "YELLOW", "nogo": "RED"}
 
 

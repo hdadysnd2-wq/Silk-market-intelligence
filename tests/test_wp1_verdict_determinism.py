@@ -271,12 +271,10 @@ def test_gate_flags_band_mismatch_as_fail_class():
     findings = G._check_confidence_band_label("الحكم بثقة عالية (68%).")
     assert findings and findings[0]["check"] == "confidence_band_mismatch"
     assert findings[0]["repairable"] is False
-    src = open(os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "silk_quality_gate.py"),
-        encoding="utf-8").read()
-    fail_block = src.split('if any(f["check"] in (')[1].split(
-        'for f in non_repairable')[0]
-    assert '"confidence_band_mismatch"' in fail_block
+    # PR A: فئاتُ FAIL صارت ثابتاً واحداً على مستوى الوحدة
+    # (`FAIL_TRIGGER_CHECKS`) بدل صفٍّ حرفيٍّ داخل `run_quality_gate` — نفس
+    # النيّة، تحقّقٌ بنيويّ لا تحليلُ نصٍّ هشّ.
+    assert "confidence_band_mismatch" in G.FAIL_TRIGGER_CHECKS
 
 
 # ── ٤) ثلاث عمليات عرض متتالية = مخرجات متطابقة بايتاً ──────────────────────
