@@ -815,7 +815,12 @@ def _check_analyst_layer_failure(dr: dict) -> list[dict]:
     return []
 
 
-_AUDIT_APPENDIX_CAP = 80
+# سقف صفوف الملحق التقني — ثابت واحد مشترك مع المصدِّر
+# (`silk_reports._docx_technical_appendix`) كي لا ينحرف حجم الجدول المُسلَّم
+# عن رسالة البوابة. رُفع 80 ← 150 (بلاغ حي Nadec/اليمن: 102 استشهاداً
+# قُصّت إلى 80 فظهر بلاغ `audit_coverage` على كل تصدير).
+AUDIT_APPENDIX_CAP = 150
+_AUDIT_APPENDIX_CAP = AUDIT_APPENDIX_CAP   # الاسم القديم — توافق داخلي
 
 
 def _check_audit_coverage(dr: dict) -> list[dict]:

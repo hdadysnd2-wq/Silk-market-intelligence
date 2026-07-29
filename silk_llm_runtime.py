@@ -253,7 +253,9 @@ def _tool_comtrade_competitors(args: dict, ctx: dict) -> list[DataPoint]:
             "(ولا مرآة)",
             _today())]
     top = comps[:top_n]
-    hhi = round(sum((c.value.get("share") or 0.0) ** 2 for c in comps), 1)
+    # رقم صحيح على مقياس 0-10000 — عشرية واحدة كانت وهم دقّة ترصده بوابة
+    # الجودة (`hhi_false_precision`) على كل تقرير يقتبس هذا الملخّص.
+    hhi = int(round(sum((c.value.get("share") or 0.0) ** 2 for c in comps)))
     mirror_note = (" — تقدير مرآة من تصريحات تصدير الشركاء (السوق لا تُبلِغ "
                    "كومتريد مباشرة)" if mirrored else "")
     summary = DataPoint(
@@ -306,13 +308,16 @@ def _tool_imf_indicator(args: dict, ctx: dict) -> list[DataPoint]:
 
 
 def _tool_trends_interest(args: dict, ctx: dict) -> list[DataPoint]:
-    from silk_trends_agent import trends_interest
+    """سلسلة الصمود WS11.1 لا النداء العاري — بلاغ Nadec/اليمن #7: البعثة
+    كانت تسقط على 429 إلى فجوة فوراً بينما لقطة مخزَّنة صالحة موجودة."""
+    from silk_trends_agent import trends_interest_resilient
     term = str(args.get("term") or ctx.get("product") or "").strip()
     if not term:
         return [DataPoint(None, "Google Trends", 0.0, "لا كلمة بحث", _today())]
     market = ctx["market"]
     timeframe = str(args.get("timeframe") or "today 12-m")
-    return [trends_interest(term, geo=(market.iso2 or None), timeframe=timeframe)]
+    return [trends_interest_resilient(term, geo=(market.iso2 or None),
+                                      timeframe=timeframe)]
 
 
 def _tool_trends_context(args: dict, ctx: dict) -> list[DataPoint]:

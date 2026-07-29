@@ -276,6 +276,14 @@ _EXC_FAMILY_AR = (
 # فأنتج نفسَ عيبِ القوس المفتوح داخل «(... ConnectionPool(...) ...)».
 _CONN_POOL_RE = re.compile(r"\b\w*ConnectionPool\([^)]*\)[^.؛)]*")
 _HTTP_STATUS_RE = re.compile(r"\bHTTP\s*(\d{3})\b:?[ \t]*")
+# بلاغ المالك (Nadec/اليمن #7): «خطأ (HTTP 429):» كانت تُعرَّب إلى
+# «خطأ (خطأ استجابة الخادم (HTTP 429)):» — بادئة خطأ مزدوجة + ترقيم فارغ
+# «): » معلّق. يُطوى الغلاف «خطأ (…)» قبل التعريب العام، ويُطوى الشكل
+# المزدوج المخزَّن من تشغيلات سابقة عند إعادة عرضه.
+_ERR_HTTP_DOUBLED_RE = re.compile(
+    r"خطأ\s*\(\s*خطأ استجابة الخادم\s*\(HTTP\s*(\d{3})\)\s*:?\s*\)\s*:?[ \t]*")
+_ERR_HTTP_WRAPPED_RE = re.compile(
+    r"خطأ\s*\(\s*HTTP\s*(\d{3})\s*\)\s*:?[ \t]*")
 
 
 def _http_status_ar(m: "re.Match") -> str:
@@ -283,8 +291,14 @@ def _http_status_ar(m: "re.Match") -> str:
 
     429 (تجاوز معدّل، أعد المحاولة) و503 (المصدر معطّل) و404 (لا سجلّ) أفعالٌ
     تشغيليةٌ مختلفة تماماً — طمسُها في سلسلةٍ واحدة يُلغي قيمةَ الرسالة. غيرُ
-    الأخطاء (2xx/3xx) يمرّ كما هو بلا تعريب."""
+    الأخطاء (2xx/3xx) يمرّ كما هو بلا تعريب.
+
+    idempotent (بلاغ Nadec/اليمن #7): «HTTP nnn» داخل بادئةٍ معرَّبة سابقاً
+    («…استجابة الخادم (») يمرّ كما هو — تطبيقُ التعريب مرّتين على نصٍّ
+    مخزَّن كان يضاعف البادئة «خطأ (خطأ استجابة الخادم …»."""
     code = m.group(1)
+    if m.string[max(0, m.start() - 24):m.start()].endswith("استجابة الخادم ("):
+        return m.group(0)
     if code[:1] in ("4", "5"):
         return f"خطأ استجابة الخادم (HTTP {code}): "
     return m.group(0)
@@ -359,6 +373,11 @@ def humanize_technical_note(text: object) -> str:
     s = _CONN_POOL_RE.sub("تعذّر الاتصال بالمصدر", s)
     for rx, ar in _EXC_FAMILY_AR:
         s = rx.sub(ar, s)
+    # اطوِ غلاف «خطأ (…)» حول رمز HTTP قبل التعريب العام — وإلا تضاعفت
+    # البادئة «خطأ (خطأ استجابة الخادم (HTTP 429)):» (المزدوج المخزَّن أولاً
+    # لأن النمط الأعمّ يبتلع نصفه).
+    s = _ERR_HTTP_DOUBLED_RE.sub(r"خطأ استجابة الخادم (HTTP \1): ", s)
+    s = _ERR_HTTP_WRAPPED_RE.sub(r"خطأ استجابة الخادم (HTTP \1): ", s)
     s = _HTTP_STATUS_RE.sub(_http_status_ar, s)
     s = _balance_parens(s)
     # قوسٌ صار فارغاً بعد التنظيف («()») لا يحمل معلومة — يُسقَط.

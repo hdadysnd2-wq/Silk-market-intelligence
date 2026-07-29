@@ -1804,9 +1804,11 @@ def _docx_technical_appendix(doc, dr: dict) -> None:
     doc.add_paragraph("لكل حقيقة مصدرها العمومي ورابطها (إن توفّر) وتاريخ "
                       "جمعها وقوة دليلها (✓ موثّق، ◐ مُقدَّر، ○ غير متحقّق).",
                       style="Intense Quote")
+    # نفس سقف بوابة الجودة (`audit_coverage`) — ثابت واحد مشترك، لا 80 حرفية.
+    from silk_quality_gate import AUDIT_APPENDIX_CAP
     _add_table(doc,
                ["الحقيقة", "المصدر", "الرابط", "تاريخ الجمع", "قوة الدليل"],
-               rows[:80])
+               rows[:AUDIT_APPENDIX_CAP])
     # WP-3 §2: الإفصاح الواحد عن كل تعارض رقمي حُسم في ممرّ المصالحة.
     for c in ((dr.get("reconciliation") or {}).get("conflicts") or []):
         doc.add_paragraph(str(c.get("note") or ""), style="Intense Quote")

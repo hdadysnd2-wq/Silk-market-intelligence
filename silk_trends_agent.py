@@ -11,11 +11,60 @@ from __future__ import annotations
 import calendar
 import logging
 import os
+import time
 
 from silk_data_layer import DataPoint, _today
 from silk_agents import BaseAgent, AgentReport
 
 log = logging.getLogger(__name__)
+
+# قابلة للحقن في الاختبارات الهرمتيكية — لا نوم حقيقياً تحت pytest.
+_sleep = time.sleep
+
+
+def _trends_max_attempts() -> int:
+    """عدد المحاولات الكلي = 1 + SILK_TRENDS_RETRIES (الافتراضي ٢ إعادتان)."""
+    try:
+        n = int(os.environ.get("SILK_TRENDS_RETRIES", "2"))
+    except (TypeError, ValueError):
+        n = 2
+    return max(0, n) + 1
+
+
+def _trends_backoff_base_s() -> float:
+    """قاعدة التراجع الأُسّي بالثواني (SILK_TRENDS_BACKOFF_S، الافتراضي ٢)."""
+    try:
+        v = float(os.environ.get("SILK_TRENDS_BACKOFF_S", "2"))
+    except (TypeError, ValueError):
+        v = 2.0
+    return v if v > 0 else 2.0
+
+
+def _is_rate_limited(e: Exception) -> bool:
+    """429 بأشكاله: صنف TooManyRequests، أو رمز 429 في الردّ/الرسالة."""
+    if "TooManyRequests" in type(e).__name__:
+        return True
+    code = getattr(getattr(e, "response", None), "status_code", None)
+    return code == 429 or "429" in str(e)
+
+
+def _retry_429(fetch, label: str):
+    """أعد جلبة pytrends عند 429 **فقط** بتراجع أُسّي — بلاغ إنتاجي
+    (Nadec/اليمن #7): أربع تشغيلات متتالية فشلت بعثتها على 429 لأن النداء
+    الواحد كان يسقط فوراً إلى فجوة. أي استثناء غير 429 يُعاد رفعه فوراً
+    (فجوة معلنة كما كانت — لا إعادة عمياء تحرق حصّة pytrends المحدودة)."""
+    attempts = _trends_max_attempts()
+    delay = _trends_backoff_base_s()
+    for i in range(attempts):
+        try:
+            return fetch()
+        except Exception as e:  # noqa: BLE001 — غير 429 يُعاد رفعه كما هو
+            if not _is_rate_limited(e) or i >= attempts - 1:
+                raise
+            log.warning("Google Trends 429 (%s) — retry %d/%d in %.0fs",
+                        label, i + 1, attempts - 1, delay)
+            _sleep(delay)
+            delay *= 2
 
 
 def trends_interest(
@@ -40,10 +89,11 @@ def trends_interest(
         if not kw:
             return DataPoint(None, "Google Trends", 0.0,
                              "empty keyword — no query", _today())
-        py = TrendReq(timeout=(10, 30))
-        py.build_payload([kw], timeframe=timeframe,
-                         geo=(geo or ""))
-        df = py.interest_over_time()
+        def _fetch():
+            py = TrendReq(timeout=(10, 30))
+            py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
+            return py.interest_over_time()
+        df = _retry_429(_fetch, f"interest '{kw}'")
         if df is None or df.empty or kw not in df.columns:
             return DataPoint(None, "Google Trends", 0.0,
                              f"no interest data for '{kw}' (geo={geo or 'WW'})", _today())
@@ -154,9 +204,11 @@ def trends_series(keyword: str, geo: str | None = None,
         return {"mean": None, "growth_pct": None, "n": 0, "confidence": 0.0,
                 "note": "empty keyword — no query"}
     try:
-        py = TrendReq(timeout=(10, 30))
-        py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
-        df = py.interest_over_time()
+        def _fetch():
+            py = TrendReq(timeout=(10, 30))
+            py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
+            return py.interest_over_time()
+        df = _retry_429(_fetch, f"series '{kw}'")
         if df is None or df.empty or kw not in df.columns:
             return {"mean": None, "growth_pct": None, "n": 0, "confidence": 0.0,
                     "note": f"no interest data for '{kw}' (geo={geo or 'WW'})"}
@@ -215,8 +267,11 @@ def trends_context(keyword: str, geo: str | None = None,
     if not kw:
         return {**empty, "note": "empty keyword — no query"}
     try:
-        py = TrendReq(timeout=(10, 30))
-        py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
+        def _payload():
+            _py = TrendReq(timeout=(10, 30))
+            _py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
+            return _py
+        py = _retry_429(_payload, f"context '{kw}'")
     except Exception as e:  # noqa: BLE001 — never raise to caller
         log.warning("Trends context payload failed ('%s', geo=%s): %s",
                     keyword, geo, e)
@@ -284,9 +339,12 @@ def _seasonality(keyword: str, geo: str | None, timeframe: str) -> DataPoint:
                          "pytrends unavailable / no network", _today())
     try:
         kw = (keyword or "").strip()
-        py = TrendReq(timeout=(10, 30))
-        py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
-        df = py.interest_over_time()
+
+        def _fetch():
+            py = TrendReq(timeout=(10, 30))
+            py.build_payload([kw], timeframe=timeframe, geo=(geo or ""))
+            return py.interest_over_time()
+        df = _retry_429(_fetch, f"seasonality '{kw}'")
         if df is None or df.empty or kw not in df.columns:
             return DataPoint(None, "Google Trends", 0.0,
                              f"no series for seasonality of '{kw}'", _today())
