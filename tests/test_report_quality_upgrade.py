@@ -453,7 +453,10 @@ def test_w4_1_hs_methodology_note_appears_at_most_once():
 
 
 def test_w4_1_writer_prompt_uses_short_backreference_for_hs_note():
-    """4.1 — عقد الكاتب يوجّه لإحالة موجزة «انظر الملاحظة المنهجية» لا تكرار."""
+    """4.1 — عقد الكاتب يوجّه لإحالة موجزة لا تكرار. المرساة صارت «قسم
+    المنهجية» بدل «الملاحظة المنهجية» (بلاغ Nadec/اليمن #7): الأخيرة كانت
+    تُطلِق `dangling_cross_reference` (FAIL) لأن الحارس لا يجد نصّها الحرفي؛
+    «قسم المنهجية» مرساةٌ يقبلها الحارس فيُنهي الحجب — نفس مقصد الإحالة."""
     import silk_ai_judge as J
     captured = {}
     with mock.patch.object(J, "available", return_value=True), \
@@ -463,7 +466,8 @@ def test_w4_1_writer_prompt_uses_short_backreference_for_hs_note():
                       "اليمن", hs_code="040510",
                       hs_confirmation={"confirmed": False, "code_desc": "زبدة",
                                        "missing_terms": ["فول"]})
-    assert "انظر الملاحظة المنهجية" in captured["u"]
+    assert "انظر قسم المنهجية" in captured["u"]
+    assert "انظر الملاحظة المنهجية" not in captured["u"]
 
 
 def test_w1_3_writer_prompt_names_import_price_as_contextual_and_explains_contradiction():
