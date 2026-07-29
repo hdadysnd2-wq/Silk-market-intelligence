@@ -1,0 +1,120 @@
+"""الحصص والطبقات — subscription quota enforcement.
+
+- العدّاد يزيد **فقط** عند انتقال draft→in_progress (أوّل بريد يُصفّ)، لا عند
+  إنشاء/تحرير المسودّة.
+- Basic: دراسة واحدة مدى الحياة (لا تُصفَّر أبداً). البقية: عدّاد شهري.
+- إعادة التصفير الشهرية: أوّل الشهر 00:00 UTC، تصفّر كل الطبقات عدا Basic.
+- تجاوز الحصّة عند الإطلاق: امنع + سجّل تدقيقاً (الواجهة تعرض دعوة ترقية).
+
+The counter increments only on launch (first email queued), never on draft edit.
+"""
+from __future__ import annotations
+
+import dataclasses
+import datetime
+import sqlite3
+
+from . import audit
+from .db import now_iso
+from .models import Tier, tier_limits
+
+
+def current_period(at: datetime.datetime | None = None) -> str:
+    """الشهر الحالي بصيغة 'YYYY-MM' UTC — the quota period key."""
+    dt = at or datetime.datetime.now(datetime.timezone.utc)
+    return dt.astimezone(datetime.timezone.utc).strftime("%Y-%m")
+
+
+@dataclasses.dataclass(frozen=True)
+class QuotaDecision:
+    allowed: bool
+    reason: str = ""          # كود سبب المنع · machine-readable reason code
+    limit: int = 0
+    used: int = 0
+    tier: str = ""
+
+
+def _account(conn: sqlite3.Connection, account_id: int) -> sqlite3.Row:
+    row = conn.execute("SELECT * FROM accounts WHERE id = ?", (account_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"no account {account_id}")
+    return row
+
+
+def _roll_period_if_needed(conn: sqlite3.Connection, acc: sqlite3.Row) -> int:
+    """صفّر العدّاد الشهري كسولاً عند دخول شهر جديد — lazy monthly roll.
+
+    يضمن صحّة العدّاد حتى لو لم تُشغَّل مهمّة التصفير بعد. لا يمسّ Basic.
+    Returns the effective current_month_study_count after any roll.
+    """
+    if Tier(acc["tier"]) == Tier.BASIC:
+        return int(acc["current_month_study_count"])
+    period = current_period()
+    if acc["quota_period"] != period:
+        conn.execute("UPDATE accounts SET current_month_study_count = 0, "
+                     "quota_period = ?, updated_at = ? WHERE id = ?",
+                     (period, now_iso(), acc["id"]))
+        conn.commit()
+        return 0
+    return int(acc["current_month_study_count"])
+
+
+def evaluate(conn: sqlite3.Connection, account_id: int) -> QuotaDecision:
+    """قيّم الحصّة دون تعديل — check whether a launch is allowed (read-only)."""
+    acc = _account(conn, account_id)
+    tier = Tier(acc["tier"])
+    limits = tier_limits(tier)
+    if tier == Tier.BASIC:
+        used = int(acc["lifetime_study_count"])
+        allowed = used < limits.lifetime_studies
+        return QuotaDecision(allowed, "" if allowed else "lifetime_quota_exceeded",
+                             limits.lifetime_studies, used, tier.value)
+    used = _roll_period_if_needed(conn, acc)
+    allowed = used < limits.monthly_studies
+    return QuotaDecision(allowed, "" if allowed else "monthly_quota_exceeded",
+                         limits.monthly_studies, used, tier.value)
+
+
+def reserve_launch(conn: sqlite3.Connection, account_id: int, *,
+                   actor_user_id: int | None) -> QuotaDecision:
+    """احجز إطلاق دراسة — check the quota and, if allowed, increment the counter.
+
+    يُستدعى مرّة واحدة عند draft→in_progress. عند المنع يكتب قيد تدقيق
+    (over-quota launch attempt) ولا يزيد شيئاً.
+    """
+    decision = evaluate(conn, account_id)
+    if not decision.allowed:
+        audit.record(conn, action="quota_exceeded", user_id=actor_user_id,
+                     account_id=account_id, resource_type="study",
+                     changes={"reason": decision.reason, "tier": decision.tier,
+                              "limit": decision.limit, "used": decision.used})
+        conn.commit()
+        return decision
+    acc = _account(conn, account_id)
+    if Tier(acc["tier"]) == Tier.BASIC:
+        conn.execute("UPDATE accounts SET lifetime_study_count = "
+                     "lifetime_study_count + 1, updated_at = ? WHERE id = ?",
+                     (now_iso(), account_id))
+    else:
+        conn.execute("UPDATE accounts SET current_month_study_count = "
+                     "current_month_study_count + 1, quota_period = ?, "
+                     "updated_at = ? WHERE id = ?",
+                     (current_period(), now_iso(), account_id))
+    conn.commit()
+    return dataclasses.replace(decision, used=decision.used + 1)
+
+
+def monthly_reset(conn: sqlite3.Connection) -> int:
+    """التصفير الشهري — reset current_month counters for all tiers EXCEPT Basic.
+
+    مهمّة أوّل الشهر 00:00 UTC. يكتب قيد تدقيق. يرجّع عدد الحسابات المصفَّرة.
+    Basic's lifetime counter is deliberately untouched (survives the reset).
+    """
+    period = current_period()
+    cur = conn.execute(
+        "UPDATE accounts SET current_month_study_count = 0, quota_period = ?, "
+        "updated_at = ? WHERE tier != 'basic'", (period, now_iso()))
+    audit.record(conn, action="monthly_quota_reset", resource_type="accounts",
+                 changes={"period": period, "accounts_reset": cur.rowcount})
+    conn.commit()
+    return cur.rowcount

@@ -3256,6 +3256,16 @@ def create_app():
                                 detail=f"analysis {analysis_id} not found")
         return {"id": analysis_id, "outcome": outcome, "recorded": True}
 
+    # منصّة SaaS متعددة المستأجرين (PR-1: مصادقة + عزل) تحت /platform — تُركَّب
+    # قبل الواجهة الثابتة وبأمان: أي فشل استيراد يُسجَّل ولا يُسقِط المحرّك القائم
+    # (مبدأ «لا انهيار»). النقاط تحت /platform مستقلّة عن مسارات المحرّك أعلاه.
+    try:
+        import silk_platform
+        if silk_platform.mount(app):
+            log.info("silk_platform router mounted at /platform")
+    except Exception:  # noqa: BLE001 — المنصّة إضافة اختيارية لا تُعطّل المحرّك
+        log.warning("silk_platform not mounted", exc_info=True)
+
     # الواجهة الثابتة على نفس الخدمة — serve the static frontend at "/" so one
     # Render service hosts BOTH the API and the UI (same origin, no CORS needed).
     # Registered last so the API routes above take precedence over static files.
