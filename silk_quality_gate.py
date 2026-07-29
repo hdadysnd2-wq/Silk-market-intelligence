@@ -1049,6 +1049,39 @@ def _usd_amount_to_float(num_str: str, mag: str) -> "float | None":
     return v * _USD_MAGNITUDE.get(mag, 1)
 
 
+# بلاغ A3 (تحليل ٧): `_USD_AMOUNT_RE` أعلاه يشترط لفظ «دولار»، بينما الكاتب
+# يكتب TAM فعلاً بصيغة رمز `$` — «TAM = 61,000,000$» (عيّنة
+# `samples/research_report_latest.md` سطر ٥١) و«2,090,000$» في تحليل ٧ — فأفلتت
+# تلك الصيغة وبقيت بوابة A3 **صامتة** على الحالة التي بُنيت لها. المستخلِص أدناه
+# يلتقط كلّ صيغةٍ يُخرِجها الكاتب: `N,NNN,NNN$` (لاحق)، `$N` (سابق)، و«N مليون
+# دولار» (لفظ). لا يمسّ `_USD_AMOUNT_RE`/`_check_evidence_body_numeric_consistency`
+# (نطاقٌ أضيق مقصود) — استخلاصٌ مستقلّ لبوّابتَي TAM وتباين المرآة.
+_USD_TRAIL_RE = re.compile(
+    r"(\d[\d,]*(?:\.\d+)?)\s*(مليار|مليون|ألف|الف)?\s*(?:دولار|\$)")
+_USD_LEAD_RE = re.compile(
+    r"\$\s*(\d[\d,]*(?:\.\d+)?)\s*(مليار|مليون|ألف|الف)?")
+
+
+def _iter_usd_amounts(text: str) -> list[tuple[int, int, float]]:
+    """كلّ مبلغٍ دولاريّ في المتن بأيّ صيغة — قائمة (بداية، نهاية، قيمة).
+    يشمل `$`-اللاحقة (`61,000,000$`)، و`$`-السابقة (`$61`)، واللفظية (`61 مليون
+    دولار`/`17000 دولار`) — لا صيغةً واحدة كما كان الاشتراط القديم."""
+    spans: list[tuple[int, int, float]] = []
+    for m in _USD_TRAIL_RE.finditer(text or ""):
+        v = _usd_amount_to_float(m.group(1), m.group(2) or "")
+        if v is not None and v > 0:
+            spans.append((m.start(), m.end(), v))
+    for m in _USD_LEAD_RE.finditer(text or ""):
+        v = _usd_amount_to_float(m.group(1), m.group(2) or "")
+        if v is None or v <= 0:
+            continue
+        if any(a <= m.start() < b for a, b, _ in spans):
+            continue   # لا تُكرِّر مبلغاً التقطته الصيغة اللاحقة
+        spans.append((m.start(), m.end(), v))
+    spans.sort()
+    return spans
+
+
 def _check_evidence_body_numeric_consistency(dr: dict) -> list[dict]:
     """قارن قيمة الواردات المسجَّلة في سجل الأدلة (DataPoint خام في findings
     البعثات) برقم الواردات المذكور في متن التقرير — تعارضٌ حقيقي (>٣×) بلا
@@ -1112,27 +1145,66 @@ _SINGLE_COUNTRY_RE = re.compile(
     r"وحده|وحدها|دولة\s+واحدة|مورّد\s+واحد|شريك\s+واحد|السعودية|سعودي")
 
 
+def _marker_min_dist(text: str, start: int, end: int, rex, lo: int,
+                     hi: int) -> "int | None":
+    """أقصرُ مسافةٍ من مدى الرقم [start,end] إلى أيّ تطابقٍ لـrex ضمن [lo,hi]؛
+    None إن لا تطابق (يُستعمَل لنسبِ رقمٍ للمؤشّر الأقرب حين يتجاور رقمان)."""
+    best: "int | None" = None
+    for m in rex.finditer(text[lo:hi]):
+        ms, me = m.start() + lo, m.end() + lo
+        d = 0 if (ms <= end and me >= start) else min(abs(ms - end),
+                                                      abs(start - me))
+        best = d if best is None else min(best, d)
+    return best
+
+
+def _classify_market_amounts(text: str) -> tuple[list[float], list[float]]:
+    """صنّف كلّ مبلغٍ دولاريّ في المتن (بأيّ صيغة، عبر `_iter_usd_amounts`) إلى:
+       - tam_amounts: مبلغٌ مجاورٌ لمؤشّر إجماليِّ سوقٍ (TAM/إجمالي واردات/حجم
+         السوق) ضمن نافذة ±٧٠ محرفاً.
+       - flow_amounts: مبلغٌ مجاورٌ لفعل تدفّق **و**دولةٍ واحدة (صادرات … السعودية
+         وحدها) — تدفّق دولةٍ مفردةٍ/مرآةٍ.
+    حين يجتمع مؤشّرا TAM والتدفّق في نافذة رقمٍ واحد (رقمان متجاوران في نفس
+    الجملة)، يُنسَب الرقم للمؤشّر **الأقرب** إليه لا بأولويّةٍ ثابتة — كي لا
+    تُختطَف قيمةُ تدفّقٍ مفردٍ إلى دلوِ TAM لمجرّد أنّ لفظ TAM في المدى.
+    مستخلَصٌ واحد يُغذّي بوابة A3 (تعارضٌ منطقيّ: TAM < تدفّق مفرد) وبوابة تباين
+    المرآة (سرد الانكماش) — مصدر تصنيفٍ واحد لا نسختان."""
+    tam_amounts: list[float] = []
+    flow_amounts: list[float] = []
+    for start, end, amt in _iter_usd_amounts(text):
+        lo, hi = max(0, start - 70), end + 70
+        ctx = text[lo:hi]
+        tam_hit = bool(_TAM_MARKER_RE.search(ctx))
+        flow_hit = bool(_FLOW_VERB_RE.search(ctx)) and \
+            bool(_SINGLE_COUNTRY_RE.search(ctx))
+        if tam_hit and not flow_hit:
+            tam_amounts.append(amt)
+        elif flow_hit and not tam_hit:
+            flow_amounts.append(amt)
+        elif tam_hit and flow_hit:
+            td = _marker_min_dist(text, start, end, _TAM_MARKER_RE, lo, hi)
+            fds = [d for d in (
+                _marker_min_dist(text, start, end, _FLOW_VERB_RE, lo, hi),
+                _marker_min_dist(text, start, end, _SINGLE_COUNTRY_RE, lo, hi))
+                if d is not None]
+            fd = min(fds) if fds else None
+            if td is not None and (fd is None or td <= fd):
+                tam_amounts.append(amt)
+            else:
+                flow_amounts.append(amt)
+    return tam_amounts, flow_amounts
+
+
 def _check_tam_below_single_country_flow(dr: dict) -> list[dict]:
     """PR A §A3 — TAM مذكورة أصغر من تدفّق دولةٍ واحدة مذكور لنفس السوق."""
     text = ((dr.get("report") or {}).get("text") or "")
     if not text:
         return []
-    tam_amounts: list[float] = []
-    flow_amounts: list[float] = []
-    for pm in _USD_AMOUNT_RE.finditer(text):
-        amt = _usd_amount_to_float(pm.group(1), pm.group(2) or "")
-        if amt is None or amt <= 0:
-            continue
-        ctx = text[max(0, pm.start() - 70):pm.end() + 70]
-        if _TAM_MARKER_RE.search(ctx):
-            tam_amounts.append(amt)
-        elif _FLOW_VERB_RE.search(ctx) and _SINGLE_COUNTRY_RE.search(ctx):
-            flow_amounts.append(amt)
+    tam_amounts, flow_amounts = _classify_market_amounts(text)
     if not tam_amounts or not flow_amounts:
         return []
     tam = min(tam_amounts)                 # أصغر إجماليٍّ مذكور (الأكثر تحفّظاً)
-    worst = max(f for f in flow_amounts if f > tam) if any(
-        f > tam for f in flow_amounts) else None
+    worst = max((f for f in flow_amounts if f > tam), default=None)
     if worst is None:
         return []
     return [{"check": "tam_below_single_country_flow", "repairable": False,
@@ -1141,6 +1213,185 @@ def _check_tam_below_single_country_flow(dr: dict) -> list[dict]:
                       "— مستحيلٌ منطقياً (تدفّق دولةٍ واحدة ≤ إجمالي الواردات "
                       "دائماً). راجع منظور المصدر (استيراد↔مرآة تصدير) وصحّة "
                       "رمز HS، وفسّر التباين صراحةً أو صحّحه قبل التسليم")}]
+
+
+# P0 (بلاغ تحليل ٧ — سردُ تباين المرآة): «انكماش ‑22.08% CAGR» محسوبٌ من سلسلة
+# تصريح اليمن الجمركية التي انهار تسجيلها، ويقود السرد (تهديد رئيسي/ضعف SWOT/
+# «الحفاظ على حصة في مواجهة انكماش الحجم») بينما تدفّق المرآة (تصدير السعودية
+# 22.14M) يفوق التصريح المُعلَن (2.09M) ×١٠. القاعدة الكتابية: حين يفوق تدفّق
+# المرآة التصريحَ مادّياً، تُعرَض القيمتان معاً، وتُسمّى المفارقة صراحةً، ولا
+# يُقاد السرد بانكماشٍ مبنيٍّ على الرقم الأدنى. بوابةٌ حاجبة تُفشِل حين يجتمع
+# (أ) تدفّق مرآةٍ مفردٍ يفوق إجمالي السوق المُعلَن، (ب) سردُ انكماشٍ **مؤطَّرٌ
+# تهديداً/ضعفاً** (قيادةً به لا تذييلاً)، دون (ج) مصالحةٍ صريحة تسمّي أنّ
+# المرآة تفوق التصريح وتعتمدها بديلاً (لا تلميح «ضعف التسجيل» عابراً وحده).
+_CONTRACTION_RE = re.compile(
+    r"انكماش|تقلّص|تقلص|تراجع\s+الحجم|[‑–—−-]\s*\d{1,2}(?:[.,]\d+)?\s*%")
+_THREAT_FRAME_RE = re.compile(
+    r"تهديد|التهديد|نقطة\s+الضعف|نقطة\s+ضعف|الضعف\b|التحدّي|التحدي|مواجهة")
+# مصالحةٌ صريحة: سطرٌ يجمع منظور المرآة/التصدير بفعل اعتمادٍ/تفوّقٍ صريح — لا
+# مجرّد ذكرٍ عابرٍ لـ«المرآة» ولا تلميح «ضعف التسجيل» وحده (القاعدة: قِد بالمصالحة
+# لا بالانكماش). نافذةٌ قصيرة (≤٨٠ محرفاً) كي لا تقفز جملةً كاملة.
+_MIRROR_RECONCILED_RE = re.compile(
+    r"(?:المرآة|تصدير\s+المُصدِّر|تصدير\s+الشريك|منظور\s+التصدير)"
+    r"[^\n]{0,80}?(?:يفوق|تفوق|أعلى|أكبر|نعتمد|البديل|الأقرب|الأدقّ|الأدق)")
+
+
+def _check_mirror_divergence_contraction_narrative(dr: dict) -> list[dict]:
+    """P0 (تحليل ٧) — سردُ انكماشٍ مؤطَّرٌ تهديداً بينما تدفّق المرآة يفوق
+    التصريح المُعلَن، دون تسمية المفارقة/مصالحتها = عيبٌ حاجب. السوق قد لا
+    ينكمش؛ التسجيل قد يكون هو الذي انهار — فلا يُقاد السرد بالسلسلة الأدنى."""
+    text = ((dr.get("report") or {}).get("text") or "")
+    if not text:
+        return []
+    tam_amounts, flow_amounts = _classify_market_amounts(text)
+    if not tam_amounts or not flow_amounts:
+        return []
+    total = min(tam_amounts)
+    mirror = max((f for f in flow_amounts if f > total), default=None)
+    if mirror is None:
+        return []
+    # (ب) قيادةٌ بالانكماش: انكماش/‑CAGR متجاورٌ لتأطير تهديدٍ/ضعفٍ (±١٢٠ محرفاً).
+    led_by_contraction = any(
+        _THREAT_FRAME_RE.search(text[max(0, cm.start() - 120):cm.end() + 120])
+        for cm in _CONTRACTION_RE.finditer(text))
+    if not led_by_contraction:
+        return []
+    # (ج) مصالحةٌ صريحة للمفارقة تُلغي القيادةَ بالأدنى — لا تُفشِل حينها.
+    if _MIRROR_RECONCILED_RE.search(text):
+        return []
+    ratio = mirror / total if total else 0
+    return [{"check": "mirror_divergence_contraction_narrative",
+             "repairable": False,
+             "note": (f"سردُ انكماشٍ (‑CAGR/«انكماش») مؤطَّرٌ تهديداً/ضعفاً بينما "
+                      f"تدفّق المرآة (تصدير الشريك ≈ {mirror:,.0f}$) يفوق إجمالي "
+                      f"السوق المُعلَن ({total:,.0f}$) بنحو {ratio:.0f}× — الانكماش "
+                      "محسوبٌ من سلسلة تصريحٍ ضعيفةِ التسجيل. اعرض القيمتين معاً "
+                      "وسمِّ مفارقة المرآة صراحةً، ولا تَقُد السرد بانكماشٍ مبنيٍّ "
+                      "على الرقم الأدنى قبل مصالحة المنظورَين")}]
+
+
+# تصعيدُ التقادُم (بلاغ تحليل ٧ — قاعدةٌ إضافية): آلية `silk_staleness` **تُوسِم**
+# السنوات المتقادِمة (>٥ سنوات) لكنها لا تُفشِل. حين تقود سنةٌ متقادِمة استنتاجاً
+# **مذكوراً** — دخل الفرد 2018 وPPP 2013 مدخلَين لاستنتاج «القدرة الشرائية تقيّد
+# التسعير» — يجب أن تُفشِل لا أن تُوسَم فقط. نربط سنةً متقادِمةً (من الحقائق ذات
+# القيم عبر `data_year` البنيويّ، لا نثراً) بلغةِ استنتاجٍ قوّةٍ شرائية↔تسعير في
+# نافذةٍ محلية — فلا يُعلَم على ذكرٍ عابرٍ لسنةٍ قديمة بلا استنتاجٍ مبنيٍّ عليها.
+_PURCHASING_POWER_RE = re.compile(
+    r"القدرة\s+الشرائية|القوّة\s+الشرائية|القوة\s+الشرائية|تعادل\s+القوة|\bPPP\b")
+_PRICING_CONCLUSION_RE = re.compile(
+    r"تسعير|التسعير|السعر|الأسعار|تقيّد|تقيد|تحدّ|يحدّ|يقيّد")
+
+
+def _stale_years_in_view(dr: dict) -> set:
+    """سنوات الحقائق المتقادِمة (ذات القيم) عبر بعثات + تقاطعات المحلل — من
+    الحقل البنيويّ `data_year` لا من نثر التقرير (`silk_staleness`)."""
+    from silk_staleness import stale_fact_years
+    findings: list = []
+    for m in (dr.get("missions") or {}).values():
+        findings.extend((m or {}).get("findings") or [])
+    for dps in ((dr.get("analyst") or {}).get("by_category") or {}).values():
+        findings.extend(dps or [])
+    return stale_fact_years(findings)
+
+
+def _check_stale_year_driving_conclusion(dr: dict) -> list[dict]:
+    """تصعيدُ التقادُم — سنةُ حقيقةٍ أقدم من ٥ سنوات تقود استنتاجاً تسعيرياً
+    مذكوراً (قوّة شرائية↔تسعير) = فشلٌ حاجب، لا مجرّد وسمٍ «الأحدث المتاح»."""
+    text = ((dr.get("report") or {}).get("text") or "")
+    if not text:
+        return []
+    stale = _stale_years_in_view(dr)
+    if not stale:
+        return []
+    findings: list[dict] = []
+    for yr in sorted(stale):
+        for m in re.finditer(rf"(?<!\d){yr}(?!\d)", text):
+            win = text[max(0, m.start() - 160):m.end() + 160]
+            if _PURCHASING_POWER_RE.search(win) and _PRICING_CONCLUSION_RE.search(win):
+                findings.append({
+                    "check": "stale_year_driving_conclusion", "repairable": False,
+                    "note": (f"سنةُ بياناتٍ متقادِمة ({yr}، أقدم من ٥ سنوات) تقود "
+                             "استنتاجاً مذكوراً (القدرة الشرائية تقيّد التسعير) — "
+                             "بياناتٌ بهذا القِدَم لا تصلح مدخلاً حاضراً لاستنتاجٍ "
+                             "تسعيريّ؛ حدِّثها أو أعلن الفجوة صراحةً، لا تُوسَم فقط")})
+                break   # بندٌ واحد لكلّ سنة متقادِمة قائدة
+    return findings
+
+
+# بلاغ المالك (تحليل ٧ — مِجَسّ /trend الحيّ): سلسلةُ واردات اليمن السنوية
+# 2018=$0.88M، 2019=$5.59M (ذروة)، 2023=$2.09M (2020–2022 بلا بيانات — انهيارُ
+# التسجيل). التقريرُ ثبّت الأساسَ على ذروة 2019 فأنتج «‑22.08% انكماش»، بينما
+# التثبيت على 2018 (أوّل سنةٍ مرصودة) يعطي +18.9% **نموّاً**. اختيارُ سنة الأساس
+# **قلب الإشارة** فانهار سردُ «السوق المنكمش» كلّه (تهديد الغلاف/ضعف SWOT).
+# القاعدة (أمر المالك): ادّعاءُ نموّ/انكماشٍ تنقلب إشارتُه بتغيير سنة الأساس
+# المرصودة ضمن السلسلة نفسها = عيبٌ حاجب. حتميّ: نقرأ السلسلة من نقاط البعثات
+# (كلّ سنة DataPoint من comtrade_imports بـdata_year) لا من نثر التقرير.
+_DIRECTIONAL_CLAIM_RE = re.compile(
+    r"انكماش|تقلّص|تقلص|نموّ|نمو|CAGR|معدّل\s+النمو|معدل\s+النمو|تراجع|توسّع|توسع")
+# إفصاحٌ صحيح (§3.6): تقريرٌ يذكر «سنة الأساس» صراحةً أو يصرّح أنّ الاتجاه غير
+# محسومٍ لحساسيته لسنة الأساس لم يُخفِ شيئاً — القاعدة تُفشِل التثبيتَ المُختار
+# الصامت لا الإفصاحَ عن الحساسية. لا يُسكِت تحليل ٧ (لا يذكر «سنة الأساس»).
+_BASE_YEAR_DISCLOSED_RE = re.compile(
+    r"سنة\s+الأساس|سنةِ\s+الأساس|سنتَي\s+الأساس|حساسية[^.\n]{0,30}الأساس|"
+    r"اعتماداً\s+على\s+سنة\s+الأساس|غير\s+محسوم[^.\n]{0,40}الأساس")
+_IMPORT_TOTAL_NOTE_RE = re.compile(r"استيراد|واردات")
+_NON_TOTAL_NOTE_RE = re.compile(r"سعر|الوزن|كميات|وحدة|price", re.I)
+
+
+def _annual_import_series(dr: dict) -> dict:
+    """سلسلةُ واردات السوق السنوية {سنة: قيمة} من نقاط البعثات — إجماليّاتُ
+    الاستيراد فقط (لا أسعار/كميات)، بـ`data_year` بنيويّ. تشمل تقديرات المرآة
+    (status=mirrored) فهي واردات أيضاً. لا تحليلَ نثر — قراءةٌ بنيوية."""
+    series: dict = {}
+    for m in (dr.get("missions") or {}).values():
+        for f in ((m or {}).get("findings") or []):
+            v = f.get("value")
+            y = f.get("data_year")
+            note = str(f.get("note") or "")
+            if not isinstance(v, (int, float)) or isinstance(v, bool):
+                continue
+            if v <= 0 or not isinstance(y, int) or isinstance(y, bool):
+                continue
+            if not _IMPORT_TOTAL_NOTE_RE.search(note) \
+                    or _NON_TOTAL_NOTE_RE.search(note):
+                continue
+            series[y] = float(v)   # آخر قيمةٍ لكلّ سنة إن تكرّرت
+    return series
+
+
+def _check_cagr_sign_flips_under_base_year(dr: dict) -> list[dict]:
+    """بلاغ المالك — إشارةُ معدّل النمو المركّب تنقلب بتغيير سنة الأساس المرصودة
+    في السلسلة نفسها (2018→نموّ مقابل 2019→انكماش، نفس النهاية 2023). ادّعاءُ
+    اتجاهٍ واحد على سلسلةٍ كهذه يُشكِّك السردَ كلّه — عيبٌ حاجب."""
+    text = ((dr.get("report") or {}).get("text") or "")
+    if not text or not _DIRECTIONAL_CLAIM_RE.search(text):
+        return []                       # لا ادّعاءَ اتجاهٍ في المتن — لا قلب
+    if _BASE_YEAR_DISCLOSED_RE.search(text):
+        return []                       # أفصح عن حساسية سنة الأساس (§3.6) — لا عقاب
+    series = _annual_import_series(dr)
+    if len(series) < 3:
+        return []                       # نحتاج ≥٣ سنوات مرصودة لتظهر الحساسية
+    years = sorted(series)
+    last_y, last_v = years[-1], series[years[-1]]
+    pos: list = []
+    neg: list = []
+    for b in years[:-1]:
+        span = last_y - b
+        if span <= 0:
+            continue
+        cagr = (last_v / series[b]) ** (1.0 / span) - 1.0
+        (pos if cagr > 0 else neg if cagr < 0 else []).append((b, cagr))
+    if not pos or not neg:
+        return []                       # الإشارة ثابتة عبر كلّ الأسس — لا قلب
+    bp, cp = max(pos, key=lambda t: t[1])   # أقوى نموّ
+    bn, cn = min(neg, key=lambda t: t[1])   # أقوى انكماش
+    return [{"check": "cagr_sign_flips_under_base_year", "repairable": False,
+             "note": (f"إشارةُ معدّل النمو المركّب تنقلب بتغيير سنة الأساس "
+                      f"المرصودة في السلسلة نفسها: أساس {bp} = {cp*100:+.1f}% "
+                      f"(نموّ) مقابل أساس {bn} = {cn*100:+.1f}% (انكماش)، "
+                      f"والنهايةُ {last_y}. لا يجوز بناءُ حكم/تهديدٍ على اتجاهٍ "
+                      "واحدٍ مختار — ثبِّت الأساسَ على أوّل سنةٍ مرصودة، أو "
+                      "اعرض كلا القراءتين صراحةً")}]
 
 
 # PR B §B3 (بلاغ تحليل ٧): تلوّثُ العملة — §3.9 اقتبس سعراً بالريال العُماني
@@ -1331,6 +1582,12 @@ FAIL_TRIGGER_CHECKS = frozenset({
     # PR A (بلاغ تحليل ٧): تعارض ثقة/تسمية حكم، وTAM أصغر من تدفّق دولة واحدة.
     "confidence_value_conflict", "verdict_label_conflict",
     "tam_below_single_country_flow",
+    # P0 (تحليل ٧): سردُ انكماشٍ مبنيٍّ على سلسلةٍ ضعيفةِ التسجيل بينما المرآة
+    # تفوقها، وتصعيدُ التقادُم (سنةٌ >٥ سنوات تقود استنتاجاً مذكوراً).
+    "mirror_divergence_contraction_narrative",
+    "stale_year_driving_conclusion",
+    # بلاغ المالك (تحليل ٧): إشارةُ CAGR تنقلب بتغيير سنة الأساس المرصودة.
+    "cagr_sign_flips_under_base_year",
     # PR B (بلاغ تحليل ٧): تلوّثُ عملةٍ خارج السوق يصل العميل مضلِّلاً.
     "off_market_currency",
 })
@@ -1394,6 +1651,11 @@ def run_quality_gate(view: dict) -> dict:
     findings += _check_confidence_value_conflict(text)
     findings += _check_verdict_label_conflict(dr)
     findings += _check_tam_below_single_country_flow(dr)
+    # P0 (تحليل ٧): سردُ تباين المرآة، وتصعيدُ التقادُم القائد لاستنتاج.
+    findings += _check_mirror_divergence_contraction_narrative(dr)
+    findings += _check_stale_year_driving_conclusion(dr)
+    # بلاغ المالك (تحليل ٧): إشارةُ CAGR تنقلب بتغيير سنة الأساس المرصودة.
+    findings += _check_cagr_sign_flips_under_base_year(dr)
     # PR B (بلاغ تحليل ٧): تلوّث عملةٍ خارج السوق (§B3، حاجب)، وبعثةُ اتجاهاتٍ
     # «مكتملة» بلا بياناتها الأساسية (§B5، ملاحظة منهجية لا حاجبة).
     findings += _check_off_market_currency(dr)

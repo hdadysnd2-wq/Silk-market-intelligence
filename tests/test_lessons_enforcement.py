@@ -354,6 +354,15 @@ _TEST_ANCHORS = [
     # المطابقة؛ الحارس السلوكي بالسلاسل الست الحرفية في السجل.
     (57, "tests/test_regression_registry.py",
      ["def _guard_sanitizer_obfuscation_variants"]),
+    # البند ٧٥ — بوّابةٌ مرّت التركيبيّ ثم صمتت على الحقيقيّ (A3/تحليل ٧): كلّ
+    # بوّابةٍ بقفلين (تركيبيّ + انحدارٍ من عرضٍ حقيقيّ الشكل يؤكّد الإطلاق).
+    (75, "tests/test_gate_regression_locks_analysis7.py",
+     ["def test_a3_real_lock_fires_on_dollar_symbol_form",
+      "def test_mirror_real_lock_fires_on_analysis7",
+      "def test_stale_real_lock_fires_on_analysis7",
+      "def test_full_gate_fails_analysis7_view"]),
+    (75, "tests/test_regression_registry.py",
+     ["def _guard_gate_passes_synthetic_but_silent_on_real"]),
 ]
 
 # حراس رمزية للبندين ١٢/١٣ (المصالحة + نقِّ-لا-ترفض) — وجود الدوال في المصدر.

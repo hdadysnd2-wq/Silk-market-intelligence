@@ -1803,6 +1803,55 @@ def _guard_dialog_prose_carries_no_product_brand_or_country():
              "def _country_terms")()
 
 
+def _guard_gate_passes_synthetic_but_silent_on_real():
+    """LESSONS ٧٥ — بوّابةُ A3 (TAM أصغر من تدفّق دولةٍ واحدة) شُحنت في PR A
+    باختباراتٍ تركيبية خضراء ثم **لم تُطلِق على تحليل ٧ الحيّ** — الحالة التي
+    بُنيت لها بالضبط: الكاتبُ كتب TAM بصيغة رمز `$` (`2,090,000$`) بينما اشترط
+    التطابقُ لفظَ «دولار». الحارس السلوكي على مدوّنة تحليل ٧ الحقيقية الشكل
+    (`tools/canonical_nadec_yemen_dairy.py`، مُمرَّرة عبر `build_view`):
+      (١) البوّابات الثلاث تُطلِق فعلاً (A3 صيغة `$` + سردُ المرآة + تصعيدُ
+          التقادُم) والحكمُ الكلّي FAIL؛
+      (٢) المستخلِص يلتقط صيغة الرمز `$` (سبب الصمت القديم)؛
+      (٣) العيّنة النظيفة (الكويت) لا تُطلِق أياً منها (لا إيجابٌ كاذب)."""
+    import silk_render as R
+    import silk_quality_gate as QG
+    from tools.canonical_nadec_yemen_dairy import nadec_yemen_research_blob
+    from tools.canonical_kuwait_peanut_butter import kuwait_research_blob
+    view = R.build_view(nadec_yemen_research_blob())
+    dr = view["deep_research"]
+    # (١) البوّابات الأربع تُطلِق + FAIL كلّي (بلاغ المالك: قلبُ إشارة CAGR
+    # بسنة الأساس المرصودة أُضيف بعد مِجَسّ /trend الحيّ — أساس 2018 نموّ مقابل
+    # أساس 2019 انكماش على نفس سلسلة 040110).
+    assert QG._check_tam_below_single_country_flow(dr)
+    assert QG._check_mirror_divergence_contraction_narrative(dr)
+    assert QG._check_stale_year_driving_conclusion(dr)
+    assert QG._check_cagr_sign_flips_under_base_year(dr)
+    out = QG.run_quality_gate(view)
+    assert out["verdict"] == QG.FAIL
+    fired = {f["check"] for f in out["findings"]}
+    assert {"tam_below_single_country_flow",
+            "mirror_divergence_contraction_narrative",
+            "stale_year_driving_conclusion",
+            "cagr_sign_flips_under_base_year"} <= fired
+    # (٢) صيغةُ الرمز `$` محفوظةٌ بعد التطهير + المستخلِص يلتقطها.
+    txt = (dr.get("report") or {}).get("text") or ""
+    assert "2,090,000$" in txt
+    assert 2_090_000 in [round(v) for _, _, v in QG._iter_usd_amounts(txt)]
+    # (٣) العيّنة النظيفة لا تُطلِق أياً من البوّابات الثلاث.
+    kdr = R.build_view(kuwait_research_blob())["deep_research"]
+    assert not QG._check_tam_below_single_country_flow(kdr)
+    assert not QG._check_mirror_divergence_contraction_narrative(kdr)
+    assert not QG._check_stale_year_driving_conclusion(kdr)
+    # (٤) الثلاث بنودُ فشلٍ حاجبة + قفلُ الانحدار موجود.
+    for c in ("tam_below_single_country_flow",
+              "mirror_divergence_contraction_narrative",
+              "stale_year_driving_conclusion",
+              "cagr_sign_flips_under_base_year"):
+        assert c in QG.FAIL_TRIGGER_CHECKS
+    assert _exists("tests/test_gate_regression_locks_analysis7.py")
+    assert _exists("tools/canonical_nadec_yemen_dairy.py")
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1884,6 +1933,7 @@ _LESSONS = {
     72: _guard_dialog_band_text_from_the_official_reference_only,  # E2 — نصُّ الحدّ من المرجع حصراً
     73: _guard_dialog_axis_siblings_never_partial,         # E3 — لا مجموعةَ محورٍ جزئية
     74: _guard_dialog_prose_carries_no_product_brand_or_country,  # E4 — لا صدى منتج/علامة/دولة
+    75: _guard_gate_passes_synthetic_but_silent_on_real,  # تحليل ٧ — بوّابة مرّت التركيبيّ ثم صمتت على الحقيقيّ (قفلان لكلّ بوّابة)
 }
 
 _TRAPS = [
