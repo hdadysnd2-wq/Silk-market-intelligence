@@ -2456,17 +2456,31 @@ def _client_gap_inputs(dr: dict) -> "tuple[list[str], list[str]]":
     # WP-4 §1: المدخل الرابع — فجوات البعثات المعلنة داخل ملخّصاتها.
     from silk_render import _mission_gap_lines
     informational: list[str] = []
-    seen: set[str] = set()
+    # PR B §B7 (بلاغ تحليل ٧): إزالةُ التكرار على **محتوى** الفجوة لا على السطر
+    # المسبوق باسم البعثة — بعثتان (قنوات + مستوردون) تُعلنان نفس الفجوة
+    # («قنوات التوزيع والاستيراد») بلاحقتَي اسمٍ مختلفتين فتُطبَعان حرفياً
+    # مرّتين. المفتاح الآن المحتوى وحده، ويشمل فجوات `critical` كي لا تتكرّر
+    # فجوةٌ عبر القائمتين.
+    def _content_key(text: str) -> str:
+        # جرِّد بادئة «اسم البعثة: » إن وُجدت، ثم طبِّع للمقارنة.
+        body = text.split(": ", 1)[-1] if ": " in text else text
+        return _client_sanitize(body).rstrip(".؛،").strip()
+
+    seen: set[str] = {_content_key(c) for c in critical}
     for k, m in (dr.get("missions") or {}).items():
         if not isinstance(m, dict):
             continue
         label = m.get("label") or str(k)
         per_mission = 0
         for line in _mission_gap_lines(label, m.get("summary") or ""):
-            g = _client_sanitize(_trim_sentence(line, 200)).rstrip(".؛،")
-            if not g or g in seen or per_mission >= 2:
+            # PR B §B6 (بلاغ تحليل ٧): الحدّ 200 كان يقصّ فجواتٍ منتصفَ جملة.
+            # رُفِع إلى 400 (أعلى من سقف ملخّص البعثة الأعلى) فتكتمل الفجوة؛
+            # والقصّ حين يلزم يبقى عند حدّ جملة نظيف (`_trim_sentence`).
+            g = _client_sanitize(_trim_sentence(line, 400)).rstrip(".؛،")
+            key = _content_key(g)
+            if not key or key in seen or per_mission >= 2:
                 continue
-            seen.add(g)
+            seen.add(key)
             per_mission += 1
             informational.append(
                 f"فجوة بيانات معلنة — {g}؛ لا تمنع القرار الحالي لكنها "
