@@ -362,6 +362,17 @@ def _budget_for(key: str) -> dict:
 _MISSION_TIMEOUT_S = int(os.environ.get("SILK_MISSION_TIMEOUT_S", "90"))
 
 
+def _report_is_failed(report: object) -> bool:
+    """علم فشل بعثة سواء كانت `AgentReport` حيّاً أو dict مُفكَّكاً — نقطة
+    قلق المالك (بلاغ Nadec/اليمن #7): `getattr(dict, "failed", False)` يعيد
+    False صامتاً لقاموس فيخفي فشلاً، فيتخطّى الاستئنافُ بعثةً فاشلة. اليوم
+    `load_mission_checkpoints` يعيد `AgentReport` (لا dict)، لكن الاعتماد
+    على ذلك ضمنيّ هشّ — هذا الحارس يجعل قرار الإعادة صحيحاً مهما كان الشكل."""
+    if isinstance(report, dict):
+        return bool(report.get("failed"))
+    return bool(getattr(report, "failed", False))
+
+
 def _timed_out_report(key: str) -> AgentReport:
     return AgentReport(
         f"LLMMissionAgent:{key}", [], True,
@@ -519,7 +530,7 @@ def run_all_missions(market: MarketRef, product: str = "",
     # نداء وتبقى البعثة فاشلة للأبد. الفاشلة تُعاد؛ الناجحة تبقى بلا إعادة
     # دفع (نقطة التفتيش الجديدة تستبدل القديمة عند الاكتمال — upsert).
     to_run = [k for k in parallel_keys
-              if k not in reports or getattr(reports[k], "failed", False)]
+              if k not in reports or _report_is_failed(reports[k])]
     card_ctx = _product_card_context(product_card)
 
     def _run_one(key: str) -> AgentReport:
@@ -582,7 +593,7 @@ def run_all_missions(market: MarketRef, product: str = "",
                            getattr(market, "iso3", None))
 
     if ("opportunity_gaps" not in reports
-            or getattr(reports["opportunity_gaps"], "failed", False)):
+            or _report_is_failed(reports["opportunity_gaps"])):
         prior_findings = [dp for k in parallel_keys for dp in reports[k].findings]
         gaps_agent = LLMMissionAgent(MISSIONS["opportunity_gaps"])
         reports["opportunity_gaps"] = gaps_agent.run({

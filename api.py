@@ -1962,7 +1962,7 @@ def create_app():
 
         if req.resume is not None:
             from silk_storage import get_analysis, get_research_run, \
-                load_mission_checkpoints
+                load_mission_checkpoints, mission_status_map
             run_row = get_research_run(req.resume)
             if run_row is None:
                 raise HTTPException(status_code=404, detail={
@@ -1999,10 +1999,21 @@ def create_app():
                         "requested_market_iso3": _req_ref.iso3})
             if run_row.get("status") == "completed":
                 # مكتملة فعلاً — أعِدها كما هي، لا إعادة تشغيل ولا حرق
-                # اعتمادات إضافي (استئناف مكتمل يجب أن يكون آمناً للتكرار).
-                existing = get_analysis(req.resume)
-                if existing is not None:
-                    return _json(existing)
+                # اعتمادات إضافي (استئناف مكتمل يجب أن يكون آمناً للتكرار)
+                # — **إلا** إن حملت التشغيلة بعثةً نقطتها فاشلة (بلاغ
+                # Nadec/اليمن #7): التشغيلة تُوسَم "completed" حتى لو فشلت
+                # بعثة (429/مهلة)، فكان هذا المسار يُعيد النتيجة المخزَّنة
+                # بصمتٍ ولا يبلغ `run_all_missions` حيث تُعاد الفاشلة (#180)
+                # — فبدا `resume` بلا أثر (updated_at ثابت، صفر نداء، تكلفة
+                # كما هي). الآن: وجود أيّ بعثة فاشلة يُسقط مسار الإعادة
+                # الصامتة فتُستأنف التشغيلة فعلاً وتُعاد الفاشلة وحدها؛
+                # التشغيلة الناجحة كاملةً تبقى إعادةَ تسليمٍ صرفةً (idempotent).
+                _status_map = mission_status_map(req.resume)
+                _has_failed = any(v == "failed" for v in _status_map.values())
+                if not _has_failed:
+                    existing = get_analysis(req.resume)
+                    if existing is not None:
+                        return _json(existing)
             analysis_id = req.resume
             # نقاط تفتيش البعثات تُحمَّل **بعد** حسم السوق أدناه (لا هنا) —
             # كي تُفلتَر بسوق التشغيلة المحسوم لا تُقرأ خاماً هنا. راجع
