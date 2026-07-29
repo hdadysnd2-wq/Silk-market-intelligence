@@ -117,13 +117,31 @@ def test_mid_run_crash_then_resume_skips_completed_missions():
 
 def test_resuming_an_already_completed_run_is_a_pure_replay_no_new_calls():
     """استئناف تشغيلة مكتملة أصلاً = إعادة تسليم بلا أي نداء جديد — أمان
-    التكرار (idempotency)، لا حرق اعتمادات مضاعف عند نقر «استئناف» خطأً."""
+    التكرار (idempotency)، لا حرق اعتمادات مضاعف عند نقر «استئناف» خطأً.
+
+    تُموَّه البعثات ناجحةً صراحةً (failed=False): «مكتملة فعلاً» تعني نجاح
+    كل بعثاتها. المموّه القديم (findings=[] عبر _call_tools) كان يخزّنها
+    failed=True، فبعد فكس «resume يعيد الفاشلة» (بلاغ Nadec/اليمن #7) صارت
+    تلك التشغيلة **تُعاد** بحقّ لا تُسلَّم صامتة — فلم تعد تختبر مقصدها.
+    الآن بعثات ناجحة حقيقية => إعادة تسليم صرفة صحيحة الدلالة."""
+    from silk_agents import AgentReport
     tool_calls: list[str] = []
     fake_call_tools = _fake_call_tools_factory(tool_calls)
+    missions_ran: list[str] = []
+
+    class _CompletedMission:
+        def __init__(self, spec):
+            self._key = spec["key"]
+
+        def run(self, task):
+            missions_ran.append(self._key)
+            return AgentReport(f"LLMMissionAgent:{self._key}", [], False, "ok")
+
     db = os.path.join(tempfile.mkdtemp(), "silk.db")
     with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test",
                                  "SILK_API_KEY": "secret"}), \
          patch("silk_llm_runtime._call_tools", side_effect=fake_call_tools), \
+         patch("silk_missions.LLMMissionAgent", _CompletedMission), \
          patch("silk_synthesis._call", side_effect=_fake_call), \
          patch("silk_ai_judge._call", side_effect=_fake_call), \
          patch("silk_storage._db_path", return_value=db):
@@ -136,11 +154,13 @@ def test_resuming_an_already_completed_run_is_a_pure_replay_no_new_calls():
         analysis_id = r1.json()["analysis_id"]
 
         tool_calls.clear()
+        missions_ran.clear()
         r2 = client.post("/research", headers=hdr,
                          json={"resume": analysis_id})
         assert r2.status_code == 200
         assert r2.json()["analysis_id"] == analysis_id
-        assert tool_calls == []  # صفر نداء — إعادة تسليم صرفة
+        assert tool_calls == []      # صفر نداء ذيل — إعادة تسليم صرفة
+        assert missions_ran == []    # ولا بعثة أُعيدت (كلها ناجحة أصلاً)
 
 
 def test_resume_of_unknown_id_returns_404_not_fabricated_result():
