@@ -98,13 +98,11 @@ def test_trailing_ellipsis_is_fail_class_except_quotations():
     assert f and f[0]["repairable"] is False
     # كتلة اقتباس حرفي تُستثنى.
     assert G._check_trailing_ellipsis("> اقتباس من مصدر ينتهي...") == []
-    src = open(os.path.join(_ROOT, "silk_quality_gate.py"),
-               encoding="utf-8").read()
-    fail_block = src.split('if any(f["check"] in (')[1].split(
-        'for f in non_repairable')[0]
+    # PR A: فئاتُ FAIL ثابتٌ واحد (`FAIL_TRIGGER_CHECKS`) بدل صفٍّ حرفيّ
+    # داخل `run_quality_gate` — نفس النيّة، تحقّقٌ بنيويّ لا تحليلُ نصٍّ هشّ.
     for check in ("client_scaffold_leak", "placeholder_leak",
                   "trailing_ellipsis"):
-        assert f'"{check}"' in fail_block, check
+        assert check in G.FAIL_TRIGGER_CHECKS, check
 
 
 # ── ٤) قسم عميل بلا سرد = نثر مُحضَّر أو FAIL (يشمل «المخاطر») ──────────────

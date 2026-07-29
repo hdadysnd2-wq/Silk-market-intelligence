@@ -483,7 +483,9 @@ def test_verdict_tone_matches_dashboard_logic():
     from silk_reports import _verdict_tone
     assert _verdict_tone("NO-GO — غير موصى به") == "nogo"
     assert _verdict_tone("WATCH — مراقبة") == "watch"
-    assert _verdict_tone("PRELIMINARY GO") == "go"
+    # PR A §A2 (قرار المالك): «PRELIMINARY GO» نغمةٌ مستقلّة «preliminary»
+    # («توصية أولية بالدخول») لا تنهار إلى go — فيتّفق الغلاف والكاتب.
+    assert _verdict_tone("PRELIMINARY GO") == "preliminary"
     assert _verdict_tone("") == "unknown"
 
 

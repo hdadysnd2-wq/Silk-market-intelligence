@@ -282,7 +282,8 @@ def test_regenerate_report_calls_writer_once_with_reconstructed_reports():
 
     def fake_write_reviewed_report(mission_reports, analyst_summary, verdict,
                                    product, market_name, trace_id=None,
-                                   hs_code=None, style=None):
+                                   hs_code=None, hs_confirmation=None,
+                                   style=None):
         captured["mission_reports"] = mission_reports
         captured["analyst_summary"] = analyst_summary
         captured["verdict"] = verdict

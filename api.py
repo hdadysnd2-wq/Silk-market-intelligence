@@ -1578,10 +1578,18 @@ def create_app():
             # يُمرَّر للكاتب فيؤطّر أرقام كومتريد «مؤشر سياقي»، ويُخزَّن في
             # النتيجة فتعيد طبقة العرض تأطيرها + تسقف الثقة (silk_render).
             try:
-                from silk_hs_confirm import confirm_hs
+                from silk_hs_confirm import (confirm_hs,
+                                             cap_confidence_for_flagged_hs)
                 hs_conf = confirm_hs(product, hs_code) if hs_code else None
             except Exception:
                 hs_conf = None
+            # PR A §A1: سقفُ ثقةِ الحكم عند تعليم الرمز يُطبَّق **قبل** الكاتب من
+            # المصدر الواحد، فيرى الكاتب القيمة المسقوفة نفسها التي سيعرضها
+            # الغلاف — لا §4 «73%» مقابل غلاف «50%». طبقة العرض تُبقيها idempotent.
+            try:
+                verdict = cap_confidence_for_flagged_hs(verdict, hs_conf)
+            except Exception:  # noqa: BLE001 — تسقيفٌ تحسينيّ لا يُسقِط تشغيلة
+                pass
             # نمط الكتابة (طلب المالك): يُمرَّر للكاتب فيبدّل عقد السجل اللغوي
             # وحده (الأكاديمي مقابل التجاري) — نفس الأقسام/الحكم/قواعد الصدق.
             eff_report_style = (report_style or _default_report_style())
@@ -3038,10 +3046,26 @@ def create_app():
                 found["hs_revalidation"] = _reval
         except Exception as e:  # noqa: BLE001 — وسمٌ تحسينيّ لا يُسقِط الطلب
             log.warning("hs revalidation skipped on regen: %s", e)
+        # PR A §A1: إعادة التوليد كانت لا تمرّر `hs_confirmation` للكاتب ولا
+        # تُسقِّف الثقة — فتعيد إنتاج نفس تعارض §4«73%»/الغلاف«50%» في كل regen.
+        # نحسب العقد ونُسقِّف الحكم من المصدر الواحد قبل الكاتب، ونمرّر العقد
+        # كي يؤطّر الكاتب أرقام كومتريد سياقياً أيضاً (كان مفقوداً على هذا المسار).
+        hs_conf_regen = None
+        try:
+            from silk_hs_confirm import (confirm_hs as _confirm_regen,
+                                        cap_confidence_for_flagged_hs
+                                        as _cap_regen)
+            _hs_regen = found.get("hs_code")
+            hs_conf_regen = (_confirm_regen(found.get("product", ""), _hs_regen)
+                             if _hs_regen else None)
+            verdict = _cap_regen(verdict, hs_conf_regen)
+        except Exception as e:  # noqa: BLE001 — تسقيفٌ تحسينيّ لا يُسقِط الطلب
+            log.warning("hs confidence cap skipped on regen: %s", e)
         report_out = write_reviewed_report(
             mission_reports, analyst_summary, verdict,
             found.get("product", ""), market_name, trace_id=trace_id,
-            hs_code=found.get("hs_code"), style=regen_style)
+            hs_code=found.get("hs_code"), hs_confirmation=hs_conf_regen,
+            style=regen_style)
         # H1 (تدقيق): إعادة التوليد كانت تطمس التقرير المخزَّن بـreport_out حتى
         # لو فشل الكاتب هذه المرة (report=None) — فيُفقَد تقرير سابق ناجح كلّفت
         # تشغيلته الكاملة، وهو بالضبط ما تُنقِذه هذه النقطة. الآن: لا نحفظ null

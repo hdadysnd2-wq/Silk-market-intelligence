@@ -95,12 +95,8 @@ def test_gate_fails_on_closing_contradiction():
     dr2 = _dr(mission_summary="فجوات: نقص بيانات",
               report_text="## 9. تقييم المخاطر\nتوجد فجوة بيانات معلنة.")
     assert G._check_gaps_closing_contradiction(dr2) == []
-    src = open(os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "silk_quality_gate.py"),
-        encoding="utf-8").read()
-    fail_block = src.split('if any(f["check"] in (')[1].split(
-        'for f in non_repairable')[0]
-    assert '"gaps_closing_contradiction"' in fail_block
+    # PR A: فئاتُ FAIL ثابتٌ واحد (`FAIL_TRIGGER_CHECKS`) — تحقّقٌ بنيويّ.
+    assert "gaps_closing_contradiction" in G.FAIL_TRIGGER_CHECKS
 
 
 def test_governance_failure_fixture_lists_the_gap_in_closing(tmp_path):
