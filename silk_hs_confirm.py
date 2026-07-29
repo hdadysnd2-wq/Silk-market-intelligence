@@ -421,6 +421,45 @@ def cap_confidence_for_flagged_hs(verdict: "dict | None",
     return out
 
 
+# ══════════════ التباسُ المحور (بلاغ المُشرِف — الالتباس اللفظيّ) ════════════
+#
+# `confirm_hs` تداخلٌ لفظيّ صرف: «حليب» تطابق 040110/040120/040140/0402 معاً
+# لأنّ الفارقَ بينها **نسبةُ دهنٍ/حالةُ حفظٍ** لا كلمةٌ في اسم المنتج. حين
+# يمرّ اسمٌ عامّ (بلا صفةِ دهنٍ/حفظ) فقد يُؤكَّد لفظياً (`confirmed=True`)
+# فيمضي الخطّ صامتاً على البند الأدنى (040110) بدل أن **يُطالَب المشغّل
+# بالاختيار**. هذا الكاشفُ يرصد ذلك الالتباس بيانياً (لا اسمَ منتج/رمز صلب):
+# ترويسةٌ تنقسم بمحورٍ رقميّ (≥بندين شقيقين) واسمٌ لا يحمل صفةَ درجةٍ تُثبِّت
+# البند => التباسٌ يستوجب حواراً، حتى لو أكّده التداخل اللفظيّ.
+_DAIRY_PCT_RE = re.compile(r"\d+(?:\.\d+)?\s*%")
+
+
+def axis_disambiguation_needed(product: str, hs_code: str,
+                               path: str = "data/hs_codes.csv") -> bool:
+    """هل الرمزُ داخل ترويسةٍ متعدّدةِ البنود على محورٍ رقميّ، واسمُ المنتج لا
+    يُثبِّت أيَّ بند؟ — التباسٌ يستوجب حواراً (نسبةُ الدهن/حالةُ الحفظ صفةٌ
+    رقمية يجيب عنها المنتج، فلا يُفترَض البند الأدنى صامتاً).
+
+    بياناتٌ لا حالةُ منتج: الأشقّاءُ من المرجع الرسميّ (`axis_siblings`)،
+    وصفاتُ الدرجة من `_DEGREE_TERMS`. اسمٌ يحمل صفةَ درجةٍ («كامل الدسم») أو
+    نسبةً مئوية صريحة يُثبِّت البند => لا التباس."""
+    code = str(hs_code or "").strip()
+    if not code:
+        return False
+    try:
+        import silk_hs_dialog
+        sibs = silk_hs_dialog.axis_siblings(code)
+    except Exception:  # noqa: BLE001 — كاشفٌ إضافيّ لا يكسر البوّابة
+        return False
+    if len(sibs) < 2:
+        return False               # لا محورَ رقميّ — لا التباسَ من هذا النوع
+    toks = _tokens(product or "")
+    if any(t in _DEGREE_TERMS for t in toks):
+        return False               # اسمٌ يحمل صفةَ درجةٍ يُثبِّت البند
+    if _DAIRY_PCT_RE.search(product or ""):
+        return False               # نسبةٌ صريحة في الاسم تُثبِّت البند
+    return True                    # اسمٌ عامّ + ترويسةٌ متعدّدة => التباس
+
+
 def deterministic_candidates(product: str, top_n: int = 3,
                              path: str = "data/hs_codes.csv") -> list[dict]:
     """مرشّحو الرمز من البذرة الحتميّة — بلا نداء كلود وبلا شبكة وبلا تكلفة.
@@ -598,6 +637,28 @@ def preflight_block(product: str, hs_code: str | None,
     if not gate_enabled():
         return None
     conf = confirm_hs(product or "", hs_code, path)
+    # التباسُ المحور (بلاغ المُشرِف): ترويسةٌ تنقسم بنودها بمحورٍ رقميّ (نسبةُ
+    # دهنٍ/سعةٍ/وزن) واسمُ المنتج لا يُثبِّت البند — يُطالَب المشغّل صراحةً
+    # بالاختيار بدل المضيّ صامتاً على البند الأدنى، **سواءٌ أكّده التداخلُ
+    # اللفظيّ أم علّمه** (التداخل اللفظيّ لا يرى الفارقَ الرقميّ أصلاً: كلاهما
+    # «حليب»). يسبق مسارَ التعليم العامّ كي يحمل حدودَ الأشقّاء المفهومة كاملةً
+    # (لا مرشّحي المصنّف العام) — مصدرٌ حتميّ صفر تكلفة.
+    if axis_disambiguation_needed(product or "", hs_code, path):
+        cands = deterministic_candidates(product or "", path=path)
+        if len([c for c in cands if c.get("band_ar")]) >= 2:
+            return {
+                "error": "hs_axis_disambiguation_needed",
+                "message": (
+                    f"رمز HS {hs_code} داخل ترويسةٍ تنقسم بنودها بحسب سمةٍ "
+                    "رقمية (مثل نسبة الدهن أو حالة الحفظ: طازج/طويل الأمد/"
+                    f"مركّز/مجفّف)، واسم المنتج «{product or ''}» لا يحدّد أيّها "
+                    "— لن يبدأ التحليل على البند الأدنى افتراضاً. اختر البند "
+                    "المطابق أدناه (يظهر حدُّ كلٍّ بلغةٍ مفهومة) أو أدخل رمزاً "
+                    "يدوياً قبل بدء التحليل."),
+                "hs_confirmation": conf,
+                "candidates": cands,
+                "candidates_source": "deterministic",
+            }
     if not is_flagged(conf):
         return None
     from silk_hs_classifier import classify_general
