@@ -534,6 +534,23 @@ def comtrade_trade_mirror_total(hs_code: str, market_m49: object, year: int,
     return sum(vals) if vals else None
 
 
+# نسخ مؤشر الأداء اللوجستي (LPI) للبنك الدولي — تصدر بفواصل، لا سنة بينية
+# لها نسخة منشورة (بلاغ Nadec/اليمن #7: كاتب استشهد بـLPI 2022 لا نسخة لها).
+# مشترَك مع حارس البوّابة `_LPI_INVALID_EDITION_YEARS`.
+_LPI_EDITIONS = (2007, 2010, 2012, 2014, 2016, 2018, 2023)
+
+
+def _is_lpi_indicator(indicator: str) -> bool:
+    return str(indicator or "").upper().startswith("LP.LPI.")
+
+
+def _snap_lpi_year(year: int) -> int:
+    """ثبّت سنةً مطلوبةً على أحدث نسخة LPI منشورة ≤ المطلوبة (وإلا الأحدث
+    مطلقاً) — كي لا تُقرَن سنةٌ بينيةٌ بالمؤشر في الملاحظة."""
+    eligible = [e for e in _LPI_EDITIONS if e <= year]
+    return eligible[-1] if eligible else _LPI_EDITIONS[-1]
+
+
 def world_bank(iso3: str, indicator: str, year: int | None = None) -> DataPoint:
     """مؤشر البنك الدولي — القيمة لسنة محددة، أو أحدث سنة منشورة.
 
@@ -542,7 +559,15 @@ def world_bank(iso3: str, indicator: str, year: int | None = None) -> DataPoint:
     بعثة كلود عبر أداة worldbank_indicator) لم تُنشر بعد كان يعيد فجوة
     صامتة (None) رغم توفر بيانات فعلية حقيقية لسنوات أقرب. الآن: إن فشلت
     السنة المطلوبة تحديداً، تراجُع صريح واحد لأحدث سنة منشورة فعلاً —
-    مُعلَن في الملاحظة، لا اختلاق ولا فجوة زائفة."""
+    مُعلَن في الملاحظة، لا اختلاق ولا فجوة زائفة.
+
+    عائلة LPI (بلاغ Nadec/اليمن #7): سنةٌ مطلوبةٌ ليست نسخةً منشورة
+    (2019-2022/2024) تُثبَّت **قبل الجلب** على أحدث نسخة منشورة — فلا
+    تُقرَن سنةٌ بينيةٌ بالمؤشر في الملاحظة (كان الكاتب يستشهد بها فيُطلِق
+    `lpi_invalid_edition_year`). القيمة نفسها بيانات حقيقية للنسخة المنشورة."""
+    if year is not None and _is_lpi_indicator(indicator) \
+            and year not in _LPI_EDITIONS:
+        year = _snap_lpi_year(year)
     dp = _world_bank_for_year(iso3, indicator, year)
     if dp.value is not None or year is None:
         return dp
