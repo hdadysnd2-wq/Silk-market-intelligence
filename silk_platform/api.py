@@ -849,6 +849,78 @@ def mount(app) -> bool:
             conn.close()
 
     # ══════════════════════════ PROSPECTS ═══════════════════════════════════
+    # ═════════════════ المسودّات · email drafts ══════════════════════════════
+    # **لماذا وُجدت هذه النقطة:** `POST /studies/{id}/launch` يصفّ البريد فقط إذا
+    # مُرِّر `draft_id` **و**`prospect_ids` معاً، ولم تكن هناك أيّ نقطة تُنشئ
+    # مسودّة (الوحيدة `POST /funnels/{id}/draft` تربط مسودّةً قائمة بقمع). فأيّ
+    # زرّ «إطلاق» في واجهةٍ كان يستهلك حصّةً وينقل الحالة ويصفّ **صفر بريد** —
+    # نجاحٌ ظاهريّ يفعل أقلّ مما يُظهِر، وهو ما يمنعه عقد عدم الاختلاق.
+    # Without this, a launch button consumed quota and queued zero mail.
+    def _validate_study_binding(conn, ctx: AuthContext, study_id):
+        """ارفض ربط دراسةٍ عابراً للمستأجر — same contract as the smtp binding.
+
+        `None` وحدها «غير مضبوط» (العمود يقبل NULL فالقالبُ يسبق الدراسة)؛
+        أمّا 0/"" فقيمةٌ غير صالحة تُرفَض 422 قبل أن تبلغ مفتاحاً أجنبياً.
+        """
+        if study_id is None:
+            return None
+        sid = _as_int(study_id, "study_id", minimum=1)
+        row = repository.studies(conn).get(ctx.account_id, sid)
+        if row is None:
+            raise HTTPException(status_code=422,
+                                detail="study_id not owned by this account")
+        return dict(row)
+
+    @app.get(_PREFIX + "/drafts")
+    def list_drafts(request: Request):
+        # محتوى مصنعٍ (نصّ تسويقيّ) — جدارُ الأدمِن قائم، فالدور مصنعٌ حصراً.
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            rows = repository.drafts(conn).list(ctx.account_id)
+        finally:
+            conn.close()
+        return {"drafts": rows}
+
+    @app.post(_PREFIX + "/drafts")
+    def create_draft(request: Request, body: dict = Body(default=None)):
+        ctx = _require(request, Role.FACTORY)
+        body = _json_body(body)
+        conn = _open()
+        try:
+            _validate_study_binding(conn, ctx, body.get("study_id"))
+            fields = {}
+            for key in ("subject_en", "subject_ar", "body_en", "body_ar"):
+                try:
+                    fields[key] = users_mod._as_text(body.get(key), key)
+                except users_mod.UserError as exc:      # حاويةٌ في حقل نصّ ⇒ 422
+                    raise HTTPException(status_code=422, detail=str(exc))
+            # مسودّةٌ بلا موضوعٍ ولا نصّ لا تصلح للإرسال: لو قُبلت لأمكن إطلاق
+            # حملةٍ ترسل رسائل فارغة — فشلٌ صامت أمام عميل المصنع.
+            if not any((fields[k] or "").strip() for k in fields):
+                raise HTTPException(
+                    status_code=422,
+                    detail="a draft needs at least a subject or a body")
+            version = (users_mod._as_text(body.get("version"), "version")
+                       or "A").strip()
+            if version not in ("A", "B"):
+                # قيدُ CHECK في المخطّط — يُرفَض هنا كي لا يصعد IntegrityError 500.
+                raise HTTPException(status_code=422,
+                                    detail="version must be 'A' or 'B'")
+            fields["version"] = version
+            fields["study_id"] = body.get("study_id")
+            try:
+                row = repository.drafts(conn).create(ctx.account_id, fields)
+            except sqlite3.IntegrityError as exc:   # عيبُ عميل لا عطلُ تشغيل
+                raise HTTPException(status_code=422, detail=str(exc))
+            audit.record(conn, action="draft_created", user_id=ctx.user_id,
+                         account_id=ctx.account_id, resource_type="draft",
+                         resource_id=row["id"], ip_address=_client_ip(request))
+            conn.commit()
+        finally:
+            conn.close()
+        return row
+
     @app.get(_PREFIX + "/prospects")
     def list_prospects(request: Request):
         ctx = _require(request, Role.FACTORY)  # PII — factory own only

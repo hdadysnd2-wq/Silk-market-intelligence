@@ -3,186 +3,288 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>سِلك — حساب المصنع</title>
+<title>سِلك — منصّة المصانع</title>
 <!-- خطوط مستضافة ذاتياً — نفس ملفات الواجهة الرئيسة، لا CDN خارجي. -->
 <link href="fonts/fonts.css" rel="stylesheet">
 <style>
-  /* نفس رموز تصميم سِلك المستعملة في index.html — صفحةٌ من المنتَج لا نموذج خام. */
+  /* ═══ الاتجاه «ج · أداة عمل» — اختيار المالك ═══════════════════════════════
+     فاتح عالي التباين، شريط أدوات ثابت، أزرار صريحة، جدول كثيف. القاعدة التي
+     أنتجت هذا الشكل: الشاشة السابقة كانت تعرض ولا تُنجِز (٢٩ نقطة كتابة في
+     الـAPI مقابل زرَّي دخول/خروج)، فبدت «مستنداً» وسأل المالك «كيف أستعمل؟».
+     فكلّ فعلٍ ممكن هنا **مرئيٌّ في شريط أدوات** لا مخفيّاً في قائمة. */
   :root{
-    --bg:#FBFAF7;--panel:#FFFFFF;--ink:#1A2420;--ink-soft:#5C665F;
-    --line:#ECE8DF;--line-2:#DFDACF;--gold:#A9772F;--gold-soft:#F4ECDC;
-    --go:#3B7355;--go-soft:#E6F0EA;--warn:#A9791F;--warn-soft:#F7EEDA;
-    --bad:#A2402F;--bad-soft:#F6E7E2;--muted:#9C978A;--side:#F6F3EC;
+    --bg:#F1F4F8;--panel:#FFFFFF;--ink:#101828;--ink-soft:#475467;
+    --muted:#667085;--line:#DCE3EB;--line-2:#EDF1F6;--zebra:#FBFCFE;
+    --pri:#1D4ED8;--pri-dark:#1740B8;--pri-soft:#EEF3FD;--pri-line:#C3D0EA;
+    --ok:#054F31;--ok-soft:#D1FADF;--warn:#93370D;--warn-soft:#FEF0C7;
+    --bad:#B42318;--bad-soft:#FEE4E2;--bad-line:#F2C4C0;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--ink);min-height:100vh;
-    font-family:"IBM Plex Sans Arabic",sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
-  .num{font-family:"IBM Plex Mono",monospace;font-feature-settings:"tnum";direction:ltr;unicode-bidi:plaintext}
-  .wrap{max-width:1080px;margin:0 auto;padding:24px 18px 60px}
-  header.top{display:flex;align-items:baseline;gap:10px;justify-content:space-between;
-    padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
-  .brand{display:flex;align-items:baseline;gap:8px}
-  .brand b{font-family:"Markazi Text",serif;font-size:30px;font-weight:700;line-height:1}
-  .brand span{font-size:11.5px;color:var(--muted)}
-  .who{font-size:12.5px;color:var(--ink-soft);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  button{font-family:inherit;cursor:pointer;border:none;border-radius:9px;font-weight:600}
-  .btn{background:var(--ink);color:#fff;padding:10px 16px;font-size:13.5px}
-  .btn:hover{opacity:.9}
-  .btn.ghost{background:transparent;color:var(--ink-soft);border:1px solid var(--line-2)}
-  .btn.sm{padding:6px 11px;font-size:12px;border-radius:7px}
+    font-family:"IBM Plex Sans Arabic",sans-serif;line-height:1.6;
+    -webkit-font-smoothing:antialiased}
+  .num{font-family:"IBM Plex Mono",monospace;font-feature-settings:"tnum";
+    direction:ltr;unicode-bidi:plaintext}
+  .hide{display:none!important}
+  button{font-family:inherit;cursor:pointer;border:none;font-weight:600}
+  input,select,textarea{font-family:inherit;width:100%;padding:9px 11px;
+    border:1px solid var(--line);border-radius:6px;font-size:13.5px;
+    background:#fff;color:var(--ink)}
+  textarea{min-height:88px;resize:vertical;line-height:1.7}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--pri-soft);
+    border-color:var(--pri)}
+  label{display:block;font-size:12px;color:var(--ink-soft);font-weight:600;
+    margin:12px 0 5px}
+  .btn{background:var(--pri);color:#fff;border-radius:6px;padding:10px 16px;
+    font-size:13.5px}
+  .btn:hover{background:var(--pri-dark)}
+  .btn.gh{background:#fff;color:var(--pri);border:1.5px solid var(--pri-line)}
+  .btn.gh:hover{background:var(--pri-soft)}
+  .btn.warn{background:#fff;color:var(--bad);border:1.5px solid var(--bad-line)}
+  .btn.warn:hover{background:var(--bad-soft)}
+  .btn.sm{padding:6px 12px;font-size:12px;border-radius:5px}
   .btn:disabled{opacity:.45;cursor:not-allowed}
+
   /* ── الدخول ── */
-  .login{max-width:390px;margin:9vh auto 0;background:var(--panel);border:1px solid var(--line);
-    border-radius:16px;padding:30px 26px}
-  .login h1{font-family:"Markazi Text",serif;font-size:27px;font-weight:700;margin-bottom:4px}
-  .login p.sub{font-size:12.5px;color:var(--muted);margin-bottom:20px}
-  label{display:block;font-size:12px;color:var(--ink-soft);font-weight:600;margin:14px 0 6px}
-  input{width:100%;padding:11px 13px;border:1px solid var(--line-2);border-radius:9px;
-    font-family:inherit;font-size:14px;background:#fff;color:var(--ink)}
-  input:focus{outline:2px solid var(--gold-soft);border-color:var(--gold)}
-  /* ── البطاقات ── */
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-bottom:22px}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
-  .card h2{font-size:12px;color:var(--muted);letter-spacing:.6px;font-weight:600;margin-bottom:12px}
-  .big{font-size:26px;font-weight:600;line-height:1.2}
-  .sub{font-size:12px;color:var(--muted);margin-top:3px}
-  .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:5px 0;
-    border-bottom:1px dashed var(--line)}
-  .row:last-child{border-bottom:none}
-  .row span:first-child{color:var(--ink-soft)}
-  .bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:9px}
-  .bar i{display:block;height:100%;background:var(--gold);border-radius:99px}
-  .chip{display:inline-block;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:99px}
-  .ok{background:var(--go-soft);color:var(--go)}
-  .no{background:#F1EFE9;color:var(--muted)}
-  .bad{background:var(--bad-soft);color:var(--bad)}
-  .warn{background:var(--warn-soft);color:var(--warn)}
-  /* ── الجداول ── */
-  section.blk{background:var(--panel);border:1px solid var(--line);border-radius:14px;
-    padding:16px 18px;margin-bottom:18px}
-  section.blk h2{font-size:13.5px;font-weight:600;margin-bottom:12px;display:flex;
-    justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .login{max-width:400px;margin:8vh auto 0;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:30px 26px}
+  .login h1{font-size:24px;font-weight:700;color:var(--pri)}
+  .login p.sub{font-size:12.5px;color:var(--muted);margin-bottom:16px}
+
+  /* ── الشريط العلوي وشريط الأدوات ── */
+  header.top{background:var(--panel);border-bottom:1px solid var(--line);
+    padding:11px 20px;display:flex;flex-wrap:wrap;align-items:center;gap:12px;
+    position:sticky;top:0;z-index:20}
+  header.top b.brand{font-size:18px;font-weight:700;color:var(--pri)}
+  header.top .tagline{font-size:13px;color:var(--ink-soft)}
+  header.top .who{margin-inline-start:auto;font-size:12.5px;color:var(--ink-soft);
+    display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .toolbar{background:var(--panel);border-bottom:1px solid var(--line);
+    padding:10px 20px;display:flex;flex-wrap:wrap;gap:8px;position:sticky;
+    top:53px;z-index:19}
+  .toolbar .spacer{margin-inline-start:auto}
+
+  /* ── المقاييس ── */
+  .stats{padding:16px 20px 4px;display:grid;gap:11px;
+    grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:14px 15px}
+  .stat span.k{font-size:11.5px;color:var(--muted);font-weight:600;
+    letter-spacing:.3px}
+  .stat b.v{display:block;font-size:24px;font-weight:700;margin-top:2px}
+  .stat .v.bad{color:var(--bad)}
+  .stat .foot{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .meter{height:5px;background:var(--line-2);border-radius:99px;margin-top:8px;
+    overflow:hidden}
+  .meter i{display:block;height:100%;background:var(--pri);border-radius:99px}
+
+  /* ── الألواح والجداول ── */
+  .panel{margin:12px 20px;background:var(--panel);border:1px solid var(--line);
+    border-radius:8px;overflow:hidden}
+  .panel>h2{font-size:14px;font-weight:700;padding:12px 16px;background:#FAFBFD;
+    border-bottom:1px solid var(--line);display:flex;justify-content:space-between;
+    align-items:center;gap:10px;flex-wrap:wrap}
   .tbl{width:100%;overflow-x:auto}
-  table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
-  th{text-align:start;font-size:11px;color:var(--muted);font-weight:600;padding:7px 8px;
-    border-bottom:1px solid var(--line);white-space:nowrap}
-  td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
-  tr:last-child td{border-bottom:none}
-  .empty{font-size:12.5px;color:var(--muted);padding:14px 4px}
-  .msg{font-size:12.5px;padding:10px 13px;border-radius:9px;margin:12px 0;display:none;line-height:1.6}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:560px}
+  th{text-align:start;font-size:11.5px;color:var(--muted);font-weight:700;
+    padding:9px 16px;background:#F8FAFC;border-bottom:1px solid var(--line);
+    white-space:nowrap}
+  td{padding:10px 16px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+  tbody tr:nth-child(even) td{background:var(--zebra)}
+  tbody tr:last-child td{border-bottom:none}
+  .empty{padding:22px 16px;text-align:center;color:var(--muted);font-size:13px}
+  .pill{display:inline-block;font-size:11px;padding:3px 9px;border-radius:5px;
+    font-weight:700;white-space:nowrap}
+  .pill.ok{background:var(--ok-soft);color:var(--ok)}
+  .pill.warn{background:var(--warn-soft);color:var(--warn)}
+  .pill.bad{background:var(--bad-soft);color:var(--bad)}
+  .pill.no{background:#EAECF0;color:var(--muted)}
+  .pill.pri{background:var(--pri-soft);color:var(--pri)}
+  .prov{font-size:11.5px;color:var(--muted);padding:10px 16px;line-height:1.6;
+    border-top:1px solid var(--line-2)}
+
+  /* ── الرسائل ── */
+  .msg{font-size:12.5px;padding:10px 13px;border-radius:6px;margin:12px 20px;
+    display:none;line-height:1.6}
   .msg.on{display:block}
   .msg.err{background:var(--bad-soft);color:var(--bad)}
-  .msg.good{background:var(--go-soft);color:var(--go)}
-  .hide{display:none!important}
-  .prov{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.55}
+  .msg.good{background:var(--ok-soft);color:var(--ok)}
+  .login .msg{margin:0 0 8px}
+
+  /* ── النوافذ · dialogs ── */
+  .veil{position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:40;
+    display:flex;align-items:flex-start;justify-content:center;padding:5vh 16px;
+    overflow-y:auto}
+  .dlg{background:var(--panel);border-radius:10px;width:100%;max-width:530px;
+    box-shadow:0 20px 48px rgba(16,24,40,.24)}
+  .dlg h3{font-size:15px;font-weight:700;padding:15px 20px;
+    border-bottom:1px solid var(--line);display:flex;justify-content:space-between;
+    align-items:center}
+  .dlg .bd{padding:16px 20px 20px}
+  .dlg .ft{padding:0 20px 20px;display:flex;gap:8px;justify-content:flex-start}
+  .dlg .x{background:none;color:var(--muted);font-size:19px;line-height:1;
+    padding:0 4px}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.6}
+  .picklist{max-height:190px;overflow-y:auto;border:1px solid var(--line);
+    border-radius:6px;padding:4px}
+  .picklist label{display:flex;gap:8px;align-items:center;margin:0;padding:7px 8px;
+    font-weight:500;color:var(--ink);font-size:13px;border-radius:5px;cursor:pointer}
+  .picklist label:hover{background:var(--pri-soft)}
+  .picklist input[type=checkbox],.picklist input[type=radio]{width:auto;margin:0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:520px){.two{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 
-<!-- ════════════════ شاشة الدخول ════════════════ -->
-<div id="loginView" class="wrap">
+<!-- ════════════════════ شاشة الدخول ════════════════════════════════════ -->
+<div id="loginView">
   <div class="login">
     <h1>سِلك</h1>
-    <p class="sub">حساب المصنع — الدخول</p>
+    <p class="sub">منصّة المصانع — الدخول</p>
     <div id="loginMsg" class="msg err"></div>
     <label for="email">البريد الإلكتروني</label>
-    <input id="email" type="email" autocomplete="username" dir="ltr" placeholder="owner@factory.local">
+    <input id="email" type="email" autocomplete="username" dir="ltr"
+           placeholder="owner@factory-a.local">
     <label for="pw">كلمة المرور</label>
     <input id="pw" type="password" autocomplete="current-password" dir="ltr">
-    <button id="loginBtn" class="btn" style="width:100%;margin-top:20px">دخول</button>
-    <p class="prov">جلسة بانتهاء ٢٤ ساعة بعدم النشاط. لا يُخزَّن رمزُها إلا مجزّأً على
-      الخادم، ولا تُعرَض كلمة المرور في أي سجلّ.</p>
+    <button id="loginBtn" class="btn" style="width:100%;margin-top:18px">دخول</button>
+    <p class="hint">جلسة بانتهاء ٢٤ ساعة بعدم النشاط. لا يُخزَّن رمزُها إلا مجزّأً
+      على الخادم، ولا تُعرَض كلمة المرور في أيّ سجلّ.</p>
   </div>
 </div>
 
-<!-- ════════════════ اللوحة ════════════════ -->
-<div id="appView" class="wrap hide">
+<!-- ════════════════════ التطبيق ════════════════════════════════════════ -->
+<div id="appView" class="hide">
   <header class="top">
-    <div class="brand"><b>سِلك</b><span>حساب المصنع</span></div>
-    <div class="who">
+    <b class="brand">سِلك</b>
+    <span class="tagline" id="ctxLabel">منصّة المصانع</span>
+    <span class="who">
       <span id="whoAmI" dir="ltr" class="num"></span>
-      <span id="whoRole" class="chip no"></span>
-      <button id="logoutBtn" class="btn ghost sm">خروج</button>
-    </div>
+      <span id="whoRole" class="pill no"></span>
+      <span id="whoTier" class="pill pri hide"></span>
+      <span id="whoBal" class="num hide" style="font-weight:700"></span>
+      <button id="logoutBtn" class="btn gh sm">خروج</button>
+    </span>
   </header>
+
+  <!-- شريط أدوات المصنع -->
+  <div class="toolbar" id="factoryBar">
+    <button id="newStudyBtn" class="btn">+ دراسة جديدة</button>
+    <button id="newDraftBtn" class="btn gh">+ نصّ رسالة</button>
+    <button id="newProspectBtn" class="btn gh">+ عميل محتمل</button>
+    <button id="newSmtpBtn" class="btn gh">إعداد بريد الإرسال</button>
+    <button id="newUserBtn" class="btn gh">+ مستخدم</button>
+    <button id="refreshBtn" class="btn gh spacer">تحديث</button>
+  </div>
+
+  <!-- شريط أدوات الأدمِن -->
+  <div class="toolbar hide" id="adminBar">
+    <button id="fundBtn" class="btn">تمويل حساب مصنع</button>
+    <button id="tierBtn" class="btn gh">تغيير الطبقة</button>
+    <button id="killBtn" class="btn warn">—</button>
+    <button id="refreshBtn2" class="btn gh spacer">تحديث</button>
+  </div>
 
   <div id="appMsg" class="msg"></div>
 
-  <!-- المحفظة + الحصّة + المقاعد -->
-  <div class="grid">
-    <div class="card">
-      <h2>المحفظة</h2>
-      <div class="big num" id="wBal">—</div>
-      <div class="sub">الرصيد الحالي</div>
-      <div style="margin-top:12px">
-        <div class="row"><span>مُموَّل تراكمياً</span><b class="num" id="wFunded">—</b></div>
-        <div class="row"><span>مُنفَق تراكمياً</span><b class="num" id="wSpent">—</b></div>
-        <div class="row"><span>الحالة</span><span id="wState" class="chip no">—</span></div>
-      </div>
+  <!-- ── مقاييس المصنع ── -->
+  <div class="stats" id="factoryStats">
+    <div class="stat">
+      <span class="k">الرصيد</span><b class="v num" id="wBal">—</b>
+      <div class="foot" id="wFoot">—</div>
     </div>
-
-    <div class="card">
-      <h2>الطبقة والحصّة</h2>
-      <div class="big" id="eTier">—</div>
-      <div class="sub" id="ePeriod">—</div>
-      <div class="bar"><i id="eBar" style="width:0"></i></div>
-      <div class="row" style="margin-top:10px">
-        <span id="eStudiesLbl">الدراسات</span><b class="num" id="eStudies">—</b>
-      </div>
+    <div class="stat">
+      <span class="k" id="eStudiesLbl">دراسات هذا الشهر</span>
+      <b class="v num" id="eStudies">—</b>
+      <div class="meter"><i id="eBar" style="width:0"></i></div>
     </div>
-
-    <div class="card">
-      <h2>المقاعد</h2>
-      <div class="big num" id="sSeats">—</div>
-      <div class="sub">مستخدمون نشطون / السقف</div>
-      <div class="bar"><i id="sBar" style="width:0"></i></div>
+    <div class="stat">
+      <span class="k">المقاعد</span><b class="v num" id="sSeats">—</b>
+      <div class="meter"><i id="sBar" style="width:0"></i></div>
     </div>
-
-    <div class="card">
-      <h2>الميزات</h2>
-      <div class="row"><span>لوحة</span><span id="fDash" class="chip no">—</span></div>
-      <div class="row"><span>قمع المقارنة</span><span id="fFunnel" class="chip no">—</span></div>
-      <div class="row"><span>تصدير</span><span id="fExport" class="chip no">—</span></div>
-      <div class="row"><span>وصول API</span><span id="fApi" class="chip no">—</span></div>
-      <div class="row"><span>علامة بيضاء</span><span id="fWhite" class="chip no">—</span></div>
+    <div class="stat">
+      <span class="k">بريد الإرسال</span><b class="v" id="smtpState">—</b>
+      <div class="foot" id="smtpFoot">لازمٌ لأيّ إطلاق</div>
     </div>
   </div>
 
-  <!-- الدراسات -->
-  <section class="blk">
-    <h2>الدراسات <button id="refreshBtn" class="btn ghost sm">تحديث</button></h2>
+  <!-- ── الدراسات ── -->
+  <section class="panel" id="studiesPanel">
+    <h2>الدراسات
+      <button class="btn sm" id="newStudyBtn2">+ جديدة</button></h2>
     <div class="tbl">
       <table>
-        <thead><tr>
-          <th>#</th><th>العنوان</th><th>الحالة</th><th>المستهدف</th><th>إجراءات</th>
-        </tr></thead>
+        <thead><tr><th>#</th><th>العنوان</th><th>الحالة</th><th>المستهدف</th>
+          <th>إجراءات</th></tr></thead>
         <tbody id="studiesBody"></tbody>
       </table>
     </div>
-    <div id="studiesEmpty" class="empty hide">لا دراسات بعد.</div>
+    <div id="studiesEmpty" class="empty hide">لا دراسات بعد — ابدأ بـ«دراسة جديدة».</div>
     <p class="prov"><b>الأرشفة سحبٌ حقيقي:</b> تُلغي البريد المصفوف الذي لم يُرسَل
       وتُبلّغك بعدده. و«إنهاء» يُرفَض ما دام في الطابور بريدٌ معلّق — لأن وسمها
       «مكتملة» ورسائلها ستخرج بعد قليل وصفٌ مخالف للواقع.</p>
   </section>
 
-  <!-- المستخدمون -->
-  <section class="blk">
-    <h2>مستخدمو الحساب</h2>
+  <!-- ── نصوص الرسائل ── -->
+  <section class="panel" id="draftsPanel">
+    <h2>نصوص الرسائل <button class="btn sm gh" id="newDraftBtn2">+ نصّ</button></h2>
     <div class="tbl">
       <table>
-        <thead><tr><th>#</th><th>البريد</th><th>الاسم</th><th>الدور</th><th>الحالة</th></tr></thead>
+        <thead><tr><th>#</th><th>الموضوع</th><th>الدراسة</th><th>النسخة</th></tr></thead>
+        <tbody id="draftsBody"></tbody>
+      </table>
+    </div>
+    <div id="draftsEmpty" class="empty hide">لا نصوص بعد — الإطلاق يحتاج نصّاً
+      وعميلاً محتملاً معاً، وإلا صفَّ صفر بريد.</div>
+  </section>
+
+  <!-- ── العملاء المحتملون ── -->
+  <section class="panel" id="prospectsPanel">
+    <h2>العملاء المحتملون
+      <button class="btn sm gh" id="newProspectBtn2">+ عميل</button></h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>البريد</th><th>الاسم</th><th>الشركة</th></tr></thead>
+        <tbody id="prospectsBody"></tbody>
+      </table>
+    </div>
+    <div id="prospectsEmpty" class="empty hide">لا عملاء محتملين بعد.</div>
+  </section>
+
+  <!-- ── المستخدمون ── -->
+  <section class="panel" id="usersPanel">
+    <h2>مستخدمو الحساب <button class="btn sm gh" id="newUserBtn2">+ مستخدم</button></h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>البريد</th><th>الاسم</th><th>الدور</th>
+          <th>الحالة</th><th>إجراءات</th></tr></thead>
         <tbody id="usersBody"></tbody>
       </table>
     </div>
     <div id="usersEmpty" class="empty hide">—</div>
   </section>
 
-  <!-- الدفتر -->
-  <section class="blk">
+  <!-- ── المزايا ── -->
+  <section class="panel" id="featuresPanel">
+    <h2>المزايا</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>الميزة</th><th>الحالة</th></tr></thead>
+        <tbody id="featuresBody"></tbody>
+      </table>
+    </div>
+    <p class="prov">ما ليس في طبقتك ليس معطوباً — يُفتح بترقية الطبقة، والترقية
+      قرارُ مالك المنصّة عبر حساب الأدمِن.</p>
+  </section>
+
+  <!-- ── الدفتر ── -->
+  <section class="panel" id="ledgerPanel">
     <h2>آخر حركات الدفتر</h2>
     <div class="tbl">
       <table>
-        <thead><tr><th>#</th><th>العملية</th><th>المبلغ</th><th>الرصيد بعدها</th><th>التاريخ</th></tr></thead>
+        <thead><tr><th>#</th><th>العملية</th><th>المبلغ</th><th>الرصيد بعدها</th>
+          <th>التاريخ</th></tr></thead>
         <tbody id="ledgerBody"></tbody>
       </table>
     </div>
@@ -190,7 +292,23 @@
     <p class="prov">الدفتر <b>غير قابل للتعديل</b> — كل حركة قيدٌ واحد بلقطة رصيد،
       ولا يُحذَف قيدٌ ولا يُعدَّل.</p>
   </section>
+
+  <!-- ── حسابات المصانع (أدمِن) ── -->
+  <section class="panel hide" id="accountsPanel">
+    <h2>حسابات المصانع</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>الاسم</th><th>الطبقة</th><th>المقاعد</th>
+          <th>الحالة</th><th>إجراءات</th></tr></thead>
+        <tbody id="accountsBody"></tbody>
+      </table>
+    </div>
+    <div id="accountsEmpty" class="empty hide">لا حسابات مصانع بعد.</div>
+  </section>
 </div>
+
+<!-- ════════════════════ حاوية النوافذ ══════════════════════════════════ -->
+<div id="dlgHost"></div>
 
 <script>
 "use strict";
@@ -198,23 +316,29 @@
    من نقطةٍ حقيقية، والخطأ يُعرَض كما تُرجعه النقطة لا كرسالة عامّة. */
 const API = "/platform";
 let TOKEN = null;
+let ME = null;
+const CACHE = {studies: [], drafts: [], prospects: [], smtp: [], accounts: []};
 
 const $ = (id) => document.getElementById(id);
 const cents = (c) => (Number(c) / 100).toLocaleString("en-US",
   {style: "currency", currency: "USD"});
 
-/* رسائل عربية للأكواد المعروفة — المنتَج عربيّ أولاً، ورسالةُ الخادم إنجليزية
-   (وهي للمطوّر/السجلّ). نُترجم **الكود** لا النصّ، فلو تغيّرت صياغة الخادم تبقى
-   الترجمة صحيحة؛ وكودٌ غير معروف يعود إلى نصّ الخادم بدل رسالة عامّة تُخفي السبب. */
+/* رسائل عربية للأكواد المعروفة — نُترجم **الكود** لا النصّ، فلو تغيّرت صياغة
+   الخادم تبقى الترجمة صحيحة؛ وكودٌ غير معروف يعود إلى نصّ الخادم بدل رسالة
+   عامّة تُخفي السبب. */
 const ERR_AR = {
   pending_emails: "لا يمكن الإنهاء وفي الطابور بريدٌ لم يخرج بعد — انتظر نفاده، أو أرشِف لإلغاء الباقي.",
   in_flight_emails: "رسالةٌ من هذه الدراسة في طريقها الآن — أعِد المحاولة بعد لحظات.",
   already_archived: "الدراسة مؤرشَفة سلفاً.",
   invalid_transition: "لا يصحّ هذا الانتقال من حالة الدراسة الحالية.",
   insufficient_funds: "الرصيد لا يكفي لهذه العملية.",
+  insufficient_balance: "الرصيد لا يكفي للتكلفة المتوقّعة لهذا الإطلاق.",
+  account_delinquent: "الحساب مدين — يلزم تمويلٌ من الأدمِن قبل أيّ إطلاق.",
   delinquent: "الحساب مدين — يلزم سداد قبل أي عملية جديدة.",
   tier_gate: "طبقتك الحالية لا تمنح هذه الميزة.",
+  quota_exhausted: "نفدت حصّة الدراسات لهذه الفترة.",
   seats_exceed_target_tier: "عدد المستخدمين النشطين يتجاوز مقاعد الطبقة المطلوبة.",
+  seat_limit_reached: "بلغتَ سقف المقاعد في طبقتك.",
 };
 
 /* استخلاص رسالة الخطأ من `detail` — قد يكون نصّاً أو كائناً (بوّابات الطبقة
@@ -222,6 +346,7 @@ const ERR_AR = {
 function detailText(d) {
   if (d == null) return "";
   if (typeof d === "string") return d;
+  if (Array.isArray(d)) return d.map(detailText).join(" · ");
   if (typeof d === "object") {
     const bits = [];
     if (d.error && ERR_AR[d.error]) bits.push(ERR_AR[d.error]);
@@ -230,6 +355,8 @@ function detailText(d) {
     if (d.queued != null || d.sending != null)
       bits.push(`(مصفوف: ${d.queued ?? 0}، في الطريق: ${d.sending ?? 0})`);
     if (d.limit != null && d.used != null) bits.push(`(${d.used}/${d.limit})`);
+    if (d.projected_cents != null)
+      bits.push(`(المطلوب: ${cents(d.projected_cents)}، الرصيد: ${cents(d.balance_cents || 0)})`);
     if (d.price_cents != null) bits.push(`(السعر: ${cents(d.price_cents)})`);
     if (d.upgrade) bits.push("— يحتاج ترقية الطبقة");
     return bits.join(" ") || JSON.stringify(d);
@@ -247,6 +374,7 @@ async function api(path, opts) {
   if (!r.ok) {
     const e = new Error(detailText(body && body.detail) || ("HTTP " + r.status));
     e.status = r.status;
+    e.detail = body && body.detail;
     throw e;
   }
   return body;
@@ -255,8 +383,45 @@ async function api(path, opts) {
 function say(el, text, kind) {
   el.textContent = text;
   el.className = "msg on " + (kind || "");
-  if (kind === "good") setTimeout(() => { el.className = "msg"; }, 6000);
+  if (kind === "good") setTimeout(() => { el.className = "msg"; }, 7000);
+  el.scrollIntoView({block: "nearest"});
 }
+const tell = (t, k) => say($("appMsg"), t, k);
+
+/* ── نافذة عامّة · one dialog builder ─────────────────────────────────────── */
+function dialog(title, bodyHtml, onSubmit, submitLabel) {
+  const veil = document.createElement("div");
+  veil.className = "veil";
+  veil.innerHTML =
+    '<div class="dlg" role="dialog" aria-modal="true"><h3><span></span>' +
+    '<button class="x" aria-label="إغلاق">✕</button></h3>' +
+    '<div class="bd"></div><div class="ft">' +
+    '<button class="btn go"></button>' +
+    '<button class="btn gh cancel">إلغاء</button></div></div>';
+  veil.querySelector("h3 span").textContent = title;
+  veil.querySelector(".bd").innerHTML = bodyHtml;
+  veil.querySelector(".btn.go").textContent = submitLabel || "حفظ";
+  const close = () => veil.remove();
+  veil.querySelector(".x").onclick = close;
+  veil.querySelector(".cancel").onclick = close;
+  veil.addEventListener("click", (ev) => { if (ev.target === veil) close(); });
+  const go = veil.querySelector(".btn.go");
+  go.onclick = async () => {
+    go.disabled = true;
+    try { await onSubmit(veil); close(); await loadAll(); }
+    catch (e) { tell(e.message || "تعذّر التنفيذ", "err"); go.disabled = false; }
+  };
+  $("dlgHost").appendChild(veil);
+  const first = veil.querySelector("input,select,textarea");
+  if (first) first.focus();
+  return veil;
+}
+const val = (veil, name) => {
+  const el = veil.querySelector('[name="' + name + '"]');
+  return el ? el.value.trim() : "";
+};
+/* قيمةٌ فارغة تُرسَل `null` لا `""` — الخادم يميّز «غير مضبوط» عن «فارغ». */
+const orNull = (v) => (v === "" ? null : v);
 
 /* ── الدخول ── */
 async function doLogin() {
@@ -269,158 +434,333 @@ async function doLogin() {
     });
     TOKEN = out.token;
     $("pw").value = "";
-    $("loginMsg").className = "msg";
+    $("loginMsg").className = "msg err";
     $("loginView").classList.add("hide");
     $("appView").classList.remove("hide");
     await loadAll();
   } catch (e) {
     say($("loginMsg"), e.message || "تعذّر الدخول", "err");
-  } finally {
-    btn.disabled = false;
-  }
+  } finally { btn.disabled = false; }
 }
 
 async function doLogout() {
   try { await api("/auth/logout", {method: "POST"}); } catch (_e) { /* اخرج محلياً */ }
-  TOKEN = null;
+  TOKEN = null; ME = null;
   $("appView").classList.add("hide");
   $("loginView").classList.remove("hide");
 }
 
-/* ── تحميل اللوحة ── */
+/* ── أدوات عرض ── */
 function pct(used, limit) {
-  if (limit == null || limit < 0 || limit === 0) return 0;
+  if (limit == null || limit <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
 }
-const yesNo = (v) => v
-  ? '<span class="chip ok">متاح</span>' : '<span class="chip no">غير متاح</span>';
+function cell(tr, text, cls) {
+  const td = document.createElement("td");
+  if (cls) { const s = document.createElement("span"); s.className = cls;
+    s.textContent = text; td.appendChild(s); }
+  else td.textContent = text;                       // نصّ لا HTML — لا حقن
+  tr.appendChild(td);
+  return td;
+}
+function pill(tr, text, kind) { return cell(tr, text, "pill " + kind); }
+function emptyToggle(id, n) { $(id).classList.toggle("hide", n > 0); }
 
+/* ═══════════════════════ التحميل ═══════════════════════════════════════ */
 async function loadAll() {
-  const msg = $("appMsg");
   try {
-    const [me, ent, w] = await Promise.all([
-      api("/me"), api("/entitlements"), api("/wallet")
-    ]);
-
-    $("whoAmI").textContent = me.email;
-    $("whoRole").textContent = me.role;
-
-    $("wBal").textContent = cents(w.balance);
-    $("wFunded").textContent = cents(w.lifetime_funded);
-    $("wSpent").textContent = cents(w.lifetime_spent);
-    const st = $("wState");
-    if (w.delinquent) { st.textContent = "مدين — الإطلاق محجوب"; st.className = "chip bad"; }
-    else { st.textContent = "سليم"; st.className = "chip ok"; }
-
-    $("eTier").textContent = ent.tier;
-    const lifetime = ent.studies_period === "lifetime";
-    $("ePeriod").textContent = lifetime ? "حصّة مدى الحياة" : "حصّة شهرية";
-    $("eStudiesLbl").textContent = lifetime ? "دراسات (مدى الحياة)" : "دراسات هذا الشهر";
-    $("eStudies").textContent = ent.studies_used + " / " + ent.studies_limit;
-    $("eBar").style.width = pct(ent.studies_used, ent.studies_limit) + "%";
-
-    const unlimited = ent.seats_limit < 0;
-    $("sSeats").textContent = ent.seats_used + " / " + (unlimited ? "∞" : ent.seats_limit);
-    $("sBar").style.width = (unlimited ? 0 : pct(ent.seats_used, ent.seats_limit)) + "%";
-
-    $("fDash").outerHTML = '<span id="fDash" class="chip ' +
-      (ent.dashboard === "none" ? "no" : "ok") + '">' + ent.dashboard + "</span>";
-    $("fFunnel").outerHTML = '<span id="fFunnel">' + yesNo(ent.funnel) + "</span>";
-    $("fExport").outerHTML = '<span id="fExport">' + yesNo(ent.export) + "</span>";
-    $("fApi").outerHTML = '<span id="fApi">' + yesNo(ent.api_access) + "</span>";
-    $("fWhite").outerHTML = '<span id="fWhite">' + yesNo(ent.white_label) + "</span>";
-
-    await Promise.all([loadStudies(), loadUsers(), loadLedger()]);
+    ME = await api("/me");
+    $("whoAmI").textContent = ME.email;
+    $("whoRole").textContent = ME.role;
+    const isAdmin = ME.role === "silk_admin";
+    $("ctxLabel").textContent = isAdmin ? "لوحة مالك المنصّة" : "حساب المصنع";
+    $("factoryBar").classList.toggle("hide", isAdmin);
+    $("adminBar").classList.toggle("hide", !isAdmin);
+    ["studiesPanel", "draftsPanel", "prospectsPanel", "usersPanel",
+     "featuresPanel", "ledgerPanel"].forEach((p) =>
+      $(p).classList.toggle("hide", isAdmin));
+    $("factoryStats").classList.toggle("hide", isAdmin);
+    $("accountsPanel").classList.toggle("hide", !isAdmin);
+    if (isAdmin) await loadAdmin();
+    else await loadFactory();
   } catch (e) {
     if (e.status === 401) { doLogout(); return; }
-    say(msg, "تعذّر تحميل اللوحة: " + e.message, "err");
+    tell("تعذّر تحميل اللوحة: " + e.message, "err");
   }
 }
 
-const STATE_AR = {draft: "مسودّة", in_progress: "جارية", completed: "مكتملة",
-                  archived: "مؤرشَفة"};
-const STATE_CHIP = {draft: "no", in_progress: "warn", completed: "ok", archived: "no"};
+async function loadFactory() {
+  const [ent, w] = await Promise.all([api("/entitlements"), api("/wallet")]);
+  $("whoTier").textContent = ent.tier;
+  $("whoTier").classList.remove("hide");
+  $("whoBal").textContent = cents(w.balance);
+  $("whoBal").classList.remove("hide");
 
-async function loadStudies() {
-  const rows = (await api("/studies")).studies || [];
-  const body = $("studiesBody");
+  const bal = $("wBal");
+  bal.textContent = cents(w.balance);
+  bal.className = "v num" + (Number(w.balance) <= 0 ? " bad" : "");
+  $("wFoot").textContent = w.delinquent
+    ? "مدين — الإطلاق محجوب حتى يُموَّل"
+    : (Number(w.balance) <= 0
+        ? "صفر — أيّ إطلاق سيُرفَض؛ التمويل من حساب الأدمِن"
+        : "مُموَّل " + cents(w.lifetime_funded) + " · مُنفَق " + cents(w.lifetime_spent));
+
+  const lifetime = ent.studies_period === "lifetime";
+  $("eStudiesLbl").textContent = lifetime ? "دراسات (مدى الحياة)" : "دراسات هذا الشهر";
+  $("eStudies").textContent = ent.studies_used + " / " + ent.studies_limit;
+  $("eBar").style.width = pct(ent.studies_used, ent.studies_limit) + "%";
+
+  const unlimited = ent.seats_limit < 0;
+  $("sSeats").textContent = ent.seats_used + " / " + (unlimited ? "∞" : ent.seats_limit);
+  $("sBar").style.width = (unlimited ? 0 : pct(ent.seats_used, ent.seats_limit)) + "%";
+
+  renderFeatures(ent);
+  await Promise.all([loadSmtp(), loadStudies(), loadDrafts(), loadProspects(),
+                     loadUsers(), loadLedger()]);
+}
+
+/* الطبقة التي تفتح كل ميزة — تُطابِق models.TIER_LIMITS. «غير متاح» كانت تُقرأ
+   «مكسور»؛ الصحيح تسمية الباقة التي تفتحها. */
+const UNLOCKS = {funnel: "الذهبية", export: "البلاتينية", api_access: "البلاتينية",
+                 white_label: "البلاتينية"};
+const FEAT_AR = {funnel: "قمع المقارنة", export: "تصدير التقارير",
+                 api_access: "وصول API", white_label: "علامة بيضاء"};
+
+function renderFeatures(ent) {
+  const body = $("featuresBody");
   body.textContent = "";
-  $("studiesEmpty").classList.toggle("hide", rows.length > 0);
-  rows.forEach((s) => {
+  const tr0 = document.createElement("tr");
+  cell(tr0, "لوحة المتابعة");
+  pill(tr0, ent.dashboard === "none" ? "غير مفعّلة" : ent.dashboard,
+       ent.dashboard === "none" ? "no" : "ok");
+  body.appendChild(tr0);
+  Object.keys(FEAT_AR).forEach((k) => {
     const tr = document.createElement("tr");
-    const title = s.title_ar || s.title_en || "—";
-    const cell = (html) => { const td = document.createElement("td"); td.innerHTML = html; return td; };
-    tr.appendChild(cell('<span class="num">' + s.id + "</span>"));
-    const tdTitle = document.createElement("td");
-    tdTitle.textContent = title;                       // نصّ لا HTML — لا حقن
-    tr.appendChild(tdTitle);
-    tr.appendChild(cell('<span class="chip ' + (STATE_CHIP[s.state] || "no") + '">' +
-      (STATE_AR[s.state] || s.state) + "</span>"));
-    tr.appendChild(cell('<span class="num">' + (s.target_count || 0) + "</span>"));
-
-    const td = document.createElement("td");
-    if (s.state === "in_progress") td.appendChild(actBtn("إنهاء", s.id, "complete"));
-    if (s.state !== "archived") td.appendChild(actBtn("أرشفة", s.id, "archive"));
-    if (!td.childNodes.length) td.innerHTML = '<span class="sub">—</span>';
-    tr.appendChild(td);
+    cell(tr, FEAT_AR[k]);
+    if (ent[k]) pill(tr, "متاحة", "ok");
+    else pill(tr, "في الباقة " + UNLOCKS[k], "pri");
     body.appendChild(tr);
   });
 }
 
-function actBtn(label, id, action) {
+async function loadSmtp() {
+  CACHE.smtp = (await api("/smtp-configs")).smtp_configs || [];
+  const active = CACHE.smtp.filter((c) => c.is_active);
+  const el = $("smtpState");
+  if (!CACHE.smtp.length) { el.textContent = "غير مُعَدّ"; el.className = "v bad"; }
+  else if (!active.length) { el.textContent = "معطَّل"; el.className = "v bad"; }
+  else { el.textContent = "جاهز"; el.className = "v"; }
+  $("smtpFoot").textContent = CACHE.smtp.length
+    ? CACHE.smtp.length + " تهيئة · " + active.length + " نشطة"
+    : "لازمٌ لأيّ إطلاق";
+}
+
+const STATE_AR = {draft: "مسودّة", in_progress: "جارية", completed: "مكتملة",
+                  archived: "مؤرشَفة"};
+const STATE_PILL = {draft: "no", in_progress: "warn", completed: "ok",
+                    archived: "no"};
+
+async function loadStudies() {
+  const rows = (await api("/studies")).studies || [];
+  CACHE.studies = rows;          // تُستعمل في قائمة «الدراسة» داخل نافذة النصّ
+  const body = $("studiesBody");
+  body.textContent = "";
+  emptyToggle("studiesEmpty", rows.length);
+  rows.forEach((s) => {
+    const tr = document.createElement("tr");
+    cell(tr, String(s.id), "num");
+    cell(tr, s.title_ar || s.title_en || "—");
+    pill(tr, STATE_AR[s.state] || s.state, STATE_PILL[s.state] || "no");
+    cell(tr, String(s.target_count || 0), "num");
+    const td = document.createElement("td");
+    if (s.state === "draft") td.appendChild(launchBtn(s));
+    if (s.state === "in_progress") {
+      td.appendChild(actBtn("إنهاء", s.id, "complete", "gh"));
+      td.appendChild(reportBtn(s.id));
+    }
+    if (s.state === "completed") td.appendChild(reportBtn(s.id));
+    if (s.state !== "archived") td.appendChild(actBtn("أرشفة", s.id, "archive", "gh"));
+    if (!td.childNodes.length) cell(tr, "—");
+    else tr.appendChild(td);
+    body.appendChild(tr);
+  });
+}
+
+function mkBtn(label, cls) {
   const b = document.createElement("button");
-  b.className = "btn ghost sm";
-  b.style.marginInlineEnd = "6px";
+  b.className = "btn sm " + (cls || "");
   b.textContent = label;
+  b.style.marginInlineEnd = "5px";
+  return b;
+}
+
+function actBtn(label, id, action, cls) {
+  const b = mkBtn(label, cls);
   b.onclick = async () => {
     b.disabled = true;
     try {
       const out = await api("/studies/" + id + "/" + action, {method: "POST"});
       const n = out.cancelled_queued_emails;
-      say($("appMsg"), action === "archive"
+      tell(action === "archive"
         ? "أُرشِفت الدراسة #" + id + (n ? " — وأُلغي " + n + " بريداً مصفوفاً لم يُرسَل." : " — لا بريد معلّق لإلغائه.")
         : "أُنهيت الدراسة #" + id + ".", "good");
       await loadAll();
     } catch (e) {
-      say($("appMsg"), "تعذّر التنفيذ على #" + id + ": " + e.message, "err");
+      tell("تعذّر التنفيذ على #" + id + ": " + e.message, "err");
       b.disabled = false;
     }
   };
   return b;
 }
 
+function reportBtn(id) {
+  const b = mkBtn("تقرير", "gh");
+  b.onclick = async () => {
+    b.disabled = true;
+    try {
+      /* مفتاح خمول لكل نقرة على نفس الدراسة: نقرةٌ مزدوجة أو إعادة محاولة
+         تُرجِع نفس القيد بلا خصمٍ ثانٍ. القيمة ثابتة لكل (دراسة، جلسة) عمداً. */
+      const out = await api("/studies/" + id + "/report", {
+        method: "POST",
+        body: JSON.stringify({idempotency_key: "ui-" + id})
+      });
+      tell(out.charged === false
+        ? "التقرير #" + id + " كان مُصدَراً سلفاً بنفس المفتاح — لم يُخصَم ثانيةً."
+        : "أُصدِر تقرير الدراسة #" + id + " وخُصِم سعره من المحفظة.", "good");
+      await loadAll();
+    } catch (e) {
+      tell("تعذّر إصدار التقرير لـ#" + id + ": " + e.message, "err");
+      b.disabled = false;
+    }
+  };
+  return b;
+}
+
+/* ── الإطلاق: نافذةٌ تُلزِم اختيار نصٍّ وعملاء ─────────────────────────────
+   الخادم يصفّ البريد **فقط** إذا مُرِّر `draft_id` و`prospect_ids` معاً. زرُّ
+   إطلاقٍ يُرسِل بلا أحدهما ينجح ظاهرياً ويصفّ صفراً — فالنافذة تمنع ذلك بنيوياً
+   بدل أن تعتمد على انتباه المستخدم. */
+function launchBtn(s) {
+  const b = mkBtn("إطلاق", "");
+  b.onclick = () => {
+    if (!CACHE.drafts.length || !CACHE.prospects.length) {
+      tell("الإطلاق يحتاج نصّ رسالة **وعميلاً محتملاً** على الأقل — أضِف الناقص أوّلاً، وإلا خرجت الحملة بصفر بريد.", "err");
+      return;
+    }
+    const drafts = CACHE.drafts.map((d, i) =>
+      '<label><input type="radio" name="draft_id" value="' + d.id + '"' +
+      (i === 0 ? " checked" : "") + "><span>#" + d.id + " — " +
+      esc(d.subject_ar || d.subject_en || "بلا موضوع") + "</span></label>").join("");
+    const people = CACHE.prospects.map((p) =>
+      '<label><input type="checkbox" name="pid" value="' + p.id + '" checked>' +
+      "<span>" + esc(p.email) + "</span></label>").join("");
+    dialog("إطلاق الدراسة #" + s.id,
+      '<p class="hint">المستهدف المسجَّل لهذه الدراسة: <b class="num">' +
+        (s.target_count || 0) + '</b>. التكلفة تُحسَب على البريد الفعليّ المصفوف.</p>' +
+      "<label>نصّ الرسالة</label><div class=\"picklist\">" + drafts + "</div>" +
+      "<label>العملاء المحتملون</label><div class=\"picklist\">" + people + "</div>" +
+      '<p class="hint">بلا نصٍّ أو بلا عميلٍ مختار يصفّ الخادم <b>صفر</b> بريد —' +
+      " والحصّة تُستهلَك مع ذلك. لذلك كلاهما إلزاميّ هنا.</p>",
+      async (veil) => {
+        const draftId = veil.querySelector('[name="draft_id"]:checked');
+        const ids = Array.from(veil.querySelectorAll('[name="pid"]:checked'))
+          .map((c) => Number(c.value));
+        if (!draftId) throw new Error("اختر نصّ الرسالة.");
+        if (!ids.length) throw new Error("اختر عميلاً محتملاً واحداً على الأقل.");
+        const out = await api("/studies/" + s.id + "/launch", {
+          method: "POST",
+          body: JSON.stringify({draft_id: Number(draftId.value), prospect_ids: ids})
+        });
+        tell("أُطلِقت الدراسة #" + s.id + " — صُفَّ " + out.queued +
+             " بريداً. الحصّة: " + out.quota_used + "/" + out.quota_limit + ".",
+             out.queued > 0 ? "good" : "err");
+      }, "إطلاق");
+  };
+  return b;
+}
+
+/* تهريبٌ للنصّ داخل HTML النافذة — العناوين والبُرد بيانات مستخدم. */
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+}
+
+async function loadDrafts() {
+  CACHE.drafts = (await api("/drafts")).drafts || [];
+  const body = $("draftsBody");
+  body.textContent = "";
+  emptyToggle("draftsEmpty", CACHE.drafts.length);
+  CACHE.drafts.forEach((d) => {
+    const tr = document.createElement("tr");
+    cell(tr, String(d.id), "num");
+    cell(tr, d.subject_ar || d.subject_en || "—");
+    cell(tr, d.study_id ? "#" + d.study_id : "قالب عامّ", d.study_id ? "num" : "");
+    cell(tr, d.version || "A", "num");
+    body.appendChild(tr);
+  });
+}
+
+async function loadProspects() {
+  CACHE.prospects = (await api("/prospects")).prospects || [];
+  const body = $("prospectsBody");
+  body.textContent = "";
+  emptyToggle("prospectsEmpty", CACHE.prospects.length);
+  CACHE.prospects.forEach((p) => {
+    const tr = document.createElement("tr");
+    cell(tr, String(p.id), "num");
+    cell(tr, p.email);
+    cell(tr, [p.first_name, p.last_name].filter(Boolean).join(" ") || "—");
+    cell(tr, p.company || "—");
+    body.appendChild(tr);
+  });
+}
+
 async function loadUsers() {
   let out;
   try { out = await api("/users"); }
   catch (e) {
-    // الأدمِن/المحلّل ليسا مصنعاً فتُرفَض النقطة 403 — أخفِ الكتلة بلا ضجيج.
-    if (e.status === 403) { $("usersBody").textContent = "";
+    if (e.status === 403) {
+      $("usersBody").textContent = "";
       $("usersEmpty").textContent = "إدارة المستخدمين متاحة لحساب المصنع فقط.";
-      $("usersEmpty").classList.remove("hide"); return; }
+      $("usersEmpty").classList.remove("hide");
+      return;
+    }
     throw e;
   }
   const rows = out.users || [];
   const body = $("usersBody");
   body.textContent = "";
-  $("usersEmpty").classList.toggle("hide", rows.length > 0);
+  emptyToggle("usersEmpty", rows.length);
   rows.forEach((u) => {
     const tr = document.createElement("tr");
-    const num = document.createElement("td");
-    num.innerHTML = '<span class="num">' + u.id + "</span>";
-    tr.appendChild(num);
-    [u.email, [u.first_name, u.last_name].filter(Boolean).join(" ") || "—", u.role]
-      .forEach((v) => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
-    const stTd = document.createElement("td");
-    stTd.innerHTML = u.is_active
-      ? '<span class="chip ok">نشط</span>' : '<span class="chip no">معطَّل</span>';
-    tr.appendChild(stTd);
+    cell(tr, String(u.id), "num");
+    cell(tr, u.email);
+    cell(tr, [u.first_name, u.last_name].filter(Boolean).join(" ") || "—");
+    cell(tr, u.role);
+    pill(tr, u.is_active ? "نشط" : "معطَّل", u.is_active ? "ok" : "no");
+    const td = document.createElement("td");
+    if (u.id !== ME.id) {                 // لا تُعطِّل نفسك فتُقفل خارج الحساب
+      const b = mkBtn(u.is_active ? "تعطيل" : "تنشيط", "gh");
+      b.onclick = async () => {
+        b.disabled = true;
+        try {
+          await api("/users/" + u.id + (u.is_active ? "/deactivate" : "/activate"),
+                    {method: "POST"});
+          tell((u.is_active ? "عُطِّل" : "نُشِّط") + " المستخدم #" + u.id + ".", "good");
+          await loadAll();
+        } catch (e2) { tell(e2.message, "err"); b.disabled = false; }
+      };
+      td.appendChild(b);
+    } else cell(tr, "—");
+    if (td.childNodes.length) tr.appendChild(td);
     body.appendChild(tr);
   });
 }
 
-const OP_AR = {email_sent: "بريد مُرسَل", report_generated: "تقرير", wallet_funded: "تمويل",
-               api_call: "نداء API", storage_charge: "تخزين",
-               comparison_report: "تقرير مقارنة", draft_email: "مسودّة بريد"};
+const OP_AR = {email_sent: "بريد مُرسَل", report_generated: "تقرير",
+               wallet_funded: "تمويل", api_call: "نداء API",
+               storage_charge: "تخزين", comparison_report: "تقرير مقارنة",
+               draft_email: "مسودّة بريد"};
 
 async function loadLedger() {
   // المفتاح `entries` لا `ledger` — التقطه تحقّقُ الخادم الحقيقي؛ الاسم
@@ -428,28 +768,296 @@ async function loadLedger() {
   const rows = (await api("/wallet/ledger?limit=12")).entries || [];
   const body = $("ledgerBody");
   body.textContent = "";
-  $("ledgerEmpty").classList.toggle("hide", rows.length > 0);
+  emptyToggle("ledgerEmpty", rows.length);
   rows.forEach((e) => {
     const tr = document.createElement("tr");
+    cell(tr, String(e.id), "num");
+    cell(tr, OP_AR[e.operation_type] || e.operation_type);
     const amt = Number(e.amount);
-    tr.innerHTML =
-      '<td><span class="num">' + e.id + "</span></td>" +
-      "<td></td>" +
-      '<td><span class="num" style="color:' + (amt < 0 ? "var(--bad)" : "var(--go)") +
-        '">' + (amt > 0 ? "+" : "") + cents(amt) + "</span></td>" +
-      '<td><span class="num">' + cents(e.balance_after) + "</span></td>" +
-      '<td><span class="num sub">' + String(e.created_at || "").slice(0, 16) + "</span></td>";
-    tr.children[1].textContent = OP_AR[e.operation_type] || e.operation_type;
+    const td = cell(tr, (amt > 0 ? "+" : "") + cents(amt), "num");
+    td.firstChild.style.color = amt < 0 ? "var(--bad)" : "var(--ok)";
+    td.firstChild.style.fontWeight = "700";
+    cell(tr, cents(e.balance_after), "num");
+    cell(tr, String(e.created_at || "").slice(0, 16), "num");
     body.appendChild(tr);
   });
 }
 
+/* ═══════════════════════ لوحة الأدمِن ══════════════════════════════════ */
+async function loadAdmin() {
+  const [accts, kill] = await Promise.all([
+    api("/admin/accounts"), api("/admin/kill-switch")
+  ]);
+  CACHE.accounts = accts.accounts || [];
+  const kb = $("killBtn");
+  kb.textContent = kill.on ? "الإرسال موقوف — أعِد تشغيله" : "إيقاف الإرسال كلّياً";
+  kb.className = "btn " + (kill.on ? "" : "warn");
+  kb.dataset.on = kill.on ? "1" : "0";
+
+  const body = $("accountsBody");
+  body.textContent = "";
+  emptyToggle("accountsEmpty", CACHE.accounts.length);
+  CACHE.accounts.forEach((a) => {
+    const tr = document.createElement("tr");
+    cell(tr, String(a.id), "num");
+    cell(tr, a.name);
+    pill(tr, a.tier, "pri");
+    cell(tr, a.seats_used + " / " + (a.seats_limit < 0 ? "∞" : a.seats_limit), "num");
+    pill(tr, a.is_active ? "نشط" : "معطَّل", a.is_active ? "ok" : "no");
+    const td = document.createElement("td");
+    const f = mkBtn("تمويل", "");
+    f.onclick = () => fundDialog(a.id);
+    const t = mkBtn("الطبقة", "gh");
+    t.onclick = () => tierDialog(a.id, a.tier);
+    td.appendChild(f); td.appendChild(t);
+    tr.appendChild(td);
+    body.appendChild(tr);
+  });
+}
+
+function accountOptions(selectedId) {
+  return CACHE.accounts.map((a) =>
+    '<option value="' + a.id + '"' + (a.id === selectedId ? " selected" : "") +
+    ">#" + a.id + " — " + esc(a.name) + " (" + esc(a.tier) + ")</option>").join("");
+}
+
+function fundDialog(accountId) {
+  if (!CACHE.accounts.length) { tell("لا حسابات مصانع لتمويلها.", "err"); return; }
+  dialog("تمويل محفظة مصنع",
+    "<label>الحساب</label><select name=\"account_id\">" +
+      accountOptions(accountId) + "</select>" +
+    '<label>المبلغ بالدولار</label><input name="usd" type="number" min="0.01" ' +
+      'step="0.01" dir="ltr" placeholder="50.00">' +
+    '<label>الوصف (اختياري)</label><input name="description" ' +
+      'placeholder="تمويل تشغيليّ">' +
+    '<p class="hint">التمويل يمرّ عبر الدفتر غير القابل للتعديل: قيدٌ واحد بلقطة ' +
+    'رصيد، ويُخصَم من خزنة المنصّة. المبلغ يُرسَل بالسِّنتات فلا كسورَ عائمة.</p>',
+    async (veil) => {
+      const usd = Number(val(veil, "usd"));
+      if (!(usd > 0)) throw new Error("أدخِل مبلغاً أكبر من صفر.");
+      const acct = Number(val(veil, "account_id"));
+      const out = await api("/admin/fund", {
+        method: "POST",
+        body: JSON.stringify({
+          account_id: acct,
+          amount_cents: Math.round(usd * 100),
+          description: orNull(val(veil, "description"))
+        })
+      });
+      /* **لا تُخبِر برصيدٍ لم يقُله الخادم.** كانت الرسالة تقرأ `out.balance`
+         ثم `out.balance_after`، والنقطة لا تُرجِع أيّاً منهما (ردّها:
+         `ok, vault_entry_id, factory_entry_id, amount_cents`) — فسقطت إلى صفر
+         وعرضت «الرصيد الآن $0.00» بعد تمويلٍ **ناجح**: رقمٌ مختلَق يخالف عقد
+         عدم الاختلاق. التقطه متصفّح رُتبة ٣. نُبلِّغ بما تُرجعه النقطة فعلاً،
+         والرصيد الجديد يظهر من إعادة التحميل بعدها. */
+      tell("مُوِّل الحساب #" + acct + " بمبلغ " + cents(out.amount_cents) +
+        " — قيد الدفتر #" + out.factory_entry_id + ".", "good");
+    }, "تمويل");
+}
+
+function tierDialog(accountId, current) {
+  if (!CACHE.accounts.length) { tell("لا حسابات مصانع.", "err"); return; }
+  const tiers = ["basic", "silver", "gold", "platinum"].map((t) =>
+    '<option value="' + t + '"' + (t === current ? " selected" : "") + ">" + t +
+    "</option>").join("");
+  dialog("تغيير طبقة حساب",
+    "<label>الحساب</label><select name=\"account_id\">" +
+      accountOptions(accountId) + "</select>" +
+    "<label>الطبقة</label><select name=\"tier\">" + tiers + "</select>" +
+    '<p class="hint">تخفيضٌ يجعل المستخدمين النشطين يتجاوزون مقاعد الطبقة ' +
+    'المطلوبة يُرفَض (409) — عطِّل مستخدمين أوّلاً. والحصّة الشهرية تُقرأ بمنطق ' +
+    "الطبقة الجديدة فوراً.</p>",
+    async (veil) => {
+      const out = await api("/admin/accounts/" + Number(val(veil, "account_id")) +
+        "/tier", {method: "POST", body: JSON.stringify({tier: val(veil, "tier")})});
+      tell("صارت الطبقة " + (out.tier || val(veil, "tier")) + ".", "good");
+    }, "تغيير");
+}
+
+async function toggleKill() {
+  const kb = $("killBtn");
+  const turningOn = kb.dataset.on !== "1";
+  kb.disabled = true;
+  try {
+    const out = await api("/admin/kill-switch", {
+      method: "POST", body: JSON.stringify({on: turningOn})
+    });
+    tell(out.on
+      ? "أُوقف الإرسال كلّياً — العامل لن يُخرِج أيّ بريد حتى إعادة التشغيل."
+      : "أُعيد تشغيل الإرسال.", "good");
+    await loadAll();
+  } catch (e) { tell(e.message, "err"); } finally { kb.disabled = false; }
+}
+
+/* ═══════════════════════ نوافذ المصنع ══════════════════════════════════ */
+function studyDialog() {
+  const active = CACHE.smtp.filter((c) => c.is_active);
+  const opts = active.map((c) =>
+    '<option value="' + c.id + '">#' + c.id + " — " +
+    esc(c.label || c.host) + "</option>").join("");
+  dialog("دراسة جديدة",
+    '<label>العنوان بالعربية</label><input name="title_ar" ' +
+      'placeholder="تمور فاخرة — هولندا">' +
+    '<label>العنوان بالإنجليزية (اختياري)</label>' +
+      '<input name="title_en" dir="ltr" placeholder="Premium dates — NL">' +
+    '<div class="two"><div><label>العدد المستهدف</label>' +
+      '<input name="target_count" type="number" min="0" step="1" dir="ltr" value="0">' +
+    "</div><div><label>بريد الإرسال</label><select name=\"smtp_config_id\">" +
+      (opts || '<option value="">— لا تهيئة نشطة —</option>') + "</select></div></div>" +
+    '<label>وصف (اختياري)</label><textarea name="description_ar"></textarea>' +
+    '<p class="hint">الإطلاق لاحقاً يشترط تهيئة SMTP <b>نشطة ومملوكة لحسابك</b> ' +
+    "ورصيداً يكفي التكلفة المتوقّعة. تُنشأ الدراسة بحالة «مسودّة».</p>",
+    async (veil) => {
+      const smtp = val(veil, "smtp_config_id");
+      const out = await api("/studies", {
+        method: "POST",
+        body: JSON.stringify({
+          title_ar: orNull(val(veil, "title_ar")),
+          title_en: orNull(val(veil, "title_en")),
+          description_ar: orNull(val(veil, "description_ar")),
+          target_count: Number(val(veil, "target_count") || 0),
+          smtp_config_id: smtp === "" ? null : Number(smtp)
+        })
+      });
+      tell("أُنشئت الدراسة #" + out.id + " بحالة مسودّة.", "good");
+    }, "إنشاء");
+}
+
+function draftDialog() {
+  // الدراسات القابلة للربط: كلُّ ما ليس مؤرشَفاً. تُبنى من `CACHE.studies`
+  // المحمّلة في `loadStudies` — قائمةٌ فارغة دائماً كانت ستجعل ربطَ النصّ
+  // بدراسةٍ مستحيلاً من الواجهة بلا أيّ خطأ ظاهر.
+  const opts = ['<option value="">— قالب عامّ بلا دراسة —</option>'].concat(
+    (CACHE.studies || []).filter((s) => s.state !== "archived").map((s) =>
+      '<option value="' + s.id + '">#' + s.id + " — " +
+      esc(s.title_ar || s.title_en || "بلا عنوان") + "</option>")).join("");
+  dialog("نصّ رسالة جديد",
+    "<label>الدراسة (اختياري)</label><select name=\"study_id\">" + opts + "</select>" +
+    '<label>الموضوع بالعربية</label><input name="subject_ar" ' +
+      'placeholder="عرض تعاون تجاري">' +
+    '<label>نصّ الرسالة</label><textarea name="body_ar" ' +
+      'placeholder="السلام عليكم..."></textarea>' +
+    '<div class="two"><div><label>النسخة</label><select name="version">' +
+      '<option value="A">A</option><option value="B">B</option></select></div></div>' +
+    '<p class="hint">النصّ إلزاميّ للإطلاق: الخادم يصفّ البريد فقط إذا مُرِّر نصٌّ ' +
+    "وعميلٌ محتمل معاً — بلا ذلك تُستهلَك الحصّة ويخرج صفر بريد.</p>",
+    async (veil) => {
+      const sid = val(veil, "study_id");
+      const out = await api("/drafts", {
+        method: "POST",
+        body: JSON.stringify({
+          study_id: sid === "" ? null : Number(sid),
+          subject_ar: orNull(val(veil, "subject_ar")),
+          body_ar: orNull(val(veil, "body_ar")),
+          version: val(veil, "version") || "A"
+        })
+      });
+      tell("أُنشئ النصّ #" + out.id + ".", "good");
+    }, "إنشاء");
+}
+
+function prospectDialog() {
+  dialog("عميل محتمل جديد",
+    '<label>البريد الإلكتروني</label><input name="email" type="email" dir="ltr" ' +
+      'placeholder="buyer@example.nl">' +
+    '<div class="two"><div><label>الاسم الأول</label><input name="first_name"></div>' +
+    '<div><label>اسم العائلة</label><input name="last_name"></div></div>' +
+    '<label>الشركة</label><input name="company">' +
+    '<label>القطاع</label><input name="industry">' +
+    '<p class="hint">البريد إلزاميّ وفريدٌ داخل حسابك — تكراره يُرفَض 422. ' +
+    "بيانات العملاء المحتملين محتوى مصنعٍ لا يبلغه الأدمِن.</p>",
+    async (veil) => {
+      const out = await api("/prospects", {
+        method: "POST",
+        body: JSON.stringify({
+          email: val(veil, "email"),
+          first_name: orNull(val(veil, "first_name")),
+          last_name: orNull(val(veil, "last_name")),
+          company: orNull(val(veil, "company")),
+          industry: orNull(val(veil, "industry"))
+        })
+      });
+      tell("أُضيف العميل المحتمل #" + out.id + ".", "good");
+    }, "إضافة");
+}
+
+function smtpDialog() {
+  dialog("إعداد بريد الإرسال (SMTP)",
+    '<label>اسم التهيئة</label><input name="label" placeholder="بريد المصنع">' +
+    '<div class="two"><div><label>المُضيف</label>' +
+      '<input name="host" dir="ltr" placeholder="smtp.example.com"></div>' +
+    '<div><label>المنفذ</label><input name="port" type="number" dir="ltr" ' +
+      'value="587"></div></div>' +
+    '<div class="two"><div><label>البريد المُرسِل</label>' +
+      '<input name="from_email" type="email" dir="ltr"></div>' +
+    '<div><label>اسم المُرسِل</label><input name="from_name"></div></div>' +
+    '<div class="two"><div><label>المستخدم</label>' +
+      '<input name="username" dir="ltr" autocomplete="off"></div>' +
+    '<div><label>كلمة المرور</label><input name="password" type="password" ' +
+      'dir="ltr" autocomplete="new-password"></div></div>' +
+    '<p class="hint">بيانات الاعتماد تُخزَّن <b>مشفَّرة</b> ولا تُعيدها أيّ نقطة ' +
+    "قراءة أبداً. المُضيف والمنفذ والبريد المُرسِل إلزاميّة.</p>",
+    async (veil) => {
+      const out = await api("/smtp-configs", {
+        method: "POST",
+        body: JSON.stringify({
+          label: orNull(val(veil, "label")),
+          host: val(veil, "host"),
+          port: Number(val(veil, "port") || 587),
+          from_email: val(veil, "from_email"),
+          from_name: orNull(val(veil, "from_name")),
+          username: orNull(val(veil, "username")),
+          password: orNull(val(veil, "password")),
+          use_tls: true,
+          is_active: true
+        })
+      });
+      tell("أُضيفت تهيئة الإرسال #" + out.id + " ونشطة.", "good");
+    }, "حفظ");
+}
+
+function userDialog() {
+  dialog("مستخدم فرعي جديد",
+    '<label>البريد الإلكتروني</label><input name="email" type="email" dir="ltr">' +
+    '<label>كلمة المرور</label><input name="password" type="password" dir="ltr" ' +
+      'autocomplete="new-password">' +
+    '<div class="two"><div><label>الاسم الأول</label><input name="first_name"></div>' +
+    '<div><label>اسم العائلة</label><input name="last_name"></div></div>' +
+    '<p class="hint">الدور <b>يُفرَض</b> «مصنع» على الخادم ولا يُقرأ من هذا ' +
+    'الطلب أبداً — فلا يمكن لهذه النافذة أن تصنع أدمِناً. وكلمة المرور تلزمها ' +
+    "٨ أحرف بحرفٍ كبير وصغير ورقم. الإزالة تعطيلٌ لا حذف (المقعد يُحرَّر).</p>",
+    async (veil) => {
+      const out = await api("/users", {
+        method: "POST",
+        body: JSON.stringify({
+          email: val(veil, "email"), password: val(veil, "password"),
+          first_name: orNull(val(veil, "first_name")),
+          last_name: orNull(val(veil, "last_name"))
+        })
+      });
+      tell("أُضيف المستخدم #" + (out.id || out.user_id || "") + ".", "good");
+    }, "إضافة");
+}
+
 /* ── التوصيل ── */
 $("loginBtn").onclick = doLogin;
-$("pw").addEventListener("keydown", (ev) => { if (ev.key === "Enter") doLogin(); });
-$("email").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("pw").focus(); });
+$("pw").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+$("email").addEventListener("keydown", (e) => { if (e.key === "Enter") $("pw").focus(); });
 $("logoutBtn").onclick = doLogout;
 $("refreshBtn").onclick = loadAll;
+$("refreshBtn2").onclick = loadAll;
+$("newStudyBtn").onclick = studyDialog;
+$("newStudyBtn2").onclick = studyDialog;
+$("newDraftBtn").onclick = draftDialog;
+$("newDraftBtn2").onclick = draftDialog;
+$("newProspectBtn").onclick = prospectDialog;
+$("newProspectBtn2").onclick = prospectDialog;
+$("newSmtpBtn").onclick = smtpDialog;
+$("newUserBtn").onclick = userDialog;
+$("newUserBtn2").onclick = userDialog;
+$("fundBtn").onclick = () => fundDialog(null);
+$("tierBtn").onclick = () => tierDialog(null, null);
+$("killBtn").onclick = toggleKill;
 
 /* جلسة قائمة؟ الكوكي httponly يكفي، فحاوِل /me مباشرةً قبل عرض الدخول. */
 (async () => {
