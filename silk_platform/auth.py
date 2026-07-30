@@ -164,6 +164,18 @@ def issue_reset_token_for_user(conn: sqlite3.Connection, user_id: int) -> str | 
     return raw
 
 
+def user_language_by_email(conn: sqlite3.Connection, email: str) -> str:
+    """لغة المستخدم ببريده — resolves before any account context exists.
+
+    نفس منطق `issue_reset_token`: البريد هويّة عالمية على مستوى المنصّة، فلا
+    قيد حساب مُمكن هنا — الحساب نتيجةٌ لاحقة لا مدخلاً. `en` احتياطاً لبريدٍ
+    غير موجود (المُنادي لا يستدعيها إلا بعد نجاح `issue_reset_token` أصلاً).
+    """
+    row = conn.execute("SELECT language_preference FROM users WHERE email = ?",
+                       ((email or "").strip().lower(),)).fetchone()
+    return row["language_preference"] if row else "en"
+
+
 def issue_reset_token(conn: sqlite3.Connection, email: str) -> str | None:
     """أصدر رمز إعادة تعيين بالبريد — returns raw token, or None if no such user.
 

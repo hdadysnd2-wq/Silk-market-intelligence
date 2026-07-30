@@ -74,6 +74,9 @@ _INTENTIONAL_GLOBAL: dict[tuple[str, str], str] = {
     ("email_queue.py", "SELECT * FROM smtp_configs WHERE id = ?"):
         "worker reads the smtp config the study was launched with (already "
         "ownership-validated at launch time)",
+    ("email_queue.py", "SELECT id, attempts FROM email_queue WHERE status = 'sending'"):
+        "PR-5 reaper scan for stuck rows is a background job across all "
+        "accounts by design, same rationale as the queued-row scan above",
     # فوترة التخزين تجمع لكل حساب بـGROUP BY owner_id ثم تشحن كل حساب على حدة.
     ("jobs.py", "FROM images GROUP BY owner_id"):
         "monthly billing aggregates per account via GROUP BY owner_id",
@@ -99,6 +102,9 @@ _INTENTIONAL_GLOBAL: dict[tuple[str, str], str] = {
     ("auth.py", "SELECT id FROM users WHERE email = ?"):
         "password-reset request resolves the global login identity; the endpoint "
         "returns 200 regardless so it leaks no existence",
+    ("auth.py", "SELECT language_preference FROM users WHERE email = ?"):
+        "same global-identity resolution as issue_reset_token, for the reset "
+        "email's language — called only after that lookup already succeeded",
     ("auth.py", "SELECT id FROM users WHERE id = ?"):
         "admin-issued reset (silk_admin-only route) targets a user by id across "
         "accounts by design; the route itself is role-walled",

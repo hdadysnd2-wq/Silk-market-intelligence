@@ -96,6 +96,36 @@ def run_job(name: str) -> object:
         conn.close()
 
 
+def run_email_pass(conn, *, sender=None) -> dict:
+    """مرور واحد على طابور البريد — reap stuck rows, then process the queue.
+
+    يُستدعى كل نبضة مجدول (لا آلة تقويم كـ`due_jobs`): البريد يحتاج زمن
+    استجابة بمقياس النبضة لا اليوم/الشهر. الحاصد **قبل** المعالجة كي تُعاد
+    الصفوف العالقة إلى `queued` في نفس المرور الذي يُعالجها.
+    Runs every poll tick, not on due_jobs' calendar — email needs poll-scale
+    latency. Reap before process so a just-requeued stuck row is picked up
+    in the same pass.
+    """
+    from . import email_queue
+
+    def _env_int(name: str, default: int) -> int:
+        # فارغ (اتفاق .env.example) لا يعني صفراً — يعني «غير مضبوط» فيرجع
+        # الافتراضي؛ `int("")` كان يرفع فيُسقِط كل نبضة صامتاً إلى الأبد.
+        # Empty means unset, not zero — bare int() would raise every tick.
+        raw = os.environ.get(name, "").strip()
+        try:
+            return int(raw) if raw else default
+        except ValueError:
+            return default
+
+    stale_s = _env_int("SILK_PLATFORM_EMAIL_STUCK_SECONDS", 900)
+    max_attempts = _env_int("SILK_PLATFORM_EMAIL_MAX_ATTEMPTS", 5)
+    reaped = email_queue.reap_stuck(conn, stale_after_seconds=stale_s,
+                                    max_attempts=max_attempts)
+    processed = email_queue.process_queue(conn, sender=sender or email_queue.sender)
+    return {"reaped": reaped, "processed": processed}
+
+
 def run_due(now: datetime.datetime | None = None,
             last_run: dict[str, str] | None = None) -> dict[str, object]:
     """نفّذ كل ما حلّ موعده وحدّث سجلّ الفتحات — one pass; testable directly.
@@ -143,11 +173,20 @@ def start(poll_seconds: float | None = None):
     last_run: dict[str, str] = {}
 
     def _loop() -> None:
+        from . import db
         while True:
             try:
                 run_due(last_run=last_run)
             except Exception as exc:  # noqa: BLE001 — الحلقة تبقى حيّة
                 log.warning("platform scheduler pass failed: %s", exc)
+            try:
+                conn = db.connect()
+                try:
+                    run_email_pass(conn)
+                finally:
+                    conn.close()
+            except Exception as exc:  # noqa: BLE001 — نبضة تفشل، الخيط يبقى حيّاً
+                log.warning("platform email pass failed: %s", exc)
             time.sleep(poll)
 
     thread = threading.Thread(target=_loop, name="silk-platform-scheduler",
