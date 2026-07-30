@@ -100,16 +100,9 @@ def _isolated_fact_store(monkeypatch):
     # صراحة قبل أي استخدام.
     import silk_context
     silk_context._data_counter.set(None)
-    # عدّاد خنق الدخول حالةُ وحدة (عملية واحدة في الإنتاج) — تُصفَّر بين
-    # الاختبارات وإلا تسرّبت محاولات فاشلة من اختبار الخنق فحجبت دخول اختبار
-    # لاحق لا علاقة له (اكتُشف فعلياً عند إضافة اختبار الخنق).
-    # Reset the in-memory login throttle between tests (module-level state).
-    try:
-        import silk_platform.api as _papi
-        with _papi._login_lock:
-            _papi._login_fails.clear()
-    except Exception:  # noqa: BLE001 — المنصّة اختيارية استيراداً
-        pass
+    # لا حاجة لتصفير خنق الدخول يدوياً: حالته صارت في قاعدة المنصّة (المعزولة
+    # لكل اختبار بالسطر أعلاه) لا في ذاكرة الوحدة — فالعزل يأتي مجّاناً.
+    # Login-throttle state lives in the (per-test isolated) platform DB.
 
 
 @pytest.fixture(autouse=True)

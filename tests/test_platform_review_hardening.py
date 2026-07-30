@@ -410,3 +410,144 @@ def test_seed_generates_random_passwords_when_env_unset(monkeypatch):
     assert cl.post("/platform/auth/login",
                    json={"email": info["admin"]["email"], "password": pw}
                    ).status_code == 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# بلاغ المالك: ضوابط الرصيد السالب + خنق يعبر العمليات
+# Owner review: negative-balance controls + cross-process throttle
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_negative_balance_blocks_new_study_launch(monkeypatch):
+    """حساب مدين لا يُطلق دراسة جديدة حتى يُسدَّد — explicit delinquency gate."""
+    seed(monkeypatch)
+    f = make_factory("gold", "delinq@f.local", fund_cents=100)
+    smtp = add_active_smtp(f["account_id"])
+    sid, _ = make_draft_study(f["account_id"], f["user_id"], smtp, target_count=1)
+    conn = pdb.connect()
+    try:  # فاتورة تخزين تدفع الرصيد إلى السالب · storage bill pushes it negative
+        wallet.post_entry(conn, account_id=f["account_id"], actor_user_id=None,
+                          operation=Operation.STORAGE_CHARGE, amount=-500,
+                          description="storage", allow_negative=True)
+        assert wallet.is_delinquent(conn, f["account_id"])
+    finally:
+        conn.close()
+    cl = client()
+    tok = login(cl, f["email"], f["password"])
+    r = cl.post(f"/platform/studies/{sid}/launch", headers=hdr(tok), json={})
+    assert r.status_code == 402
+    assert r.json()["detail"]["error"] == "account_delinquent"
+    assert r.json()["detail"]["settle_up_required"] is True
+    # والمديونية مرئية للعميل في محفظته · surfaced on the wallet endpoint.
+    w = cl.get("/platform/wallet", headers=hdr(tok)).json()
+    assert w["delinquent"] is True and w["balance"] < 0
+
+
+def test_settling_up_restores_launch_ability(monkeypatch):
+    """التمويل يفكّ الحجب — admin funding clears delinquency and unblocks launch."""
+    info = seed(monkeypatch)
+    f = make_factory("gold", "settle@f.local", fund_cents=100)
+    smtp = add_active_smtp(f["account_id"])
+    sid, _ = make_draft_study(f["account_id"], f["user_id"], smtp, target_count=1)
+    conn = pdb.connect()
+    try:
+        wallet.post_entry(conn, account_id=f["account_id"], actor_user_id=None,
+                          operation=Operation.STORAGE_CHARGE, amount=-500,
+                          description="storage", allow_negative=True)
+    finally:
+        conn.close()
+    cl = client()
+    admin = login(cl, info["admin"]["email"], info["admin"]["password"])
+    assert cl.post("/platform/admin/fund", headers=hdr(admin),
+                   json={"account_id": f["account_id"], "amount_cents": 5000}
+                   ).status_code == 200
+    tok = login(cl, f["email"], f["password"])
+    assert cl.post(f"/platform/studies/{sid}/launch", headers=hdr(tok), json={}
+                   ).status_code == 200
+
+
+def test_overdraft_is_bounded_by_a_floor(monkeypatch):
+    """المديونية مسقوفة: خصم يتجاوز السقف يُرفَض بدل الانزلاق بلا حدّ."""
+    seed(monkeypatch)
+    monkeypatch.setenv("SILK_PLATFORM_MAX_OVERDRAFT_CENTS", "1000")
+    f = make_factory("gold", "floor@f.local", fund_cents=0)
+    conn = pdb.connect()
+    try:
+        # داخل السقف · within the floor: allowed.
+        wallet.post_entry(conn, account_id=f["account_id"], actor_user_id=None,
+                          operation=Operation.STORAGE_CHARGE, amount=-900,
+                          description="storage", allow_negative=True)
+        assert wallet.get_wallet(conn, f["account_id"])["balance"] == -900
+        # يتجاوز السقف · beyond the floor: refused, and nothing is written.
+        with pytest.raises(wallet.InsufficientFunds):
+            wallet.post_entry(conn, account_id=f["account_id"], actor_user_id=None,
+                              operation=Operation.STORAGE_CHARGE, amount=-5000,
+                              description="huge storage", allow_negative=True)
+        assert wallet.get_wallet(conn, f["account_id"])["balance"] == -900
+    finally:
+        conn.close()
+
+
+def test_negative_balance_stops_further_sends(monkeypatch):
+    """الإرسال يتوقّف أيضاً عند المديونية — no sends while overdrawn."""
+    seed(monkeypatch)
+    f = make_factory("gold", "nosend@f.local", fund_cents=0)
+    smtp = add_active_smtp(f["account_id"])
+    sid, did = make_draft_study(f["account_id"], f["user_id"], smtp)
+    conn = pdb.connect()
+    try:
+        wallet.post_entry(conn, account_id=f["account_id"], actor_user_id=None,
+                          operation=Operation.STORAGE_CHARGE, amount=-100,
+                          description="storage", allow_negative=True)
+        draft = dict(conn.execute("SELECT * FROM drafts WHERE id = ?",
+                                  (did,)).fetchone())
+        email_queue.enqueue(
+            conn, account_id=f["account_id"], study_id=sid,
+            prospect={"id": 1, "email": "p@x.local", "first_name": "P",
+                      "language_preference": "en"},
+            draft=draft, smtp_config_id=None, actor_user_id=f["user_id"])
+        sent = []
+        res = email_queue.process_queue(conn, sender=lambda c, e: sent.append(e))
+        assert sent == [] and res["sent"] == [] and len(res["failed"]) == 1
+    finally:
+        conn.close()
+
+
+def test_login_throttle_is_shared_across_processes(monkeypatch):
+    """الخنق في القاعدة: محاولات عمليةٍ تُخنِق الأخرى — one real cap, N workers.
+
+    يحاكي عاملَين مستقلَّين باتصالين منفصلين (لا حالة ذاكرة مشتركة بينهما):
+    فشل مسجَّل عبر الاتصال الأوّل يجب أن يراه الثاني فوراً.
+    """
+    setup_env(monkeypatch)
+    monkeypatch.setenv("SILK_PLATFORM_LOGIN_MAX_FAILURES", "3")
+    from silk_platform import throttle
+    ident = throttle.identity("victim@f.local", "1.2.3.4")
+    worker_a, worker_b = pdb.connect(), pdb.connect()
+    try:
+        for _ in range(3):                       # كل الفشل عبر «العامل أ»
+            throttle.record_failure(worker_a, ident)
+        # «العامل ب» — عمليةٌ أخرى بلا أي حالة ذاكرة مشتركة — يرى الخنق.
+        assert throttle.is_throttled(worker_b, ident) is True
+        throttle.clear(worker_b, ident)          # ونجاحٌ في ب يُصفّر لـأ أيضاً
+        assert throttle.is_throttled(worker_a, ident) is False
+    finally:
+        worker_a.close(); worker_b.close()
+
+
+def test_login_throttle_survives_process_restart(monkeypatch):
+    """الخنق يصمد لإعادة النشر — durable across a simulated restart."""
+    setup_env(monkeypatch)
+    monkeypatch.setenv("SILK_PLATFORM_LOGIN_MAX_FAILURES", "2")
+    from silk_platform import throttle
+    ident = throttle.identity("victim2@f.local", "9.9.9.9")
+    c1 = pdb.connect()
+    try:
+        throttle.record_failure(c1, ident)
+        throttle.record_failure(c1, ident)
+    finally:
+        c1.close()                                # «إعادة تشغيل» · restart
+    c2 = pdb.connect()
+    try:
+        assert throttle.is_throttled(c2, ident) is True
+    finally:
+        c2.close()

@@ -20,7 +20,7 @@ import time
 import uuid
 
 from . import (auth, audit, crypto, email_queue, quota, repository, seed as
-               seed_mod, settings, wallet)
+               seed_mod, settings, throttle, wallet)
 from .db import connect, init_db
 from .models import AuthContext, Role, projected_email_cost_cents
 
@@ -29,46 +29,9 @@ log = logging.getLogger(__name__)
 COOKIE_NAME = "silk_session"
 _PREFIX = "/platform"
 
-# ── خنق محاولات الدخول · login throttle ──────────────────────────────────────
-# نافذة ثابتة لكل هويّة (بريد + IP): التحقّق ثابت الزمن يمنع تعداد المستخدمين
-# لكنه لا يمنع تخميناً غاشماً بلا سقف. الحالة في الذاكرة (عملية واحدة على
-# Railway) وتُطهَّر ذاتياً. Fixed-window per-identity throttle on failed logins.
-LOGIN_MAX_FAILURES = 10
-LOGIN_WINDOW_S = 300
-_login_fails: dict[str, list[float]] = {}
-_login_lock = threading.Lock()
-
-
-def _login_identity(email: str, ip: str | None) -> str:
-    return f"{(email or '').strip().lower()}|{ip or '-'}"
-
-
-def _login_throttled(identity: str) -> bool:
-    """هل تجاوزت الهويّة سقف الفشل في النافذة؟ — is this identity locked out?"""
-    now = time.time()
-    with _login_lock:
-        hits = [t for t in _login_fails.get(identity, []) if now - t < LOGIN_WINDOW_S]
-        _login_fails[identity] = hits
-        return len(hits) >= LOGIN_MAX_FAILURES
-
-
-def _login_record_failure(identity: str) -> None:
-    """سجّل محاولة فاشلة — count one failed attempt for this identity."""
-    now = time.time()
-    with _login_lock:
-        hits = [t for t in _login_fails.get(identity, []) if now - t < LOGIN_WINDOW_S]
-        hits.append(now)
-        _login_fails[identity] = hits
-        if len(_login_fails) > 4096:   # حدّ ذاكرة: طهّر النوافذ المنتهية
-            for k in [k for k, v in _login_fails.items()
-                      if not v or now - v[-1] >= LOGIN_WINDOW_S]:
-                _login_fails.pop(k, None)
-
-
-def _login_clear(identity: str) -> None:
-    """امسح العدّاد بعد دخول ناجح — reset the counter on success."""
-    with _login_lock:
-        _login_fails.pop(identity, None)
+# خنق الدخول يعيش في قاعدة المنصّة لا في ذاكرة العملية (`silk_platform/throttle.py`):
+# الحالة على مستوى الوحدة تنفصل لكل worker فيصير السقف ١٠×عددها، وتُمحى عند كل
+# إعادة نشر. Throttle state is DB-backed ⇒ shared across workers, restart-durable.
 
 
 # ── تحقّق من المدخلات · input coercion (client faults must be 4xx, never 500) ─
@@ -278,18 +241,19 @@ def mount(app) -> bool:
         body = _json_body(body)
         email = (body.get("email") or "").strip()
         password = body.get("password") or ""
-        identity = _login_identity(email, _client_ip(request))
-        if _login_throttled(identity):
-            raise HTTPException(status_code=429,
-                                detail="too many failed attempts; try again later")
+        ident = throttle.identity(email, _client_ip(request))
         conn = _open()
         try:
+            # الخنق يُقرأ من القاعدة فيراه كل worker فوراً (لا حالة في الذاكرة).
+            if throttle.is_throttled(conn, ident):
+                raise HTTPException(status_code=429,
+                                    detail="too many failed attempts; try again later")
             user = auth.authenticate(conn, email, password)
             if not user:
-                _login_record_failure(identity)
+                throttle.record_failure(conn, ident)
                 # لا تعداد مستخدمين: نفس الرسالة والتوقيت للمجهول والخطأ.
                 raise HTTPException(status_code=401, detail="invalid credentials")
-            _login_clear(identity)
+            throttle.clear(conn, ident)
             raw = auth.create_session(
                 conn, user["id"], ip_address=_client_ip(request),
                 user_agent=request.headers.get("user-agent"))
@@ -499,6 +463,19 @@ def mount(app) -> bool:
             # (2) رصيد كافٍ للتكلفة المتوقّعة · wallet >= projected email cost.
             projected = projected_email_cost_cents(study["target_count"])
             w = wallet.ensure_wallet(conn, ctx.account_id)
+            # المديونية تُصرَّح صريحةً لا تُستنتَج من حسابٍ عددي: حساب سالب
+            # الرصيد محجوب عن أي إطلاق جديد حتى يُسدَّد بتمويل الأدمِن.
+            # Delinquency is an explicit, declared gate — not emergent arithmetic.
+            if wallet.is_delinquent(conn, ctx.account_id):
+                audit.record(conn, action="launch_blocked_delinquent",
+                             user_id=ctx.user_id, account_id=ctx.account_id,
+                             resource_type="study", resource_id=study_id,
+                             changes={"balance": int(w["balance"])})
+                conn.commit()
+                raise HTTPException(status_code=402,
+                                    detail={"error": "account_delinquent",
+                                            "balance_cents": int(w["balance"]),
+                                            "settle_up_required": True})
             if int(w["balance"]) < projected:
                 audit.record(conn, action="launch_blocked_insufficient_funds",
                              user_id=ctx.user_id, account_id=ctx.account_id,
@@ -743,6 +720,9 @@ def mount(app) -> bool:
         conn = _open()
         try:
             w = wallet.ensure_wallet(conn, ctx.account_id)  # own account only
+            # المديونية وحدّها مرئيان للعميل صراحةً (لماذا تُحجَب الإطلاقات).
+            w["delinquent"] = wallet.is_delinquent(conn, ctx.account_id)
+            w["overdraft_floor_cents"] = wallet.overdraft_floor_cents()
         finally:
             conn.close()
         return w

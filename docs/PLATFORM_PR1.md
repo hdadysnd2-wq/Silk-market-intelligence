@@ -2,9 +2,9 @@
 
 > **حالة الدليل (الدلاء الثلاثة · three-bucket honesty):**
 > **«hermetic only».** كل ادّعاءات هذا المستند مُثبَتة برُتبة ١ فقط —
-> `python3 -m pytest tests/test_platform_*.py -q` أخضر (**٦٦ اختباراً في ستّة
+> `python3 -m pytest tests/test_platform_*.py -q` أخضر (**٧٢ اختباراً في ستّة
 > ملفات**: auth 16، isolation 8، roles 7، quota/wallet/kill-switch 12،
-> concurrency 4، review-hardening 19) ضمن الحزمة الكاملة. **لم** يُقلَع خادم
+> concurrency 4، review-hardening 25) ضمن الحزمة الكاملة. **لم** يُقلَع خادم
 > uvicorn حقيقي ولا متصفّح (رُتبتا ٢–٣) لهذه المنصّة بعد؛ فهي **ليست** بعد في
 > دلو «جاهز لتأكيد المالك بنقرة». التكامل الحيّ وe2e يأتيان في PR لاحق حين
 > تُبنى الواجهة.
@@ -33,6 +33,8 @@
 | الوحدة | الدور |
 |---|---|
 | `migrations/platform/001_platform_core.sql` | المخطط الكامل لكل الكيانات (PR-1..8) — لا إعادة ترحيل لاحقاً |
+| `migrations/platform/002_login_attempts.sql` | حالة خنق الدخول (مشتركة بين العمّال، تصمد لإعادة النشر) |
+| `silk_platform/throttle.py` | خنق محاولات الدخول على القاعدة لا في ذاكرة العملية |
 | `silk_platform/db.py` | اتصال + مُطبِّق ترحيلات (قاعدة مستقلّة) |
 | `silk_platform/passwords.py` | bcrypt-أو-scrypt + سياسة كلمة المرور |
 | `silk_platform/tokens.py` | رموز عشوائية + تجزئة + توقيع HMAC |
@@ -61,6 +63,39 @@
   يُقرأ من الطلب أو الاستعلام، فتلاعب المعاملات لا يعبر.
 - **دلالات الرموز**: عبور مصنع↔مصنع ⇒ **404** (لا تسريب وجود بين المنافسين)؛
   جدار الدور (admin/analyst على محتوى مصنع) ⇒ **403**. كل محاولة عبور تُسجَّل تدقيقاً.
+
+## ٣·١) ضوابط الرصيد السالب · negative-balance controls
+
+المديونية ليست حالةً عارضة بل مسارٌ محكوم بثلاث ضوابط:
+
+1. **مصدرها محصور بمسارين مقصودين فقط** — خصم بريدٍ **خرج فعلاً** (٥ سنتات كحدّ
+   أقصى لكل سباق؛ لا يجوز محو أثر رسالة أُرسِلت)، وفوترة التخزين الشهرية (دَينٌ
+   حقيقي **يجب** أن يُقيَّد في الدفتر بصدق لا أن يُقنَّع بصفر).
+2. **سقف أقصى** — `overdraft_floor_cents()` (افتراضي **$100**، يُضبَط بـ
+   `SILK_PLATFORM_MAX_OVERDRAFT_CENTS`). أي خصم يتجاوزه يُرفَض بـ
+   `InsufficientFunds` **قبل** أي كتابة، فلا تنزلق فاتورة ضخمة بحساب غير ممول
+   إلى سالبٍ بلا حدّ. مُقفَل بـ`test_overdraft_is_bounded_by_a_floor`.
+3. **حجب صريح حتى السداد** — `wallet.is_delinquent()` بوّابةٌ **معلَنة** (لا
+   استنتاج من حسابٍ عددي) في مسار الإطلاق: رصيد سالب ⇒ `402
+   account_delinquent` + `settle_up_required` + قيد تدقيق، والإرسال يتوقّف أيضاً
+   عند فحص ما قبل الإرسال. المديونية وحدّها مكشوفان في `GET /platform/wallet`
+   (`delinquent`, `overdraft_floor_cents`). السداد = تمويل الأدمِن، ويفكّ الحجب فوراً.
+
+الأقفال: `test_negative_balance_blocks_new_study_launch` ·
+`test_negative_balance_stops_further_sends` · `test_settling_up_restores_launch_ability`.
+
+## ٣·٢) خنق الدخول عبر العمليات · cross-process login throttle
+
+حالة الخنق في **قاعدة المنصّة** (`silk_platform/throttle.py` + ترحيل
+`002_login_attempts.sql`) لا في ذاكرة العملية. السبب: حالةٌ على مستوى الوحدة
+تنفصل لكل worker فيصير سقف «١٠ محاولات» عملياً ١٠×عدد العمّال، وتُمحى كلّياً عند
+كل إعادة نشر. النشر الحالي عملية uvicorn **واحدة** (`Dockerfile` / `railway.json`
+بلا `--workers`) فالسقف كان صحيحاً اليوم — لكن إضافة عاملٍ ثانٍ لاحقاً كانت
+ستُضعف الحماية **صامتةً**، والأمان لا يجوز أن يتعلّق بطوبولوجيا النشر.
+
+لا Redis: القاعدة هي المخزن المشترك الموجود أصلاً (stdlib-first، وقرار «SQLite
+يبقى»). الأقفال: `test_login_throttle_is_shared_across_processes` (اتصالان
+مستقلّان يحاكيان عاملَين) · `test_login_throttle_survives_process_restart`.
 
 ## ٤) المال · wallet, ledger, funding
 
@@ -91,13 +126,13 @@
 
 ## ٧) الاختبارات (القسم ١٣) · Section 13 acceptance suite
 
-**٦٦ اختباراً هرمتياً عبر ستّة ملفات** — `test_platform_auth.py` (16) ·
+**٧٢ اختباراً هرمتياً عبر ستّة ملفات** — `test_platform_auth.py` (16) ·
 `test_platform_isolation.py` (8) · `test_platform_roles.py` (7) ·
 `test_platform_quota_wallet_killswitch.py` (12) · `test_platform_concurrency.py`
-(4، خيوط حقيقية) · `test_platform_review_hardening.py` (19، أقفال المراجعة).
+(4، خيوط حقيقية) · `test_platform_review_hardening.py` (25، أقفال المراجعة).
 
 ```bash
-python3 -m pytest tests/test_platform_*.py -q      # 66 passed
+python3 -m pytest tests/test_platform_*.py -q      # 72 passed
 python3 -m pytest tests/ -q                         # الحزمة الكاملة تبقى خضراء
 python3 -m silk_platform.seed                       # هيّئ + ابذر قاعدة المنصّة
 ```

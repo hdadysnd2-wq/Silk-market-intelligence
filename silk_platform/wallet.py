@@ -11,6 +11,7 @@ failure rolls the whole thing back. Money is integer cents.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 
 from . import audit
@@ -53,6 +54,33 @@ def get_wallet(conn: sqlite3.Connection, account_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def is_delinquent(conn: sqlite3.Connection, account_id: int) -> bool:
+    """حسابٌ مدين (رصيد سالب) — an overdrawn account owes a settle-up.
+
+    السالب يحدث من مسارين مقصودين فقط: (١) خصم بريدٍ **خرج فعلاً** (٥ سنتات
+    كحدّ أقصى لكل سباق)، و(٢) فوترة تخزين شهرية (دَينٌ حقيقي يجب أن يُقيَّد).
+    ما دام سالباً: لا إطلاق دراسة جديدة ولا إرسال بريد — يُفكّ بتمويل الأدمِن.
+    While negative: no launches, no sends. Cleared by admin funding.
+    """
+    w = get_wallet(conn, account_id)
+    return bool(w) and int(w["balance"]) < 0
+
+
+def overdraft_floor_cents() -> int:
+    """أقصى مديونية مسموحة (سنتات موجبة) — the overdraft floor.
+
+    حدٌّ **تشغيلي** يمنع انزلاق المديونية بلا سقف (فاتورة تخزين ضخمة لحساب
+    غير ممول مثلاً). عند تجاوزه يُرفَض الخصم الاختياري ويُسجَّل إنذار بدل
+    الاستمرار صامتاً. صفر = لا مديونية إطلاقاً فوق ما خرج فعلاً.
+    Operational cap so debt cannot slide unbounded; env-tunable.
+    """
+    raw = os.environ.get("SILK_PLATFORM_MAX_OVERDRAFT_CENTS", "").strip()
+    try:
+        return max(0, int(raw)) if raw else 10_000   # افتراضي $100
+    except ValueError:
+        return 10_000
+
+
 def list_ledger(conn: sqlite3.Connection, account_id: int,
                 limit: int = 20) -> list[dict]:
     """اسرد قيود دفتر حساب واحد — this account's entries only, newest first."""
@@ -69,6 +97,11 @@ def _apply(conn: sqlite3.Connection, account_id: int, actor_user_id: int | None,
 
     لا يلتزم (ليُركَّب داخل معاملة أكبر). يرفع InsufficientFunds قبل أي كتابة
     حين يخالف الخصم الرصيد. Does NOT commit; raises before writing on overdraft.
+
+    `allow_negative=True` ليس «بلا حدّ»: المديونية مسقوفة بـ`overdraft_floor_cents()`
+    فلا تنزلق فاتورةٌ كبيرة بحسابٍ إلى سالبٍ غير محدود صامتةً — تجاوز السقف يرفع
+    InsufficientFunds ليعالجه المُنادي (تسجيل/إنذار) لا ليمرّ بهدوء.
+    Even allow_negative debits are bounded by the overdraft floor.
     """
     row = conn.execute("SELECT balance, lifetime_funded, lifetime_spent "
                        "FROM wallets WHERE account_id = ?", (account_id,)).fetchone()
@@ -79,6 +112,10 @@ def _apply(conn: sqlite3.Connection, account_id: int, actor_user_id: int | None,
     if new_balance < 0 and not allow_negative:
         raise InsufficientFunds(
             f"balance {balance} insufficient for {amount}")
+    if new_balance < -overdraft_floor_cents():
+        raise InsufficientFunds(
+            f"debit would exceed the overdraft floor "
+            f"({new_balance} < -{overdraft_floor_cents()})")
     funded = int(row["lifetime_funded"]) + (amount if amount > 0 else 0)
     spent = int(row["lifetime_spent"]) + (-amount if amount < 0 else 0)
     conn.execute("UPDATE wallets SET balance = ?, lifetime_funded = ?, "
