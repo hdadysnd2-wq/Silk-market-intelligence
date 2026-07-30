@@ -8,8 +8,8 @@ Each worker uses its OWN sqlite connection (connections aren't thread-shareable)
 import threading
 
 from platform_helpers import make_factory, seed
-from silk_platform import (billing, db as pdb, entitlements, quota, users,
-                           wallet)
+from silk_platform import (billing, db as pdb, email_queue, entitlements,
+                           lifecycle, quota, users, wallet)
 from silk_platform.models import Operation
 
 
@@ -296,6 +296,150 @@ def _widen_charge_check_window(monkeypatch, delay_s=0.15):
         return out
 
     monkeypatch.setattr(billing, "already_charged", slow_already_charged)
+
+
+def _mk_study(account_id, user_id, state="in_progress"):
+    from silk_platform.db import now_iso
+    conn = pdb.connect()
+    try:
+        n = now_iso()
+        cur = conn.execute(
+            "INSERT INTO studies (owner_id, title_en, state, created_by_user_id, "
+            "created_at, updated_at) VALUES (?,'S',?,?,?,?)",
+            (account_id, state, user_id, n, n))
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def _queue(account_id, study_id, n):
+    from silk_platform.db import now_iso
+    conn = pdb.connect()
+    try:
+        for i in range(n):
+            conn.execute(
+                "INSERT INTO email_queue (account_id, study_id, prospect_email, "
+                "subject, body, status, queued_at) "
+                "VALUES (?,?,?,'S','B','queued',?)",
+                (account_id, study_id, f"race{i}@f.local", now_iso()))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_concurrent_archives_only_one_wins(monkeypatch):
+    """أرشفتان متزامنتان ⇒ واحدة تنجح والأخرى تُرفَض — لا إلغاء مزدوج محسوب."""
+    seed(monkeypatch)
+    f = make_factory("gold", "conc-archive@f.local")
+    sid = _mk_study(f["account_id"], f["user_id"])
+    _queue(f["account_id"], sid, 3)
+
+    def attempt(_i):
+        conn = pdb.connect()
+        try:
+            out = lifecycle.archive_study(conn, account_id=f["account_id"],
+                                          study_id=sid, actor_user_id=f["user_id"])
+            return out["cancelled_queued_emails"]
+        except lifecycle.LifecycleError:
+            return None
+        finally:
+            conn.close()
+
+    results = _run_concurrent(2, attempt)
+    winners = [r for r in results if r is not None]
+    assert len(winners) == 1, f"exactly one archive may win: {results}"
+    assert winners[0] == 3, f"the winner must report all 3 cancelled: {winners}"
+
+
+def test_archive_never_races_the_worker_into_sending_an_archived_study(monkeypatch):
+    """الأرشفة والعامل متزامنان ⇒ **لا صفّ يُرسَل ويُلغى معاً**، ولا صفّ عالق.
+
+    الخطر الحقيقي: لو طالب العامل بصفٍّ (`queued`→`sending`) **بين** فحص الأرشفة
+    وحذفها، لأمكن أن يُرسَل الصفّ **ويُحسَب ملغىً** في الوقت نفسه — أي رسالةٌ
+    خرجت وخُصِمت ثم قيل للعميل إنها سُحبت. القفل الفوري يمنع ذلك: مطالبةُ العامل
+    كتابةٌ فتُحتجَز حتى تلتزم الأرشفة.
+
+    **الثابتة المقيسة ليست «لا إرسال بعد الأرشفة»** — رسالةٌ خرجت **قبل** التزام
+    الأرشفة لا يمكن سحبها، وأرشفةٌ بعدها سلوكٌ صحيح لا خلل (وهذا ما رصده أوّل
+    تشغيل لهذا الاختبار فصُحّحت صياغته). الثابتة: **المجموع محفوظ** —
+    `مُرسَل + ملغى = الأصل`، فلا صفّ يُحسَب مرّتين ولا يضيع.
+
+    Invariant: sent + cancelled == original, with no row both delivered and
+    withdrawn. (Mail that left BEFORE the archive committed cannot be recalled.)
+    """
+    import time
+    seed(monkeypatch)
+    f = make_factory("gold", "conc-arch-worker@f.local", fund_cents=1000)
+    sid = _mk_study(f["account_id"], f["user_id"])
+    _queue(f["account_id"], sid, 4)
+
+    real_pending = lifecycle._pending_counts
+
+    def slow_pending(conn, account_id, study_id):
+        out = real_pending(conn, account_id, study_id)
+        time.sleep(0.2)          # النافذة التي يجب أن يُغلقها القفل
+        return out
+
+    monkeypatch.setattr(lifecycle, "_pending_counts", slow_pending)
+    sent_calls = []
+
+    cancelled = []
+
+    def do_archive(_i):
+        conn = pdb.connect()
+        try:
+            out = lifecycle.archive_study(conn, account_id=f["account_id"],
+                                          study_id=sid,
+                                          actor_user_id=f["user_id"])
+            cancelled.append(out["cancelled_queued_emails"])
+            return "archived"
+        except lifecycle.LifecycleError as exc:
+            return exc.code
+        finally:
+            conn.close()
+
+    def do_worker(_i):
+        conn = pdb.connect()
+        try:
+            email_queue.process_queue(
+                conn, sender=lambda cfg, row: sent_calls.append(row["id"]))
+            return "worked"
+        finally:
+            conn.close()
+
+    _run_concurrent(2, lambda i: do_archive(i) if i == 0 else do_worker(i))
+
+    conn = pdb.connect()
+    try:
+        stuck = conn.execute(
+            "SELECT COUNT(*) c FROM email_queue WHERE account_id = ? AND "
+            "study_id = ? AND status = 'sending'", (f["account_id"], sid)
+        ).fetchone()["c"]
+        by_status = {r["status"]: r["c"] for r in conn.execute(
+            "SELECT status, COUNT(*) c FROM email_queue WHERE account_id = ? "
+            "AND study_id = ? GROUP BY status", (f["account_id"], sid)).fetchall()}
+        bal = int(wallet.get_wallet(conn, f["account_id"])["balance"])
+        consents = conn.execute(
+            "SELECT COUNT(*) c FROM consent_registry WHERE sending_account_id = ? "
+            "AND study_id = ?", (f["account_id"], sid)).fetchone()["c"]
+    finally:
+        conn.close()
+
+    assert stuck == 0, "a row was left stranded in 'sending'"
+    sent_rows = by_status.get("sent", 0)
+    cancelled_n = cancelled[0] if cancelled else 0
+    # (١) المجموع محفوظ: لا صفّ ضاع ولا حُسِب مرّتين.
+    assert sent_rows + cancelled_n + by_status.get("queued", 0) == 4, (
+        f"rows lost or double-counted: sent={sent_rows} "
+        f"cancelled={cancelled_n} left={by_status}")
+    # (٢) كل رسالة خرجت لها قيد موافقة وخصمها — والملغاة لا شيء منهما.
+    assert consents == sent_rows, (
+        f"consent records ({consents}) must match delivered mail ({sent_rows})")
+    assert bal == 1000 - sent_rows * 5, (
+        f"balance {bal} does not match {sent_rows} delivered emails")
+    assert len(sent_calls) == sent_rows, (
+        f"sender called {len(sent_calls)}× but {sent_rows} rows are 'sent'")
 
 
 def test_concurrent_debits_no_lost_updates(monkeypatch):

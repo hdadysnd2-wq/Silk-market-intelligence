@@ -20,8 +20,9 @@ import time
 import uuid
 
 from . import (auth, audit, billing, crypto, email_queue, entitlements,
-               passwords, quota, reporting, repository, scheduler,
-               seed as seed_mod, settings, throttle, users as users_mod, wallet)
+               lifecycle, passwords, quota, reporting, repository,
+               scheduler, seed as seed_mod, settings, throttle,
+               users as users_mod, wallet)
 from .db import connect, init_db
 from .models import (AuthContext, PRICE_REPORT_CENTS, Role,
                      projected_email_cost_cents)
@@ -762,6 +763,44 @@ def mount(app) -> bool:
         finally:
             conn.close()
         return {"account_id": ctx.account_id, "audit": rows}
+
+    # ═══════════════ دورة حياة الدراسة · study lifecycle transitions ═════════
+    def _lifecycle(fn, study_id: int, request: Request, action: str):
+        """جسم مشترك لانتقالَي الإنهاء والأرشفة — one body so they cannot drift."""
+        ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
+        conn = _open()
+        try:
+            try:
+                out = fn(conn, account_id=ctx.account_id, study_id=study_id,
+                         actor_user_id=ctx.user_id)
+            except lifecycle.LifecycleError as exc:
+                raise HTTPException(status_code=409, detail=exc.as_detail())
+            if out is None:
+                repo = repository.studies(conn)
+                _deny_write_404(conn, request, ctx, repo, study_id, "study", action)
+        finally:
+            conn.close()
+        return out
+
+    @app.post(_PREFIX + "/studies/{study_id}/complete")
+    def complete_study_ep(study_id: int, request: Request):
+        """أنهِ دراسة — in_progress → completed؛ 409 ما دام في الطابور معلّق.
+
+        «مكتملة» ورسائلها ستخرج بعد دقائق **ادعاءٌ كاذب** عن الواقع — والعامل لا
+        يفحص حالة الدراسة، فلا شيء يوقفها. ينتظر العميل النفاد أو يؤرشف.
+        """
+        return _lifecycle(lifecycle.complete_study, study_id, request,
+                          "cross_tenant_complete")
+
+    @app.post(_PREFIX + "/studies/{study_id}/archive")
+    def archive_study_ep(study_id: int, request: Request):
+        """أرشِف دراسة — **سحبٌ حقيقي**: يُلغي البريد المعلّق ثم يُغلق الحالة.
+
+        يرجّع `cancelled_queued_emails`. صفٌّ مُرسَل مِن قبل لا يُمَسّ (له قيد
+        موافقة وقيد دفتر)، وصفٌّ في الطريق (`sending`) يرفع 409 عابراً.
+        """
+        return _lifecycle(lifecycle.archive_study, study_id, request,
+                          "cross_tenant_archive")
 
     # ═══════════════ التقرير المدفوع · the charged campaign report ═══════════
     @app.post(_PREFIX + "/studies/{study_id}/report")
