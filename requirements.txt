@@ -9,3 +9,7 @@ pytrends==4.9.2
 # عجلة Rust مستقلّة (لا cffi)؛ حين تغيب يرجع الكود إلى hashlib.scrypt القياسي.
 # Silk platform password hashing (bcrypt cost 12, spec §11); scrypt fallback if absent.
 bcrypt==4.2.1
+# منصّة سِلك: تحليل multipart/form-data لرفع الصور الحقيقي (PR-8) — FastAPI
+# يحتاجها فعلياً عند استعمال UploadFile/File/Form، وإلا يفشل عند التسجيل.
+# Silk platform: multipart/form-data parser FastAPI's UploadFile/File/Form need.
+python-multipart==0.0.20

@@ -21,8 +21,8 @@ import uuid
 
 from . import (auth, audit, billing, crypto, email_queue, entitlements,
                passwords, quota, reporting, repository, scheduler,
-               seed as seed_mod, settings, smtp_transport, throttle, tokens,
-               unsubscribe, users as users_mod, wallet)
+               seed as seed_mod, settings, smtp_transport, storage, throttle,
+               tokens, unsubscribe, users as users_mod, wallet)
 from .db import connect, init_db
 from .models import (AuthContext, PRICE_REPORT_CENTS, Role,
                      projected_email_cost_cents)
@@ -151,12 +151,12 @@ def mount(app) -> bool:
     boot_config_guard()   # افشل بصوت عالٍ على سوء تهيئة الإنتاج · fail fast
     try:
         from fastapi import Request, Response
-        from fastapi.responses import HTMLResponse, JSONResponse
+        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
     except Exception:  # noqa: BLE001 — بلا fastapi لا تركيب (استيراد بلا انهيار)
         log.warning("fastapi unavailable — platform router not mounted")
         return False
 
-    from fastapi import Body, HTTPException
+    from fastapi import Body, File, Form, HTTPException, UploadFile
     from starlette.concurrency import run_in_threadpool
 
     def _resolve_token(token: str):
@@ -843,23 +843,44 @@ def mount(app) -> bool:
 
     # ══════════════════════════ IMAGES ══════════════════════════════════════
     @app.post(_PREFIX + "/images")
-    def create_image(request: Request, body: dict = Body(default=None)):
+    def create_image(request: Request, file: UploadFile = File(...),
+                     alt_text_en: str = Form(default=""),
+                     alt_text_ar: str = Form(default="")):
+        """ارفع صورة حقيقية — real bytes to disk; size_bytes is measured, not trusted.
+
+        قبل هذا الفرق كانت النقطة تسجّل `size_bytes`/`ext` كما يرسلهما العميل
+        بلا أي بايت فعليّ — عيبٌ يخالف عقد عدم الاختلاق مباشرةً: فاتورة تخزينٍ
+        (`jobs.run_storage_billing`) على رقمٍ لم يُقَس. الآن الحجم = طول
+        المحتوى المرفوع فعلياً، والامتداد مُقيَّد بقائمة بيضاء (`storage.py`).
+        Previously trusted client-supplied size_bytes/ext with zero real bytes
+        — a direct violation of the no-fabrication contract for a number that
+        feeds real billing. size_bytes is now measured from the actual upload.
+        """
         ctx = _require(request, Role.FACTORY)
-        body = _json_body(body)
+        # اقرأ بحدّ أقصى +1 بايت فوق السقف — لا تحمّل رفعاً ضخماً كاملاً في
+        # الذاكرة قبل أن تعرف أنه سيُرفَض. Bounded read: never buffer an
+        # oversized upload fully before checking the cap.
+        cap = storage.max_bytes()
+        content = file.file.read(cap + 1)
+        if len(content) > cap:
+            raise HTTPException(status_code=422,
+                                detail=f"file exceeds max size ({cap} bytes)")
+        orig_name = file.filename or ""
+        raw_ext = orig_name.rsplit(".", 1)[-1] if "." in orig_name else ""
+        try:
+            ext = storage.validate_extension(raw_ext)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        key = f"{ctx.account_id}/{uuid.uuid4().hex}.{ext}"
+        storage.write(key, content)   # القرص أوّلاً — صفٌّ يشير لملفٍ غير مكتوب أسوأ من ملفٍ يتيم
         conn = _open()
         try:
-            ext = (body.get("ext") or "bin").lstrip(".")
-            key = f"{ctx.account_id}/{uuid.uuid4().hex}.{ext}"
-            fields = {"filename": body.get("filename"), "storage_key": key,
-                      "mime_type": body.get("mime_type"),
-                      # حجم غير سالب حتماً: قيمة سالبة كانت تُنقص مجموع الحساب
-                      # فيتخطّاه `HAVING bytes > 0` وتصير فاتورة تخزينه صفراً.
-                      # Non-negative: a negative row could zero the storage bill.
-                      "size_bytes": _as_int(body.get("size_bytes"), "size_bytes",
-                                            minimum=0, default=0),
+            fields = {"filename": orig_name or None, "storage_key": key,
+                      "mime_type": storage.mime_for_extension(ext),
+                      "size_bytes": len(content),
                       "uploaded_by_user_id": ctx.user_id,
-                      "alt_text_en": body.get("alt_text_en"),
-                      "alt_text_ar": body.get("alt_text_ar")}
+                      "alt_text_en": alt_text_en or None,
+                      "alt_text_ar": alt_text_ar or None}
             row = repository.images(conn).create(ctx.account_id, fields)
             conn.commit()
         finally:
@@ -868,23 +889,38 @@ def mount(app) -> bool:
 
     @app.get(_PREFIX + "/images/{image_id}/signed-url")
     def image_signed_url(image_id: int, request: Request):
-        """رابط موقّع للصورة — verify owner_id BEFORE signing; foreign ⇒ 404/403.
-
-        **حدّ معلَن**: مسار الخدمة `/files/...` نفسه يأتي مع خزن البايتات في
-        موجة الصور (PR-8) — لا شيء يُرفَع فعلياً الآن (هذه النقطة تسجّل بيانات
-        وصفية فقط)، فالرابط موقّع وصحيح البنية لكنه لا يُخدَم بعد. البوّابة التي
-        يفرضها القسم ١٣ (لا توقيع لمالك أجنبي) نافذة هنا.
-        Declared limit: the /files serving route lands with PR-8 storage.
-        """
+        """رابط موقّع للصورة — verify owner_id BEFORE signing; foreign ⇒ 404/403."""
         row = _tenant_detail(request, repository.images, image_id, "image")
-        from . import tokens
         # التوقيع يحدث فقط بعد إثبات الملكية · signed only after ownership proven.
         expiry = int(time.time()) + 900
         sig = tokens.sign(f"{row['storage_key']}:{expiry}")
         return {"signed_url": f"/files/{row['storage_key']}?expires={expiry}&sig={sig}",
                 "expires": expiry, "storage_key": row["storage_key"],
-                "serving_available": False,
-                "note": "URL signing is enforced now; /files serving lands in PR-8"}
+                "serving_available": True}
+
+    # ══════════════════════════ FILES (signed, public) ═══════════════════════
+    # خارج _PREFIX عمداً (يطابق شكل signed_url أعلاه منذ PR-1) وبلا مصادقة —
+    # التوقيع HMAC هو الحارس الوحيد، نفس نمط /platform/unsubscribe. البحث عن
+    # الصفّ بـstorage_key (عمودٌ UNIQUE عالمياً، لا لكل حساب) هو حدّ الثقة قبل
+    # أي لمسٍ للقرص: مفتاحٌ لا يطابق صفّاً حقيقياً لا يصل نظام الملفات إطلاقاً.
+    # Outside _PREFIX by design (matches signed_url's shape since PR-1), no
+    # auth — the HMAC signature is the sole guard, same pattern as unsubscribe.
+    @app.get("/files/{storage_key:path}")
+    def serve_file(storage_key: str, expires: int, sig: str):
+        if time.time() > expires or not tokens.verify_signature(
+                f"{storage_key}:{expires}", sig):
+            raise HTTPException(status_code=404, detail="not found")
+        conn = _open()
+        try:
+            row = conn.execute(
+                "SELECT storage_key, mime_type FROM images WHERE storage_key = ?",
+                (storage_key,)).fetchone()
+        finally:
+            conn.close()
+        if row is None or not storage.exists(row["storage_key"]):
+            raise HTTPException(status_code=404, detail="not found")
+        return FileResponse(storage.path_for(row["storage_key"]),
+                            media_type=row["mime_type"] or "application/octet-stream")
 
     # ══════════════════════════ WALLET / LEDGER ═════════════════════════════
     @app.get(_PREFIX + "/wallet")
@@ -918,11 +954,17 @@ def mount(app) -> bool:
 
     # ══════════════════════════ AUDIT (factory own) ═════════════════════════
     @app.get(_PREFIX + "/audit")
-    def factory_audit(request: Request, limit: int = 50):
+    def factory_audit(request: Request, limit: int = 50, action: str | None = None):
+        """بحث تدقيق الحساب — same `action` filter admin_audit already has.
+
+        النطاق يبقى account_id الجلسة دائماً (لا يُقبَل من الطلب) — البحث فقط
+        على الفعل، لا توسيع النطاق. Search adds a filter, never widens scope.
+        """
         ctx = _require(request, Role.FACTORY)
         conn = _open()
         try:  # own account only — cannot see other accounts' logs
-            rows = audit.search(conn, account_id=ctx.account_id, limit=limit)
+            rows = audit.search(conn, account_id=ctx.account_id, action=action,
+                                limit=limit)
         finally:
             conn.close()
         return {"account_id": ctx.account_id, "audit": rows}

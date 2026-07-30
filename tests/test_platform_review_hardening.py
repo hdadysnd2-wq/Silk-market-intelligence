@@ -329,9 +329,10 @@ def test_input_validation_returns_422_not_500(monkeypatch):
     # smtp_config_id = 0 (قيمة زائفة) تُرفَض بدل أن تصل مفتاحاً أجنبياً.
     assert cl.patch(f"/platform/studies/{study['id']}", headers=hdr(tok),
                     json={"smtp_config_id": 0}).status_code == 422
-    # حجم صورة سالب.
+    # امتداد صورة خارج القائمة البيضاء (PR-8: الحجم يُقاس لا يُصرَّح به العميل).
     assert cl.post("/platform/images", headers=hdr(tok),
-                   json={"ext": "png", "size_bytes": -999}).status_code == 422
+                   files={"file": ("a.exe", b"MZ-fake", "application/octet-stream")}
+                   ).status_code == 422
 
 
 def test_admin_fund_rejects_non_integer_and_float_amounts(monkeypatch):
