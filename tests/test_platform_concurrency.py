@@ -8,7 +8,8 @@ Each worker uses its OWN sqlite connection (connections aren't thread-shareable)
 import threading
 
 from platform_helpers import make_factory, seed
-from silk_platform import db as pdb, entitlements, quota, users, wallet
+from silk_platform import (billing, db as pdb, entitlements, quota, users,
+                           wallet)
 from silk_platform.models import Operation
 
 
@@ -241,6 +242,60 @@ def test_concurrent_reactivations_never_exceed_seat_cap(monkeypatch):
     finally:
         conn.close()
     assert used == 3, f"seat cap breached: {used} active on a 3-seat tier"
+
+
+def test_concurrent_metered_charges_on_one_key_charge_exactly_once(monkeypatch):
+    """نقرتان متزامنتان على نفس مفتاح الخمول ⇒ خصمٌ **واحد** بالضبط.
+
+    فحصُ «هل خُصِم؟» ثمّ الخصم على اتصالين متزامنين كان يسمح للاثنين بأن يريا
+    «لم يُخصَم بعد» فيخصمان مرّتين على مفتاح واحد — والدفتر غير قابل للتعديل
+    فالتكرار **لا يُصحَّح**. نفس عائلة `LESSONS` ٧٦.
+
+    النافذة مُوسَّعة صناعياً (`_widen_charge_check_window`) لأن الحاجز وحده لا
+    يكفي لقسمٍ حرجٍ أقصر من ميلي ثانية — الدرس نفسه: حارسٌ لا يُثبَت أنه يصطاد
+    قد يكون خاملاً. Proven: without BEGIN IMMEDIATE this yields two charges.
+    """
+    seed(monkeypatch)
+    f = make_factory("gold", "conc-charge@f.local", fund_cents=1000)
+    _widen_charge_check_window(monkeypatch)
+
+    def attempt(_i):
+        conn = pdb.connect()
+        try:
+            _entry, charged = billing.charge_metered(
+                conn, account_id=f["account_id"], actor_user_id=f["user_id"],
+                operation=Operation.REPORT_GENERATED, amount_cents=100,
+                key="one-report")
+            return charged
+        finally:
+            conn.close()
+
+    results = _run_concurrent(2, attempt)
+    assert sum(1 for r in results if r) == 1, f"exactly one charge: {results}"
+    conn = pdb.connect()
+    try:
+        n = conn.execute(
+            "SELECT COUNT(*) c FROM ledger_entries WHERE account_id = ? AND "
+            "operation_type = 'report_generated'", (f["account_id"],)
+        ).fetchone()["c"]
+        bal = wallet.get_wallet(conn, f["account_id"])["balance"]
+    finally:
+        conn.close()
+    assert n == 1, f"double-charged one idempotency key: {n} entries"
+    assert bal == 900, f"balance says double charge: {bal}"
+
+
+def _widen_charge_check_window(monkeypatch, delay_s=0.15):
+    """وسّع نافذة فحص الخمول — same rationale as `_widen_seat_check_window`."""
+    import time
+    real = billing.already_charged
+
+    def slow_already_charged(conn, account_id, operation, key):
+        out = real(conn, account_id, operation, key)
+        time.sleep(delay_s)
+        return out
+
+    monkeypatch.setattr(billing, "already_charged", slow_already_charged)
 
 
 def test_concurrent_debits_no_lost_updates(monkeypatch):

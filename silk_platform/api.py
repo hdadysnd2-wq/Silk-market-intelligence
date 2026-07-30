@@ -19,11 +19,12 @@ import threading
 import time
 import uuid
 
-from . import (auth, audit, crypto, email_queue, entitlements, passwords, quota,
-               repository, scheduler, seed as seed_mod, settings, throttle,
-               users as users_mod, wallet)
+from . import (auth, audit, billing, crypto, email_queue, entitlements,
+               passwords, quota, reporting, repository, scheduler,
+               seed as seed_mod, settings, throttle, users as users_mod, wallet)
 from .db import connect, init_db
-from .models import AuthContext, Role, projected_email_cost_cents
+from .models import (AuthContext, PRICE_REPORT_CENTS, Role,
+                     projected_email_cost_cents)
 
 log = logging.getLogger(__name__)
 
@@ -761,6 +762,60 @@ def mount(app) -> bool:
         finally:
             conn.close()
         return {"account_id": ctx.account_id, "audit": rows}
+
+    # ═══════════════ التقرير المدفوع · the charged campaign report ═══════════
+    @app.post(_PREFIX + "/studies/{study_id}/report")
+    def generate_study_report(study_id: int, request: Request,
+                              body: dict = Body(default=None)):
+        """أنشئ تقرير حملة واخصم سعره — $1.00، مرّة واحدة لكل مفتاح خمول.
+
+        نقرةٌ مزدوجة أو إعادة محاولة ترجع **نفس** القيد بـ`charged: false` ولا
+        تخصم ثانية (المفتاح مخزَّن في وصف قيد الدفتر). الحساب المدين يُرفَض 402،
+        والرصيد غير الكافي 402 كذلك — لا يُسجَّل دَينٌ مقابل شيء لم يحدث.
+        """
+        ctx = _require(request, Role.FACTORY)
+        body = _json_body(body)
+        key = body.get("idempotency_key")
+        if key is not None and not isinstance(key, str):
+            raise HTTPException(status_code=422,
+                                detail="idempotency_key must be a string")
+        conn = _open()
+        try:
+            try:
+                out = reporting.generate_charged_report(
+                    conn, account_id=ctx.account_id, actor_user_id=ctx.user_id,
+                    study_id=study_id, idempotency_key=key)
+            except billing.Delinquent as exc:
+                raise HTTPException(status_code=402,
+                                    detail={"error": "delinquent",
+                                            "message": str(exc)})
+            except wallet.InsufficientFunds as exc:
+                raise HTTPException(
+                    status_code=402,
+                    detail={"error": "insufficient_funds", "message": str(exc),
+                            "price_cents": PRICE_REPORT_CENTS})
+            except billing.BillingError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+            if out is None:
+                # غير مملوكة للمنادي — 404 بلا تسريب وجود + تدقيق للعبور.
+                repo = repository.studies(conn)
+                if repo.exists_anywhere(study_id):
+                    audit.record_denied(conn, action="cross_tenant_read",
+                                        user_id=ctx.user_id,
+                                        account_id=ctx.account_id,
+                                        resource_type="study",
+                                        resource_id=study_id,
+                                        ip_address=_client_ip(request))
+                raise HTTPException(status_code=404, detail="not found")
+            if out["billing"]["charged"]:
+                audit.record(conn, action="campaign_report_generated",
+                             user_id=ctx.user_id, account_id=ctx.account_id,
+                             resource_type="study", resource_id=study_id,
+                             ip_address=_client_ip(request))
+                conn.commit()
+        finally:
+            conn.close()
+        return out
 
     # ═══════════════ الاستحقاقات والمقاعد · entitlements + seats ═════════════
     class _UsersRepoShim:

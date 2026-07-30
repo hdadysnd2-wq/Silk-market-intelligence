@@ -1866,23 +1866,44 @@ def _guard_seat_lock_is_load_bearing():
           باختبارَي المقاعد — فلو حُذفت لعاد الاختبار يجتاز كوداً غير ذرّي بصمت.
     إثباتٌ محفوظ: بحذف القفل يخرج الاختبار `[True, True]` (٤ نشطين على سقف ٣).
     """
+    # **الشكل التنفيذي وحده يُحتسَب.** الفحص الأوّل كان على النصّ المجرّد
+    # «BEGIN IMMEDIATE»، وهو يظهر في **شروح** هذه الوحدات أيضاً — فكان ذكرٌ في
+    # docstring يُشبِع الحارس، ويمكن حذف قفلٍ فعليّ دون أن يُحمِّر. نفس ثقب
+    # «ذكر العمود ≠ قيد عليه» الذي أُغلق في حارس العزل، تكرّر هنا فأُغلق.
+    # Only the executable statement counts — a docstring mention is not a lock.
+    _LOCK = 'conn.execute("BEGIN IMMEDIATE")'
     src = _read("silk_platform/users.py")
-    assert src.count("BEGIN IMMEDIATE") >= 2, (
+    assert src.count(_LOCK) >= 2, (
         "silk_platform/users.py: مسارا كتابة المقعد (create_sub_user/set_active) "
-        "يجب أن يبدأا معاملة كتابة فورية — بلا ذلك يتجاوز تنشيطان متزامنان السقف")
+        "يجب أن يبدأا معاملة كتابة فورية فعلياً — بلا ذلك يتجاوز تنشيطان "
+        f"متزامنان السقف (وُجد {src.count(_LOCK)} من عبارات القفل التنفيذية)")
     # التنشيط تحديداً محروسٌ بالحالة كي تخسر الكتابة الثانية بلا أثر.
     assert "AND is_active = ?" in src, (
         "silk_platform/users.py: تحديث التنشيط بلا شرط `is_active` — الكتابة "
         "الثانية تنجح صمتاً")
+    # القاعدة أوسع من المقاعد: **كل** مسار يستهلك حدّاً مدفوعاً يفتح معاملة كتابة
+    # فورية قبل فحصه. أُضيف الخصم المقيس (PR-3) لأن فحص الخمول ثمّ الخصم بلا قفل
+    # يُنتج خصماً مزدوجاً على مفتاح واحد — والدفتر غير قابل للتعديل.
+    bill = _read("silk_platform/billing.py")
+    assert _LOCK in bill, (
+        "silk_platform/billing.py: فحص الخمول والخصم يجب أن يتشاركا معاملة كتابة "
+        "فورية فعلية — بلا ذلك تخصم نقرتان متزامنتان مرّتين على مفتاح واحد")
+
     tests = _read("tests/test_platform_concurrency.py")
-    assert "def _widen_seat_check_window" in tests, (
-        "tests/test_platform_concurrency.py: مُوسِّع نافذة الفحص محذوف — بدونه "
-        "يجتاز كودٌ غير ذرّي اختبارَ التزامن (أخضر فارغ)")
-    for name in ("test_concurrent_sub_user_creates_never_exceed_seat_cap",
-                 "test_concurrent_reactivations_never_exceed_seat_cap"):
-        assert name in tests, f"اختبار قفل المقاعد مفقود: {name}"
+    for widener in ("def _widen_seat_check_window", "def _widen_charge_check_window"):
+        assert widener in tests, (
+            f"tests/test_platform_concurrency.py: {widener} محذوف — بدونه يجتاز "
+            "كودٌ غير ذرّي اختبارَ التزامن (أخضر فارغ)")
+    for name, widener in (
+            ("test_concurrent_sub_user_creates_never_exceed_seat_cap",
+             "_widen_seat_check_window"),
+            ("test_concurrent_reactivations_never_exceed_seat_cap",
+             "_widen_seat_check_window"),
+            ("test_concurrent_metered_charges_on_one_key_charge_exactly_once",
+             "_widen_charge_check_window")):
+        assert name in tests, f"اختبار قفل حدٍّ مدفوع مفقود: {name}"
         body = tests.split(f"def {name}(")[1].split("\ndef ")[0]
-        assert "_widen_seat_check_window" in body, (
+        assert widener in body, (
             f"{name}: لا يُوسِّع نافذة الفحص ⇒ قد يجتاز شيفرةً غير ذرّية")
 
 
