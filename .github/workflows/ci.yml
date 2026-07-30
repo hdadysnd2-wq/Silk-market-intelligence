@@ -7,6 +7,12 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # سقف زمني صريح: الافتراضي بلا ضبط ٣٦٠ دقيقة (٦ ساعات)، فأيّ تعليق حقيقي
+    # (قفل قاعدة، انتظار شبكة) كان سيحرق رصيد Actions صامتاً حتى ينتبه أحدٌ
+    # يدوياً. الحزمة الهرمتية تكتمل في ~٦–٨ دقائق، فـ٢٠ هامشٌ واسع يقتل التعليق
+    # سريعاً دون إسقاط تشغيلة سليمة بطيئة.
+    # Explicit cap: the 360-minute default would burn CI budget on a real hang.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.11

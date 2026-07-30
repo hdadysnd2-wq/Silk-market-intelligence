@@ -67,6 +67,18 @@ def _index_search(q: str = "", limit: int = 20) -> list[dict]:
     return out
 
 
+def _platform_db_path() -> str | None:
+    """مسار قاعدة المنصّة المحلول — resolved platform DB path for /health.
+
+    None حين لا تكون الحزمة متوفّرة (المنصّة إضافة اختيارية استيراداً).
+    """
+    try:
+        import silk_platform.db as _pdb
+        return _pdb.db_path()
+    except Exception:  # noqa: BLE001 — الكشف أفضل جهد؛ لا يُسقط /health
+        return None
+
+
 def _cors_origins() -> list[str]:
     """أصول CORS المسموحة — allowed origins from CORS_ORIGINS; [] = same-origin only.
 
@@ -451,6 +463,11 @@ def create_app():
                 "fact_store_db": _fact_store._db_path(),
                 "usage_db": _usage._db_path(),
                 "cache_dir": _cache._cache_dir(),
+                # المخزن الخامس (منصّة المستأجرين/المصادقة/المحافظ) — بلا كشفه
+                # لا يستطيع المالك التحقّق بعد النشر أن بيانات المستأجرين نزلت
+                # على الوحدة المركَّبة لا على قرص الحاوية الفاني.
+                # Fifth store: tenant/auth/wallet DB must be verifiable remotely.
+                "platform_db": _platform_db_path(),
                 # PART E (أمر العمل الرئيس): حالة مصيدة الإقلاع مرئية من
                 # /health — كانت غير قابلة للتفتيش عن بُعد فلا يعرف المالك
                 # إن كان صمّام «رفض الإقلاع على قرص فانٍ» مفعّلاً فعلاً.
@@ -3255,6 +3272,22 @@ def create_app():
             raise HTTPException(status_code=404,
                                 detail=f"analysis {analysis_id} not found")
         return {"id": analysis_id, "outcome": outcome, "recorded": True}
+
+    # منصّة SaaS متعددة المستأجرين (PR-1: مصادقة + عزل) تحت /platform — تُركَّب
+    # قبل الواجهة الثابتة وبأمان: أي فشل استيراد يُسجَّل ولا يُسقِط المحرّك القائم
+    # (مبدأ «لا انهيار»). النقاط تحت /platform مستقلّة عن مسارات المحرّك أعلاه.
+    # حارس الإقلاع **يصعد** ولا يُبتلَع: `boot_config_guard` يرفع RuntimeError
+    # عند إشارة إنتاج بلا سرّ توقيع، وابتلاعه هنا كان يعني إقلاعاً «أخضر»
+    # و/platform غائبة صامتة (404 من الملفات الثابتة) — نفس عائلة «الفقدان
+    # الصامت» التي يمنعها SILK_REQUIRE_PERSISTENT_DATA_DIR بالفشل العالي.
+    # Only a missing/broken import degrades; a config RuntimeError refuses boot.
+    try:
+        import silk_platform
+    except ImportError:  # المنصّة غير متوفّرة استيراداً · optional at import time
+        log.warning("silk_platform not importable — router not mounted", exc_info=True)
+    else:
+        if silk_platform.mount(app):   # RuntimeError من الحارس يصعد عمداً
+            log.info("silk_platform router mounted at /platform")
 
     # الواجهة الثابتة على نفس الخدمة — serve the static frontend at "/" so one
     # Render service hosts BOTH the API and the UI (same origin, no CORS needed).
