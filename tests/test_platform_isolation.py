@@ -33,7 +33,8 @@ def _setup(monkeypatch):
     prospect = cl.post("/platform/prospects", headers=hdr(ta),
                        json={"email": "lead@a.local", "first_name": "Lead"}).json()
     image = cl.post("/platform/images", headers=hdr(ta),
-                    json={"ext": "png", "size_bytes": 1000}).json()
+                    files={"file": ("a.png", b"\x89PNG-fake-bytes", "image/png")}
+                    ).json()
     smtp = cl.post("/platform/smtp-configs", headers=hdr(ta),
                    json={"host": "h", "port": 25, "from_email": "a@a.local",
                          "username": "u", "password": "p"}).json()

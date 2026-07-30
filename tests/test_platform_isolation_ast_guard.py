@@ -92,6 +92,11 @@ _INTENTIONAL_GLOBAL: dict[tuple[str, str], str] = {
     ("api.py", "SELECT * FROM smtp_configs WHERE id = ?"):
         "ownership verified immediately after fetch in _validate_smtp_binding "
         "(rejects with 422 when owner_id differs)",
+    ("api.py", "SELECT storage_key, mime_type FROM images WHERE storage_key = ?"):
+        "GET /files is a public signed-URL route (PR-8), same trust model as "
+        "/platform/unsubscribe — the HMAC signature verified just above is "
+        "the actual authorization; storage_key is UNIQUE platform-wide (not "
+        "per-account) so an owner predicate doesn't apply to this lookup",
     # ── مسارات الهويّة على `users` · identity paths (PR-2) ───────────────────
     # الدخول وإعادة التعيين **يجب** أن تكون عالمية: البريد هو هويّة الدخول وهو
     # فريد على مستوى المنصّة، فالحساب غير معروف بعد قبل أن تُحلّ الهويّة. تقييدها

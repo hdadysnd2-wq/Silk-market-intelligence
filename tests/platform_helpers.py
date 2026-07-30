@@ -10,11 +10,18 @@ import tempfile
 
 
 def setup_env(monkeypatch) -> str:
-    """قاعدة منصّة معزولة لكل اختبار — isolated platform DB; returns its path."""
+    """قاعدة منصّة معزولة لكل اختبار — isolated platform DB; returns its path.
+
+    يعزل أيضاً جذر تخزين الملفات (PR-8) في نفس المجلّد المؤقّت — بلا هذا كان
+    رفع صورة في الاختبارات يكتب فعلياً داخل `data/` الحقيقي للريبو.
+    Also isolates the file-storage root in the same temp dir — otherwise an
+    uploaded-image test would write real files into the repo's actual data/.
+    """
     d = tempfile.mkdtemp()
     path = os.path.join(d, "platform.db")
     monkeypatch.setenv("SILK_PLATFORM_DB", path)
     monkeypatch.setenv("SILK_PLATFORM_SECRET", "fixed-test-secret-do-not-use-in-prod")
+    monkeypatch.setenv("SILK_PLATFORM_STORAGE_DIR", os.path.join(d, "files"))
     from silk_platform import db as pdb
     pdb.init_db(path, force=True)
     return path

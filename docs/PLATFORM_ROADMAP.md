@@ -151,10 +151,31 @@ CRUD كامل مُستأجَر للدراسات/العملاء/المسودّا�
 
 ---
 
-## PR-6 · PR-7 · PR-8 — لم تبدأ · not started
-لوحات + نظام تصميم · القمع وبوّابته · الصور وفوترة التخزين وبحث التدقيق.
-(فوترة التخزين نفسها مُنفَّذة وخاملة التكرار في `jobs.py`، وينقصها رفع البايتات
-وخدمتها عبر `/files` — الحدّ المعلَن في PR-1.)
+## PR-8 — الصور وفوترة التخزين وبحث التدقيق · images, storage billing, audit search
+
+### ✅ نُفِّذ الآن · shipped now
+
+| بند | الموضع | الدليل |
+|---|---|---|
+| **رفع صور حقيقي** (لا `size_bytes`/`ext` مصرَّح بهما من العميل) | `POST /platform/images` صار multipart حقيقياً (`UploadFile`)؛ الحجم = طول المحتوى المرفوع فعلاً، الامتداد مُقيَّد بقائمة بيضاء (`silk_platform/storage.py`) | `tests/test_platform_storage.py` |
+| **خدمة `/files/...`** (كانت توقّع رابطاً لمسارٍ لا يخدم شيئاً منذ PR-1) | `GET /files/{storage_key:path}` — عامّ بلا مصادقة، التوقيع HMAC (المُتحقَّق منه **قبل** أي بحث DB أو لمس قرص) هو الحارس الوحيد، نفس نمط `/platform/unsubscribe` | `test_signed_url_then_serve_file_round_trip`، `test_serve_file_rejects_path_traversal_signed_for_a_fake_key` |
+| **بحث تدقيق الحساب** (`/platform/audit` كان بلا مرشِّح `action` بخلاف `/admin/audit`) | `factory_audit` صار يقبل `?action=` بنفس نمط `admin_audit` | `test_factory_audit_filters_by_action` |
+
+فوترة التخزين نفسها (`jobs.run_storage_billing`) كانت مُنفَّذة وخاملة التكرار
+سلفاً — الآن `size_bytes` الذي تقرؤه **مقيسٌ فعلياً** لا مُصرَّحاً به، فالفاتورة
+تعكس استهلاكاً حقيقياً لأوّل مرّة.
+
+### ⬜ ناقص
+لا شيء من قائمة PR-8 الأصلية. الحدّ الوحيد: حجم الرفع الأقصى ثابتٌ عملياتي
+(`SILK_PLATFORM_MAX_IMAGE_BYTES`، افتراضه ١٠ ميجابايت) — تكبيره قرار مالك لو
+احتاجته صورةٌ أكبر.
+
+---
+
+## PR-6 · PR-7 — لم تبدأ · not started
+لوحات + نظام تصميم · القمع وبوّابته (`funnel_max_studies`/`require_feature("funnel")`
+جاهزتان من PR-2، لكن دلالة الحالات الخمس `compared→selected→extracted→drafted→sent`
+في `comparison_funnels` غير موثَّقة في أي مصدر مكتوب — قرار تصميم ميزة ينتظر المالك).
 
 ---
 
