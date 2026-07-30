@@ -115,9 +115,14 @@ CRUD كامل مُستأجَر للدراسات/العملاء/المسودّا�
 حالات الدراسة `draft→in_progress`، `language_preference` للمستخدم والعميل،
 تعبئة `{{first_name}}`، واختيار المسودّة بلغة العميل.
 
+### ✅ نُفِّذ الآن · shipped now
+
+| بند | الموضع | الدليل |
+|---|---|---|
+| **حالتا `completed`/`archived` كانتقالات صريحة بنقاط خاصّة** | `POST /platform/studies/{id}/complete` (`in_progress`→`completed`، يختم `completed_at`)، `POST /platform/studies/{id}/archive` (`draft`/`completed`→`archived`؛ لا أرشفة لدراسة نشطة) — كلاهما مطالبة ذرّية بنمط `launch_study` (`AND state='...'` + فحص rowcount) | `tests/test_platform_study_lifecycle.py` (١١ اختباراً: انتقال صحيح، 409 من حالة خطأ، 409 تكرار، عزل مستأجر 404، حرس الدور، سجلّ تدقيق) |
+
 ### ⬜ ناقص
 قواميس الترجمة المفتاحية (`"wallet.balance"` → …) وRTL — كلّها طبقة عرض (PR-6).
-حالتا `completed`/`archived` كانتقالات صريحة بنقاط خاصّة.
 
 ---
 
