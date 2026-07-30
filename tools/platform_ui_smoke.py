@@ -128,9 +128,49 @@ def drive(base: str, email: str, shots: pathlib.Path) -> None:
         # انتظارٌ لا عدٌّ فوريّ: `#wBal` يُملأ **قبل** `Promise.all` الذي يحمّل
         # الجداول، فعدُّ الصفوف لحظةَ ظهور الرصيد سباقٌ يفشل عشوائياً. (فشل فعلاً
         # هنا بعد أن صار التحميل يشمل ستّ مجموعات بدل ثلاث.)
+        # القائمة الجانبية تُبدِّل فعلاً — لا مجرّد وجودِ أزرار. (بلاغ المالك:
+        # «المفروض فيه قائمة جانبية بس النثر هذا».)
+        def goto(label: str, panel: str) -> None:
+            """انتقِل إلى قسمٍ ثم انتظِر ظهوره.
+
+            مع القائمة الجانبية يظهر **قسمٌ واحد** فقط، فأيّ فحصٍ على صفوف قسمٍ
+            آخر يجد عناصر «مخفيّة» — لا غائبة. فالتنقّل شرطُ صحّةٍ للفحص نفسه.
+            """
+            pg.locator("#sideNav button", has_text=label).first.click()
+            pg.locator(f"#{panel}.on").wait_for(timeout=15000)
+
+        nav = pg.locator("#sideNav button")
+        # `buildNav()` يجري **بعد** `Promise.all` للتحميل، فالعدُّ لحظةَ ظهور
+        # الرصيد سباقٌ يقرأ صفراً. انتظِر أوّل مدخل ثم عُدّ.
+        nav.first.wait_for(timeout=20000)
+        assert nav.count() >= 6, f"القائمة الجانبية ناقصة: {nav.count()} مدخلاً"
+        goto("الدفتر", "ledgerPanel")
         pg.locator("#ledgerBody tr").first.wait_for(timeout=20000)
+        assert not pg.is_visible("#studiesPanel"), \
+            "قسمان ظاهران معاً — التبديل لا يعمل"
+        goto("الدراسات", "studiesPanel")
+        print("١ب) القائمة الجانبية تُبدِّل الأقسام فعلاً —",
+              nav.count(), "مدخلاً ✔")
+        # شريط المقاييس سياقٌ **دائم**: يبقى ظاهراً وشبكةً في أيّ قسم.
+        disp = pg.evaluate(
+            "getComputedStyle(document.getElementById('factoryStats')).display")
+        assert disp == "grid", f"بطاقات المقاييس ليست شبكة: display={disp}"
+        assert pg.is_visible("#factoryStats"), "شريط المقاييس اختفى مع تبديل القسم"
         pg.screenshot(path=str(shots / "01_dashboard.png"), full_page=True)
 
+        # ٣٧٥px — معيار قبولٍ صريح: القائمة تنطوي ولا تمريرَ أفقيّ للصفحة.
+        pg.set_viewport_size({"width": 375, "height": 820})
+        pg.locator("#sideToggle").wait_for(state="visible", timeout=15000)
+        doc_w = pg.evaluate("document.documentElement.scrollWidth")
+        assert doc_w <= 375 + 1, f"تمريرٌ أفقيّ عند ٣٧٥px: عرض المستند {doc_w}"
+        pg.click("#sideToggle")
+        pg.locator("#sideBar.open").wait_for(timeout=15000)
+        pg.screenshot(path=str(shots / "01b_mobile_375.png"), full_page=True)
+        goto("الدراسات", "studiesPanel")
+        print("١ج) عند ٣٧٥px: القائمة تنطوي وتُفتَح بالزرّ، ولا تمريرَ أفقيّ ✔")
+        pg.set_viewport_size({"width": 1280, "height": 1600})
+
+        goto("الدراسات", "studiesPanel")
         row = pg.locator("#studiesBody tr").filter(has_text="جارية").first
         sid = row.locator("td").first.inner_text().strip()
         row.locator("button", has_text="إنهاء").click()
@@ -185,7 +225,7 @@ def drive(base: str, email: str, shots: pathlib.Path) -> None:
         pg.fill('.veil [name="email"]', "buyer@smoke.example")
         pg.fill('.veil [name="first_name"]', "Jan")
         submit("عميل محتمل جديد")
-        # انتظارٌ لا عدّ — إعادةُ الرسم تجري بعد رسالة النجاح لا قبلها.
+        goto("العملاء المحتملون", "prospectsPanel")
         pg.locator("#prospectsBody tr").first.wait_for(timeout=20000)
         print("٥) أُضيف عميل محتمل بالنقر ✔")
 
@@ -193,6 +233,7 @@ def drive(base: str, email: str, shots: pathlib.Path) -> None:
         pg.fill('.veil [name="title_ar"]', "حملة الدخان العاملة")
         pg.fill('.veil [name="target_count"]', "1")
         submit("دراسة جديدة")
+        goto("الدراسات", "studiesPanel")
         study_row = pg.locator("#studiesBody tr").filter(
             has_text="حملة الدخان العاملة").first
         study_row.wait_for(timeout=20000)
@@ -203,10 +244,12 @@ def drive(base: str, email: str, shots: pathlib.Path) -> None:
         pg.fill('.veil [name="subject_ar"]', "عرض تعاون تجاري")
         pg.fill('.veil [name="body_ar"]', "نصّ الرسالة التجريبية.")
         submit("نصّ رسالة جديد")
+        goto("نصوص الرسائل", "draftsPanel")
         pg.locator("#draftsBody tr").first.wait_for(timeout=20000)
         print("٧) أُضيف نصّ رسالة بالنقر ✔")
 
         # الإطلاق: النافذة تُلزِم نصّاً وعملاء، والخادم يصفّ فقط بهما معاً.
+        goto("الدراسات", "studiesPanel")
         pg.locator("#studiesBody tr").filter(has_text="حملة الدخان العاملة").first \
           .locator("button", has_text="إطلاق").click()
         msg = submit("إطلاق الدراسة")
@@ -216,6 +259,7 @@ def drive(base: str, email: str, shots: pathlib.Path) -> None:
 
         # مسارُ المال: يُخصَم $1.00 فعلاً. لا يجوز الاكتفاء بـ«ظهرت رسالة» —
         # كان هذا الفحص يقرأ رسالةَ الإطلاق البائتة فيمرّ ولو فشل التقرير.
+        goto("الدراسات", "studiesPanel")
         before_bal = pg.inner_text("#wBal")
         before_msg = pg.inner_text("#appMsg") if pg.is_visible("#appMsg") else ""
         pg.locator("#studiesBody tr").filter(has_text="حملة الدخان العاملة").first \

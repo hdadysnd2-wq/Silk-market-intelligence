@@ -349,6 +349,62 @@ def test_the_page_never_calls_a_missing_feature_unavailable(html):
     assert "في الباقة " in visible, "لا نصّ ترقية يسمّي الباقة"
 
 
+# ══════ القائمة الجانبية · the sidebar (بلاغ مالك: «المفروض قائمة جانبية») ════
+def test_every_sidebar_section_points_at_a_panel_that_exists(html):
+    """كل مدخلٍ في `SECTIONS` يشير إلى لوحٍ موجود — لا مدخلَ يفتح فراغاً.
+
+    القائمة تُبنى من جدولٍ واحد، فمِعرَّفٌ مكتوبٌ خطأً يُنتِج زرّاً يُبدِّل إلى
+    **لا شيء** بلا أيّ خطأ في وحدة التحكّم: القسم لا يظهر والسابق يختفي. وهذا
+    عيبٌ لا تلتقطه مراجعةُ عين.
+    """
+    m = re.search(r"const SECTIONS = \[(.*?)\n\];", html, re.S)
+    assert m, "لم يُوجد جدول الأقسام `SECTIONS`"
+    panels = re.findall(r'panel:\s*"(\w+)"', m.group(1))
+    assert len(panels) >= 7, f"عدد الأقسام أقلّ من المتوقّع: {panels}"
+    # شريط المقاييس سياقٌ دائم لا قسماً — فلا يجوز أن يعود إلى الجدول.
+    assert "factoryStats" not in panels, (
+        "شريط المقاييس عاد قسماً يُبدَّل؛ وهو سياقٌ دائم (والقسم كان يُفكِّك شبكته)")
+    for pid in panels:
+        assert f'id="{pid}"' in html, f"القسم يشير إلى لوحٍ غير موجود: {pid}"
+
+
+def test_every_panel_in_the_page_is_reachable_from_the_sidebar(html):
+    """والعكس: لوحٌ في الصفحة بلا مدخلٍ في القائمة = محتوىً لا سبيل إليه.
+
+    هذا الاتجاه هو الذي يُنتِج بلاغ «لا يوجد أيّ خيار» من جديد: القسم موجود
+    ومحمَّل ولا زرَّ يُظهِره.
+    """
+    m = re.search(r"const SECTIONS = \[(.*?)\n\];", html, re.S)
+    listed = set(re.findall(r'panel:\s*"(\w+)"', m.group(1)))
+    in_page = set(re.findall(r'<section class="panel sect" id="(\w+)"', html))
+    orphans = in_page - listed
+    assert not orphans, f"ألواحٌ لا يفتحها أيّ مدخل في القائمة: {sorted(orphans)}"
+
+
+def test_the_sidebar_hides_admin_sections_from_a_factory(html):
+    """أقسام الأدمِن لا تُبنى لمصنع — التصفية بالدور لا بإخفاءٍ بصريّ.
+
+    زرٌّ مخفيٌّ بـCSS يبقى في الشجرة ويُنقَر برمجياً؛ التصفية عند البناء تمنع
+    وجوده أصلاً.
+    """
+    assert "function visibleSections" in html, "لا تصفية للأقسام بالدور"
+    assert 'x.role === "silk_admin"' in html
+
+
+def test_the_page_is_usable_at_a_phone_width(html):
+    """استجابةٌ عند ٣٧٥px: القائمة تنطوي، والبطاقات تتراصف، ولا تمريرَ أفقيّ.
+
+    (معيارُ قبولٍ صريح في الأمر المُعدَّل §8.1(1). التحقّق البصريّ الفعليّ يجري
+    في رُتبة ٣ بلقطة عند ٣٧٥px؛ هذا يقفل وجودَ القواعد نفسها.)
+    """
+    assert "@media(max-width:820px)" in html, "لا استعلامَ وسائط للجوّال"
+    mobile = html[html.index("@media(max-width:820px)"):][:600]
+    assert "translateX(100%)" in mobile, "القائمة لا تنطوي على الجوّال"
+    assert "grid-template-columns:1fr" in mobile, "البطاقات لا تتراصف"
+    # الجداول تُمرَّر داخل حاوٍ لا تُمرِّر الصفحة أفقياً.
+    assert ".tbl{width:100%;overflow-x:auto}" in html
+
+
 def test_the_admin_and_factory_toolbars_are_separated(html):
     """شريطُ الأدمِن لا يظهر لمصنع ولا العكس — نقاط الأدمِن ترفض 403 أصلاً.
 
