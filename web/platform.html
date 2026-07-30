@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سِلك — حساب المصنع</title>
+<!-- خطوط مستضافة ذاتياً — نفس ملفات الواجهة الرئيسة، لا CDN خارجي. -->
+<link href="fonts/fonts.css" rel="stylesheet">
+<style>
+  /* نفس رموز تصميم سِلك المستعملة في index.html — صفحةٌ من المنتَج لا نموذج خام. */
+  :root{
+    --bg:#FBFAF7;--panel:#FFFFFF;--ink:#1A2420;--ink-soft:#5C665F;
+    --line:#ECE8DF;--line-2:#DFDACF;--gold:#A9772F;--gold-soft:#F4ECDC;
+    --go:#3B7355;--go-soft:#E6F0EA;--warn:#A9791F;--warn-soft:#F7EEDA;
+    --bad:#A2402F;--bad-soft:#F6E7E2;--muted:#9C978A;--side:#F6F3EC;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);min-height:100vh;
+    font-family:"IBM Plex Sans Arabic",sans-serif;line-height:1.65;-webkit-font-smoothing:antialiased}
+  .num{font-family:"IBM Plex Mono",monospace;font-feature-settings:"tnum";direction:ltr;unicode-bidi:plaintext}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px 18px 60px}
+  header.top{display:flex;align-items:baseline;gap:10px;justify-content:space-between;
+    padding-bottom:18px;border-bottom:1px solid var(--line);margin-bottom:22px;flex-wrap:wrap}
+  .brand{display:flex;align-items:baseline;gap:8px}
+  .brand b{font-family:"Markazi Text",serif;font-size:30px;font-weight:700;line-height:1}
+  .brand span{font-size:11.5px;color:var(--muted)}
+  .who{font-size:12.5px;color:var(--ink-soft);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  button{font-family:inherit;cursor:pointer;border:none;border-radius:9px;font-weight:600}
+  .btn{background:var(--ink);color:#fff;padding:10px 16px;font-size:13.5px}
+  .btn:hover{opacity:.9}
+  .btn.ghost{background:transparent;color:var(--ink-soft);border:1px solid var(--line-2)}
+  .btn.sm{padding:6px 11px;font-size:12px;border-radius:7px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  /* ── الدخول ── */
+  .login{max-width:390px;margin:9vh auto 0;background:var(--panel);border:1px solid var(--line);
+    border-radius:16px;padding:30px 26px}
+  .login h1{font-family:"Markazi Text",serif;font-size:27px;font-weight:700;margin-bottom:4px}
+  .login p.sub{font-size:12.5px;color:var(--muted);margin-bottom:20px}
+  label{display:block;font-size:12px;color:var(--ink-soft);font-weight:600;margin:14px 0 6px}
+  input{width:100%;padding:11px 13px;border:1px solid var(--line-2);border-radius:9px;
+    font-family:inherit;font-size:14px;background:#fff;color:var(--ink)}
+  input:focus{outline:2px solid var(--gold-soft);border-color:var(--gold)}
+  /* ── البطاقات ── */
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-bottom:22px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .card h2{font-size:12px;color:var(--muted);letter-spacing:.6px;font-weight:600;margin-bottom:12px}
+  .big{font-size:26px;font-weight:600;line-height:1.2}
+  .sub{font-size:12px;color:var(--muted);margin-top:3px}
+  .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;padding:5px 0;
+    border-bottom:1px dashed var(--line)}
+  .row:last-child{border-bottom:none}
+  .row span:first-child{color:var(--ink-soft)}
+  .bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:9px}
+  .bar i{display:block;height:100%;background:var(--gold);border-radius:99px}
+  .chip{display:inline-block;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:99px}
+  .ok{background:var(--go-soft);color:var(--go)}
+  .no{background:#F1EFE9;color:var(--muted)}
+  .bad{background:var(--bad-soft);color:var(--bad)}
+  .warn{background:var(--warn-soft);color:var(--warn)}
+  /* ── الجداول ── */
+  section.blk{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:16px 18px;margin-bottom:18px}
+  section.blk h2{font-size:13.5px;font-weight:600;margin-bottom:12px;display:flex;
+    justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .tbl{width:100%;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:520px}
+  th{text-align:start;font-size:11px;color:var(--muted);font-weight:600;padding:7px 8px;
+    border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  .empty{font-size:12.5px;color:var(--muted);padding:14px 4px}
+  .msg{font-size:12.5px;padding:10px 13px;border-radius:9px;margin:12px 0;display:none;line-height:1.6}
+  .msg.on{display:block}
+  .msg.err{background:var(--bad-soft);color:var(--bad)}
+  .msg.good{background:var(--go-soft);color:var(--go)}
+  .hide{display:none!important}
+  .prov{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.55}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ شاشة الدخول ════════════════ -->
+<div id="loginView" class="wrap">
+  <div class="login">
+    <h1>سِلك</h1>
+    <p class="sub">حساب المصنع — الدخول</p>
+    <div id="loginMsg" class="msg err"></div>
+    <label for="email">البريد الإلكتروني</label>
+    <input id="email" type="email" autocomplete="username" dir="ltr" placeholder="owner@factory.local">
+    <label for="pw">كلمة المرور</label>
+    <input id="pw" type="password" autocomplete="current-password" dir="ltr">
+    <button id="loginBtn" class="btn" style="width:100%;margin-top:20px">دخول</button>
+    <p class="prov">جلسة بانتهاء ٢٤ ساعة بعدم النشاط. لا يُخزَّن رمزُها إلا مجزّأً على
+      الخادم، ولا تُعرَض كلمة المرور في أي سجلّ.</p>
+  </div>
+</div>
+
+<!-- ════════════════ اللوحة ════════════════ -->
+<div id="appView" class="wrap hide">
+  <header class="top">
+    <div class="brand"><b>سِلك</b><span>حساب المصنع</span></div>
+    <div class="who">
+      <span id="whoAmI" dir="ltr" class="num"></span>
+      <span id="whoRole" class="chip no"></span>
+      <button id="logoutBtn" class="btn ghost sm">خروج</button>
+    </div>
+  </header>
+
+  <div id="appMsg" class="msg"></div>
+
+  <!-- المحفظة + الحصّة + المقاعد -->
+  <div class="grid">
+    <div class="card">
+      <h2>المحفظة</h2>
+      <div class="big num" id="wBal">—</div>
+      <div class="sub">الرصيد الحالي</div>
+      <div style="margin-top:12px">
+        <div class="row"><span>مُموَّل تراكمياً</span><b class="num" id="wFunded">—</b></div>
+        <div class="row"><span>مُنفَق تراكمياً</span><b class="num" id="wSpent">—</b></div>
+        <div class="row"><span>الحالة</span><span id="wState" class="chip no">—</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>الطبقة والحصّة</h2>
+      <div class="big" id="eTier">—</div>
+      <div class="sub" id="ePeriod">—</div>
+      <div class="bar"><i id="eBar" style="width:0"></i></div>
+      <div class="row" style="margin-top:10px">
+        <span id="eStudiesLbl">الدراسات</span><b class="num" id="eStudies">—</b>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>المقاعد</h2>
+      <div class="big num" id="sSeats">—</div>
+      <div class="sub">مستخدمون نشطون / السقف</div>
+      <div class="bar"><i id="sBar" style="width:0"></i></div>
+    </div>
+
+    <div class="card">
+      <h2>الميزات</h2>
+      <div class="row"><span>لوحة</span><span id="fDash" class="chip no">—</span></div>
+      <div class="row"><span>قمع المقارنة</span><span id="fFunnel" class="chip no">—</span></div>
+      <div class="row"><span>تصدير</span><span id="fExport" class="chip no">—</span></div>
+      <div class="row"><span>وصول API</span><span id="fApi" class="chip no">—</span></div>
+      <div class="row"><span>علامة بيضاء</span><span id="fWhite" class="chip no">—</span></div>
+    </div>
+  </div>
+
+  <!-- الدراسات -->
+  <section class="blk">
+    <h2>الدراسات <button id="refreshBtn" class="btn ghost sm">تحديث</button></h2>
+    <div class="tbl">
+      <table>
+        <thead><tr>
+          <th>#</th><th>العنوان</th><th>الحالة</th><th>المستهدف</th><th>إجراءات</th>
+        </tr></thead>
+        <tbody id="studiesBody"></tbody>
+      </table>
+    </div>
+    <div id="studiesEmpty" class="empty hide">لا دراسات بعد.</div>
+    <p class="prov"><b>الأرشفة سحبٌ حقيقي:</b> تُلغي البريد المصفوف الذي لم يُرسَل
+      وتُبلّغك بعدده. و«إنهاء» يُرفَض ما دام في الطابور بريدٌ معلّق — لأن وسمها
+      «مكتملة» ورسائلها ستخرج بعد قليل وصفٌ مخالف للواقع.</p>
+  </section>
+
+  <!-- المستخدمون -->
+  <section class="blk">
+    <h2>مستخدمو الحساب</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>البريد</th><th>الاسم</th><th>الدور</th><th>الحالة</th></tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table>
+    </div>
+    <div id="usersEmpty" class="empty hide">—</div>
+  </section>
+
+  <!-- الدفتر -->
+  <section class="blk">
+    <h2>آخر حركات الدفتر</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>#</th><th>العملية</th><th>المبلغ</th><th>الرصيد بعدها</th><th>التاريخ</th></tr></thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+    </div>
+    <div id="ledgerEmpty" class="empty hide">لا حركات بعد.</div>
+    <p class="prov">الدفتر <b>غير قابل للتعديل</b> — كل حركة قيدٌ واحد بلقطة رصيد،
+      ولا يُحذَف قيدٌ ولا يُعدَّل.</p>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* واجهة رقيقة فوق /platform — لا إطار عمل، ولا حالة مخفيّة: كل رقم معروض يأتي
+   من نقطةٍ حقيقية، والخطأ يُعرَض كما تُرجعه النقطة لا كرسالة عامّة. */
+const API = "/platform";
+let TOKEN = null;
+
+const $ = (id) => document.getElementById(id);
+const cents = (c) => (Number(c) / 100).toLocaleString("en-US",
+  {style: "currency", currency: "USD"});
+
+/* رسائل عربية للأكواد المعروفة — المنتَج عربيّ أولاً، ورسالةُ الخادم إنجليزية
+   (وهي للمطوّر/السجلّ). نُترجم **الكود** لا النصّ، فلو تغيّرت صياغة الخادم تبقى
+   الترجمة صحيحة؛ وكودٌ غير معروف يعود إلى نصّ الخادم بدل رسالة عامّة تُخفي السبب. */
+const ERR_AR = {
+  pending_emails: "لا يمكن الإنهاء وفي الطابور بريدٌ لم يخرج بعد — انتظر نفاده، أو أرشِف لإلغاء الباقي.",
+  in_flight_emails: "رسالةٌ من هذه الدراسة في طريقها الآن — أعِد المحاولة بعد لحظات.",
+  already_archived: "الدراسة مؤرشَفة سلفاً.",
+  invalid_transition: "لا يصحّ هذا الانتقال من حالة الدراسة الحالية.",
+  insufficient_funds: "الرصيد لا يكفي لهذه العملية.",
+  delinquent: "الحساب مدين — يلزم سداد قبل أي عملية جديدة.",
+  tier_gate: "طبقتك الحالية لا تمنح هذه الميزة.",
+  seats_exceed_target_tier: "عدد المستخدمين النشطين يتجاوز مقاعد الطبقة المطلوبة.",
+};
+
+/* استخلاص رسالة الخطأ من `detail` — قد يكون نصّاً أو كائناً (بوّابات الطبقة
+   والمال تُرجع كائناً بكود ورسالة). عرضُ «[object Object]» كان سيُخفي السبب. */
+function detailText(d) {
+  if (d == null) return "";
+  if (typeof d === "string") return d;
+  if (typeof d === "object") {
+    const bits = [];
+    if (d.error && ERR_AR[d.error]) bits.push(ERR_AR[d.error]);
+    else if (d.message) bits.push(d.message);
+    else if (d.error) bits.push(d.error);
+    if (d.queued != null || d.sending != null)
+      bits.push(`(مصفوف: ${d.queued ?? 0}، في الطريق: ${d.sending ?? 0})`);
+    if (d.limit != null && d.used != null) bits.push(`(${d.used}/${d.limit})`);
+    if (d.price_cents != null) bits.push(`(السعر: ${cents(d.price_cents)})`);
+    if (d.upgrade) bits.push("— يحتاج ترقية الطبقة");
+    return bits.join(" ") || JSON.stringify(d);
+  }
+  return String(d);
+}
+
+async function api(path, opts) {
+  const o = Object.assign({headers: {}}, opts || {});
+  o.headers["Content-Type"] = "application/json";
+  if (TOKEN) o.headers["Authorization"] = "Bearer " + TOKEN;
+  const r = await fetch(API + path, o);
+  let body = null;
+  try { body = await r.json(); } catch (_e) { /* ردٌّ بلا JSON */ }
+  if (!r.ok) {
+    const e = new Error(detailText(body && body.detail) || ("HTTP " + r.status));
+    e.status = r.status;
+    throw e;
+  }
+  return body;
+}
+
+function say(el, text, kind) {
+  el.textContent = text;
+  el.className = "msg on " + (kind || "");
+  if (kind === "good") setTimeout(() => { el.className = "msg"; }, 6000);
+}
+
+/* ── الدخول ── */
+async function doLogin() {
+  const btn = $("loginBtn");
+  btn.disabled = true;
+  try {
+    const out = await api("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({email: $("email").value.trim(), password: $("pw").value})
+    });
+    TOKEN = out.token;
+    $("pw").value = "";
+    $("loginMsg").className = "msg";
+    $("loginView").classList.add("hide");
+    $("appView").classList.remove("hide");
+    await loadAll();
+  } catch (e) {
+    say($("loginMsg"), e.message || "تعذّر الدخول", "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doLogout() {
+  try { await api("/auth/logout", {method: "POST"}); } catch (_e) { /* اخرج محلياً */ }
+  TOKEN = null;
+  $("appView").classList.add("hide");
+  $("loginView").classList.remove("hide");
+}
+
+/* ── تحميل اللوحة ── */
+function pct(used, limit) {
+  if (limit == null || limit < 0 || limit === 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
+}
+const yesNo = (v) => v
+  ? '<span class="chip ok">متاح</span>' : '<span class="chip no">غير متاح</span>';
+
+async function loadAll() {
+  const msg = $("appMsg");
+  try {
+    const [me, ent, w] = await Promise.all([
+      api("/me"), api("/entitlements"), api("/wallet")
+    ]);
+
+    $("whoAmI").textContent = me.email;
+    $("whoRole").textContent = me.role;
+
+    $("wBal").textContent = cents(w.balance);
+    $("wFunded").textContent = cents(w.lifetime_funded);
+    $("wSpent").textContent = cents(w.lifetime_spent);
+    const st = $("wState");
+    if (w.delinquent) { st.textContent = "مدين — الإطلاق محجوب"; st.className = "chip bad"; }
+    else { st.textContent = "سليم"; st.className = "chip ok"; }
+
+    $("eTier").textContent = ent.tier;
+    const lifetime = ent.studies_period === "lifetime";
+    $("ePeriod").textContent = lifetime ? "حصّة مدى الحياة" : "حصّة شهرية";
+    $("eStudiesLbl").textContent = lifetime ? "دراسات (مدى الحياة)" : "دراسات هذا الشهر";
+    $("eStudies").textContent = ent.studies_used + " / " + ent.studies_limit;
+    $("eBar").style.width = pct(ent.studies_used, ent.studies_limit) + "%";
+
+    const unlimited = ent.seats_limit < 0;
+    $("sSeats").textContent = ent.seats_used + " / " + (unlimited ? "∞" : ent.seats_limit);
+    $("sBar").style.width = (unlimited ? 0 : pct(ent.seats_used, ent.seats_limit)) + "%";
+
+    $("fDash").outerHTML = '<span id="fDash" class="chip ' +
+      (ent.dashboard === "none" ? "no" : "ok") + '">' + ent.dashboard + "</span>";
+    $("fFunnel").outerHTML = '<span id="fFunnel">' + yesNo(ent.funnel) + "</span>";
+    $("fExport").outerHTML = '<span id="fExport">' + yesNo(ent.export) + "</span>";
+    $("fApi").outerHTML = '<span id="fApi">' + yesNo(ent.api_access) + "</span>";
+    $("fWhite").outerHTML = '<span id="fWhite">' + yesNo(ent.white_label) + "</span>";
+
+    await Promise.all([loadStudies(), loadUsers(), loadLedger()]);
+  } catch (e) {
+    if (e.status === 401) { doLogout(); return; }
+    say(msg, "تعذّر تحميل اللوحة: " + e.message, "err");
+  }
+}
+
+const STATE_AR = {draft: "مسودّة", in_progress: "جارية", completed: "مكتملة",
+                  archived: "مؤرشَفة"};
+const STATE_CHIP = {draft: "no", in_progress: "warn", completed: "ok", archived: "no"};
+
+async function loadStudies() {
+  const rows = (await api("/studies")).studies || [];
+  const body = $("studiesBody");
+  body.textContent = "";
+  $("studiesEmpty").classList.toggle("hide", rows.length > 0);
+  rows.forEach((s) => {
+    const tr = document.createElement("tr");
+    const title = s.title_ar || s.title_en || "—";
+    const cell = (html) => { const td = document.createElement("td"); td.innerHTML = html; return td; };
+    tr.appendChild(cell('<span class="num">' + s.id + "</span>"));
+    const tdTitle = document.createElement("td");
+    tdTitle.textContent = title;                       // نصّ لا HTML — لا حقن
+    tr.appendChild(tdTitle);
+    tr.appendChild(cell('<span class="chip ' + (STATE_CHIP[s.state] || "no") + '">' +
+      (STATE_AR[s.state] || s.state) + "</span>"));
+    tr.appendChild(cell('<span class="num">' + (s.target_count || 0) + "</span>"));
+
+    const td = document.createElement("td");
+    if (s.state === "in_progress") td.appendChild(actBtn("إنهاء", s.id, "complete"));
+    if (s.state !== "archived") td.appendChild(actBtn("أرشفة", s.id, "archive"));
+    if (!td.childNodes.length) td.innerHTML = '<span class="sub">—</span>';
+    tr.appendChild(td);
+    body.appendChild(tr);
+  });
+}
+
+function actBtn(label, id, action) {
+  const b = document.createElement("button");
+  b.className = "btn ghost sm";
+  b.style.marginInlineEnd = "6px";
+  b.textContent = label;
+  b.onclick = async () => {
+    b.disabled = true;
+    try {
+      const out = await api("/studies/" + id + "/" + action, {method: "POST"});
+      const n = out.cancelled_queued_emails;
+      say($("appMsg"), action === "archive"
+        ? "أُرشِفت الدراسة #" + id + (n ? " — وأُلغي " + n + " بريداً مصفوفاً لم يُرسَل." : " — لا بريد معلّق لإلغائه.")
+        : "أُنهيت الدراسة #" + id + ".", "good");
+      await loadAll();
+    } catch (e) {
+      say($("appMsg"), "تعذّر التنفيذ على #" + id + ": " + e.message, "err");
+      b.disabled = false;
+    }
+  };
+  return b;
+}
+
+async function loadUsers() {
+  let out;
+  try { out = await api("/users"); }
+  catch (e) {
+    // الأدمِن/المحلّل ليسا مصنعاً فتُرفَض النقطة 403 — أخفِ الكتلة بلا ضجيج.
+    if (e.status === 403) { $("usersBody").textContent = "";
+      $("usersEmpty").textContent = "إدارة المستخدمين متاحة لحساب المصنع فقط.";
+      $("usersEmpty").classList.remove("hide"); return; }
+    throw e;
+  }
+  const rows = out.users || [];
+  const body = $("usersBody");
+  body.textContent = "";
+  $("usersEmpty").classList.toggle("hide", rows.length > 0);
+  rows.forEach((u) => {
+    const tr = document.createElement("tr");
+    const num = document.createElement("td");
+    num.innerHTML = '<span class="num">' + u.id + "</span>";
+    tr.appendChild(num);
+    [u.email, [u.first_name, u.last_name].filter(Boolean).join(" ") || "—", u.role]
+      .forEach((v) => { const td = document.createElement("td"); td.textContent = v; tr.appendChild(td); });
+    const stTd = document.createElement("td");
+    stTd.innerHTML = u.is_active
+      ? '<span class="chip ok">نشط</span>' : '<span class="chip no">معطَّل</span>';
+    tr.appendChild(stTd);
+    body.appendChild(tr);
+  });
+}
+
+const OP_AR = {email_sent: "بريد مُرسَل", report_generated: "تقرير", wallet_funded: "تمويل",
+               api_call: "نداء API", storage_charge: "تخزين",
+               comparison_report: "تقرير مقارنة", draft_email: "مسودّة بريد"};
+
+async function loadLedger() {
+  // المفتاح `entries` لا `ledger` — التقطه تحقّقُ الخادم الحقيقي؛ الاسم
+  // الخاطئ كان سيُظهر دفتراً فارغاً **صمتاً** بلا أي خطأ.
+  const rows = (await api("/wallet/ledger?limit=12")).entries || [];
+  const body = $("ledgerBody");
+  body.textContent = "";
+  $("ledgerEmpty").classList.toggle("hide", rows.length > 0);
+  rows.forEach((e) => {
+    const tr = document.createElement("tr");
+    const amt = Number(e.amount);
+    tr.innerHTML =
+      '<td><span class="num">' + e.id + "</span></td>" +
+      "<td></td>" +
+      '<td><span class="num" style="color:' + (amt < 0 ? "var(--bad)" : "var(--go)") +
+        '">' + (amt > 0 ? "+" : "") + cents(amt) + "</span></td>" +
+      '<td><span class="num">' + cents(e.balance_after) + "</span></td>" +
+      '<td><span class="num sub">' + String(e.created_at || "").slice(0, 16) + "</span></td>";
+    tr.children[1].textContent = OP_AR[e.operation_type] || e.operation_type;
+    body.appendChild(tr);
+  });
+}
+
+/* ── التوصيل ── */
+$("loginBtn").onclick = doLogin;
+$("pw").addEventListener("keydown", (ev) => { if (ev.key === "Enter") doLogin(); });
+$("email").addEventListener("keydown", (ev) => { if (ev.key === "Enter") $("pw").focus(); });
+$("logoutBtn").onclick = doLogout;
+$("refreshBtn").onclick = loadAll;
+
+/* جلسة قائمة؟ الكوكي httponly يكفي، فحاوِل /me مباشرةً قبل عرض الدخول. */
+(async () => {
+  try {
+    await api("/me");
+    $("loginView").classList.add("hide");
+    $("appView").classList.remove("hide");
+    await loadAll();
+  } catch (_e) { /* لا جلسة — أبقِ شاشة الدخول */ }
+})();
+</script>
+</body>
+</html>
