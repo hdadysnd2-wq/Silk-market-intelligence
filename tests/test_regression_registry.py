@@ -1907,6 +1907,55 @@ def _guard_seat_lock_is_load_bearing():
             f"{name}: لا يُوسِّع نافذة الفحص ⇒ قد يجتاز شيفرةً غير ذرّية")
 
 
+def _guard_readiness_names_the_offending_variable():
+    """LESSONS ٧٧ — أداةُ تشخيصٍ أبلغت بالفشل وحجبت سببَه.
+
+    `readiness()` شُحن في #197 لينهي «الدخول مستحيلٌ بلا تفسير»، ثم ضبط المالك
+    البوّابةَ وظلّ الدخول يُرفَض: كلمتُه خالفت السياسة، فرفع التلبيد، فابتلعه
+    الإقلاع صواباً، فبقيت القاعدة بصفر مستخدمين — والجهوزيّة قالت `seeded:false`
+    مع `seed_gate_set:true` **بلا سبب**، فصمتت عند السؤال الوحيد المهم.
+
+    الحارس يحمي ثلاثة أشياء معاً:
+      (١) الحقلُ `seed_error` قائمٌ في الجهوزيّة (لا عودةَ إلى «فشلٌ بلا سبب»)؛
+      (٢) الرفضُ يقع **قبل** المحاولة (`seed_problem()` في `maybe_seed`) كي
+          تسمّي الرسالةُ المتغيّرَ المخالف بعينه لا الكلمةَ السليمة؛
+      (٣) لا قيمةَ كلمةِ مرورٍ في أيّ مخرَج — تُنشَر الأسماءُ والقواعد فقط.
+    """
+    src = _read("silk_platform/bootstrap.py")
+    for needle in ("def seed_problem", '"seed_error"', "validate_policy"):
+        assert needle in src, (
+            f"silk_platform/bootstrap.py: {needle} محذوف — الجهوزيّة تعود "
+            "تُبلِّغ بالفشل بلا سببه، وهو العجزُ الذي وُجدت لإلغائه")
+    # الرفضُ المسبق: `seed_problem()` مستدعًى داخل `maybe_seed` نفسه، لا في
+    # الجهوزيّة وحدها — فبلا ذلك يعود السجلّ إلى «فشل» بلا اسم متغيّر.
+    body = src.split("def maybe_seed(")[1]
+    assert "seed_problem()" in body, (
+        "silk_platform/bootstrap.py: `maybe_seed` لا يرفض مسبقاً ⇒ رسالةُ "
+        "السجلّ تعود بلا اسم المتغيّر المخالف")
+    # لا تُطبَع قيمةُ أيّ متغيّر بذر — الأسماءُ فقط (`/health` عامّة).
+    assert "os.environ.get(env" in src or "_IDENTITY_ENV" in src, (
+        "silk_platform/bootstrap.py: أسماءُ متغيّرات البذر لم تبقَ بياناتٍ "
+        "واحدةَ المصدر")
+    tests = _read("tests/test_platform_bootstrap.py")
+    for name in ("test_a_policy_violating_seed_password_is_named_in_readiness",
+                 "test_readiness_never_leaks_the_seed_password_value",
+                 "test_a_bad_optional_password_names_that_variable_not_the_admin",
+                 "test_the_policy_refusal_logs_the_variable_name_and_not_its_value",
+                 "test_the_platform_prefix_leads_to_the_page_not_a_bare_404"):
+        assert f"def {name}" in tests, f"قفلُ تشخيصٍ مفقود: {name}"
+    # والبادئة تقود إلى الصفحة — المالك فتح `/platform` فرأى 404 بصيغة JSON.
+    # **يُفحَص تسجيلُ المسار نفسه** لا اسمُ الدالّة: الفحص الأوّل كان على «def
+    # platform_root»، فتعطيلُ المعالج بإعادة تسميته `platform_root_DISABLED`
+    # يُبقي النصَّ الفرعيّ حاضراً ⇒ يجتاز الحارسُ مساراً محذوفاً. نفسُ ثقب
+    # النصّ الفرعيّ المعروف، أُغلق هنا بفحص المُزخرِف والهدف معاً.
+    api_src = _read("silk_platform/api.py")
+    assert "@app.get(_PREFIX)\n" in api_src, (
+        "silk_platform/api.py: لا مسارَ مسجَّلاً على البادئة المجرّدة ⇒ "
+        "`/platform` يعود 404 بصيغة JSON فيتكرّر لبسُ المالك")
+    assert 'RedirectResponse("/platform.html"' in api_src, (
+        "silk_platform/api.py: البادئة لا تُحوِّل إلى الصفحة فعلاً")
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1990,6 +2039,7 @@ _LESSONS = {
     74: _guard_dialog_prose_carries_no_product_brand_or_country,  # E4 — لا صدى منتج/علامة/دولة
     75: _guard_gate_passes_synthetic_but_silent_on_real,  # تحليل ٧ — بوّابة مرّت التركيبيّ ثم صمتت على الحقيقيّ (قفلان لكلّ بوّابة)
     76: _guard_seat_lock_is_load_bearing,  # PR-2 — قفل المقعد وحارسه المُميِّز
+    77: _guard_readiness_names_the_offending_variable,  # #197 — تشخيصٌ بلا سبب
 }
 
 _TRAPS = [

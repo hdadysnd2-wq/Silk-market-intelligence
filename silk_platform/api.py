@@ -260,6 +260,20 @@ def mount(app) -> bool:
                                 ip_address=_client_ip(request))
         raise HTTPException(status_code=404, detail="not found")
 
+    # ═══════════════════ البادئة تقود إلى الشاشة · prefix → page ═════════════
+    @app.get(_PREFIX)
+    def platform_root():
+        """`/platform` ⇒ الصفحة، لا `{"detail":"Not Found"}`.
+
+        **بلاغ مالك حيّ:** فتح `<الرابط>/platform` — تخمينٌ طبيعي، فالبادئة هي
+        `/platform` — فرأى 404 بصيغة JSON فظنّ الشاشة غير مشحونة أصلاً. الشاشة
+        على `/platform.html` (تُخدَم من `web/` المُركَّب على `/`). البادئة نفسها
+        ليست نقطةَ نهاية، فتحويلها إلى الصفحة يمنع تكرار اللبس بلا أن يُغيّر
+        سلوك أيّ مسار قائم — لم يكن هنا مسارٌ من قبل.
+        """
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("/platform.html", status_code=307)
+
     # ══════════════════════════ AUTH ════════════════════════════════════════
     # ملاحظة على `def` بلا `async` في كل ما يلي: هذه المعالجات تُنفِّذ عملاً
     # حاجباً (bcrypt عامل ١٢ ≈ ٢٥٠ms، وSQLite بمهلة انتظار قفل). FastAPI يشغّل

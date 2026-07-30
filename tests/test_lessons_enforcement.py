@@ -648,6 +648,17 @@ _SYMBOL_ANCHORS_EXTRA = [
       "def test_concurrent_reactivations_never_exceed_seat_cap"]),
     (76, "tests/test_regression_registry.py",
      ["def _guard_seat_lock_is_load_bearing"]),
+    # البند ٧٧ — التشخيصُ يحمل السببَ لا الأثرَ: اسمُ المتغيّر المخالف والقاعدة
+    # المخروقة، بلا قيمةٍ أبداً (`/health` عامّة).
+    (77, "silk_platform/bootstrap.py",
+     ["def seed_problem", '"seed_error"']),
+    (77, "silk_platform/api.py", ["def platform_root"]),
+    (77, "tests/test_platform_bootstrap.py",
+     ["def test_a_policy_violating_seed_password_is_named_in_readiness",
+      "def test_readiness_never_leaks_the_seed_password_value",
+      "def test_the_platform_prefix_leads_to_the_page_not_a_bare_404"]),
+    (77, "tests/test_regression_registry.py",
+     ["def _guard_readiness_names_the_offending_variable"]),
 ]
 
 

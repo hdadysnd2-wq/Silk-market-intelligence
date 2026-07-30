@@ -60,9 +60,101 @@ def test_readiness_explains_why_login_fails(monkeypatch):
     _clear_gate(monkeypatch)
     client()
     ready = _readiness()
-    assert set(ready) == {"seeded", "users", "accounts", "seed_gate_set"}
+    assert set(ready) == {"seeded", "users", "accounts", "seed_gate_set",
+                          "seed_error"}
+    assert ready["seed_error"] is None      # البوّابة مغلقة، لا كلمةَ مخالفة
     # لا بريد ولا كلمة مرور — `/health` عامّة.
     assert not any(isinstance(v, str) and "@" in v for v in ready.values())
+
+
+# ═══ بلاغ مالك حيّ ٢: البوّابة مضبوطة والدخول ما زال يُرفَض ═══════════════════
+# «invalid credentials» بعد ضبط المتغيّر. السبب المُعاد إنتاجه: الكلمة المختارة
+# تخالف السياسة، فـ`hash_password` يرفع، والإقلاع يبتلع (صواباً — لا يُسقِط
+# الخدمة)، فتُقلِع القاعدة بصفر مستخدمين. الجهوزيّة قالت `seeded:false` +
+# `seed_gate_set:true` **بلا سبب** — فبقي المالك بلا تشخيص، وهو بعينه ما وُجد
+# هذا الملفّ لمنعه. السبب كان في سجلّ النشر فقط، ولا يجوز إجبار المالك عليه.
+def test_a_policy_violating_seed_password_is_named_in_readiness(monkeypatch):
+    """كلمةٌ مخالفة ⇒ الجهوزيّة تسمّي **المتغيّر** والقاعدة المخروقة."""
+    setup_env(monkeypatch)
+    _clear_gate(monkeypatch)
+    monkeypatch.setenv("SILK_SEED_ADMIN_PASSWORD", "silk2026")   # بلا حرف كبير
+    cl = client()
+    ready = _readiness()
+    assert ready["seeded"] is False and ready["users"] == 0
+    assert ready["seed_gate_set"] is True        # البوّابة مضبوطة — فلماذا؟
+    err = ready["seed_error"]
+    assert err and "SILK_SEED_ADMIN_PASSWORD" in err, err
+    assert "uppercase" in err, err               # القاعدة المخروقة بالتحديد
+    # والعرَض الذي بلّغ عنه المالك قائم — فالتشخيص يشرحه لا يُخفيه.
+    assert cl.post("/platform/auth/login",
+                   json={"email": "admin@silk.local",
+                         "password": "silk2026"}).status_code == 401
+
+
+def test_readiness_never_leaks_the_seed_password_value(monkeypatch):
+    """السبب يُسمّي المتغيّر لا قيمته — `/health` عامّة فالقيمة تسريبٌ مباشر."""
+    setup_env(monkeypatch)
+    _clear_gate(monkeypatch)
+    secret = "unmistakablesecret2026"            # مخالفة (بلا حرف كبير)
+    monkeypatch.setenv("SILK_SEED_ADMIN_PASSWORD", secret)
+    client()
+    blob = repr(_readiness())
+    assert secret not in blob, "قيمة كلمة المرور ظهرت في جهوزيّة عامّة!"
+    assert "SILK_SEED_ADMIN_PASSWORD" in blob    # الاسم نعم، القيمة لا
+
+
+def test_a_bad_optional_password_names_that_variable_not_the_admin(monkeypatch):
+    """كلمةٌ مخالفة في هويّة **اختياريّة** تُسقِط البذر — فلتُسمَّ هي بالذات.
+
+    `seed()` يُلبِّد الكلمات الأربع مسبقاً (seed.py) قبل إدخال أيّ صفّ، فمخالفةٌ
+    في `FACTORY_B` تمنع إنشاء الأدمِن أيضاً. أُبقي هذا السلوك (رفضٌ عالٍ أفضل من
+    تجاهلٍ صامت لِما ضبطه المالك صراحةً) وأُصلِح **تشخيصه** فقط: لا يجوز أن يقرأ
+    المالك «فشل» ويظنّ كلمةَ الأدمِن هي المشكلة.
+    """
+    setup_env(monkeypatch)
+    _clear_gate(monkeypatch)
+    monkeypatch.setenv("SILK_SEED_ADMIN_PASSWORD", "AdminChosen1234")   # سليمة
+    monkeypatch.setenv("SILK_SEED_FACTORY_B_PASSWORD", "short")         # مخالفة
+    client()
+    ready = _readiness()
+    assert ready["seeded"] is False and ready["users"] == 0
+    err = ready["seed_error"]
+    assert "SILK_SEED_FACTORY_B_PASSWORD" in err, err
+    assert "SILK_SEED_ADMIN_PASSWORD" not in err, err   # لا تُلَم السليمة
+
+
+def test_fixing_the_password_lets_a_later_boot_seed(monkeypatch):
+    """الرفض ليس نهائياً: تصحيح المتغيّر وإعادة النشر يبذر فعلاً.
+
+    لو «تذكّرت» الشيفرة الفشلَ ورفضت لاحقاً، لكان الإصلاح يتطلّب حذف الحجم.
+    """
+    setup_env(monkeypatch)
+    _clear_gate(monkeypatch)
+    monkeypatch.setenv("SILK_SEED_ADMIN_PASSWORD", "silk2026")   # مخالفة
+    client()
+    assert _readiness()["seeded"] is False
+    monkeypatch.setenv("SILK_SEED_ADMIN_PASSWORD", "Silk2026admin")   # مُصحَّحة
+    cl = client()                                  # «أعِد النشر»
+    ready = _readiness()
+    assert ready["seeded"] is True and ready["seed_error"] is None
+    assert cl.post("/platform/auth/login",
+                   json={"email": "admin@silk.local",
+                         "password": "Silk2026admin"}).status_code == 200
+
+
+# ═══ بلاغ مالك حيّ ٣: `{"detail":"Not Found"}` ════════════════════════════════
+def test_the_platform_prefix_leads_to_the_page_not_a_bare_404(monkeypatch):
+    """`/platform` كان 404 خالصاً — بادئةُ API لا صفحة. الآن يقود إلى الصفحة.
+
+    المالك فتح `<الرابط>/platform` (تخمينٌ طبيعي: البادئة هي `/platform`) فرأى
+    `{"detail":"Not Found"}` فظنّ الشاشة غير مشحونة. الشاشة على `/platform.html`.
+    """
+    setup_env(monkeypatch)
+    _clear_gate(monkeypatch)
+    cl = client()
+    r = cl.get("/platform", follow_redirects=False)
+    assert r.status_code in (307, 308), f"{r.status_code}: {r.text[:120]}"
+    assert r.headers["location"].endswith("/platform.html")
 
 
 # ═══════════════════ البوّابة تفتح · the gate opens ═══════════════════════════
@@ -176,6 +268,26 @@ def test_no_password_is_ever_written_to_the_log(monkeypatch, caplog):
     blob = "\n".join(r.getMessage() for r in caplog.records)
     assert secret_pw not in blob, "كلمة مرور الأدمِن ظهرت في السجلّ!"
     assert "FactorySecret1234" not in blob, "كلمة مرور المصنع ظهرت في السجلّ!"
+
+
+def test_the_policy_refusal_logs_the_variable_name_and_not_its_value(
+        monkeypatch, caplog):
+    """سجلّ النشر يسمّي **المتغيّر** المخالف — لا «فشل» مجهول ولا القيمة.
+
+    بلا الرفض المسبق في `maybe_seed` كان السجلّ يقول «bootstrap seeding failed:
+    password must contain an uppercase letter» بلا أيّ اسم متغيّر، فلا يُعرَف أيُّ
+    الأربعة السبب. هذا الاختبار يعزل تلك الطبقة (الجهوزيّة تحسبها مستقلّةً،
+    فلولا هذا الاختبار لَما حرسها شيء).
+    """
+    setup_env(monkeypatch)
+    _clear_gate(monkeypatch)
+    monkeypatch.setenv("SILK_SEED_ADMIN_PASSWORD", "AdminChosen1234")
+    monkeypatch.setenv("SILK_SEED_ANALYST_PASSWORD", "leakmarker2026")  # مخالفة
+    with caplog.at_level(logging.INFO):
+        client()
+    blob = "\n".join(r.getMessage() for r in caplog.records)
+    assert "SILK_SEED_ANALYST_PASSWORD" in blob, blob[-400:]
+    assert "leakmarker2026" not in blob, "قيمة كلمة المرور في السجلّ!"
 
 
 def test_the_unset_gate_logs_actionable_guidance(monkeypatch, caplog):
