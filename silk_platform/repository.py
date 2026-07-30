@@ -28,9 +28,11 @@ _WRITABLE: dict[str, set[str]] = {
     "images": {"filename", "storage_key", "mime_type", "size_bytes",
                "uploaded_by_user_id", "alt_text_en", "alt_text_ar"},
     # `comparison_funnels` غير مُدرَج عمداً: عمود `state` آلةُ حالاتٍ ببوّابة
-    # طبقة (Gold/Platinum) وقيود دفتر لكل انتقال، فإدراجه في CRUD العامّ يفتح
-    # باباً ثانياً يتخطّى تلك البوّابات. تُضيفه موجة القمع مع نقاطها واختباراتها.
-    # Deliberately absent: a gated state machine must not be generic-CRUD writable.
+    # طبقة (Gold/Platinum) وقيود لكل انتقال، فإدراجه في CRUD العامّ يفتح باباً
+    # ثانياً يتخطّى تلك البوّابات. موجة القمع (PR-7) وصلت و**أبقته خارج القائمة**
+    # عن قصد: مسارها الوحيد `silk_platform/funnels.py` بنفس نمط `lifecycle.py`.
+    # Deliberately absent: a gated state machine must not be generic-CRUD
+    # writable. PR-7 shipped the funnel and kept it out — see funnels.py.
 }
 
 # جداول بلا عمود `updated_at` — الطابع الزمني عندها هو عمود الإنشاء وحده.
@@ -160,6 +162,8 @@ def drafts(conn: sqlite3.Connection) -> TenantRepository:
 def images(conn: sqlite3.Connection) -> TenantRepository:
     return TenantRepository(conn, "images")
 
-# لا مصنع `funnels()` هنا: القمع (Gold/Platinum) يحتاج بوّابة طبقة وقيود دفتر
-# لكل انتقال حالة، فمساره يُبنى مع نقاطه واختباراته في موجته لا قبلها.
-# No funnels() factory yet — the tier-gated funnel arrives with its own PR.
+# لا مصنع `funnels()` هنا **بقصدٍ دائم** لا انتظاراً: القمع (Gold/Platinum) يحتاج
+# بوّابة طبقة وسقف دراسات وتحقّق ملكية على جدولَي وصلٍ بلا عمود مالك، وكلّها لا
+# يعبّر عنها مستودعٌ عامّ. مساره الوحيد `silk_platform/funnels.py` (PR-7).
+# No funnels() factory by permanent design (not "not yet") — the tier gate, the
+# study cap, and the ownerless join tables can't be expressed by generic CRUD.

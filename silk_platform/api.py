@@ -20,9 +20,9 @@ import time
 import uuid
 
 from . import (auth, audit, billing, crypto, email_queue, entitlements,
-               lifecycle, passwords, quota, reporting, repository, scheduler,
-               seed as seed_mod, settings, smtp_transport, storage, throttle,
-               tokens, unsubscribe, users as users_mod, wallet)
+               funnels, lifecycle, passwords, quota, reporting, repository,
+               scheduler, seed as seed_mod, settings, smtp_transport, storage,
+               throttle, tokens, unsubscribe, users as users_mod, wallet)
 from .db import connect, init_db
 from .models import (AuthContext, PRICE_REPORT_CENTS, Role,
                      projected_email_cost_cents)
@@ -682,6 +682,156 @@ def mount(app) -> bool:
         """
         return _lifecycle(lifecycle.archive_study, study_id, request,
                           "cross_tenant_archive")
+
+    # ══════════════════════ COMPARISON FUNNELS (Gold/Platinum) ═══════════════
+    # القمع مِلكُ المصنع وحده: يجمع دراساته وعملاءه (PII) ويُرسِل بريداً باسمه،
+    # فلا معنى لأدمِن سِلك أن يقود قمع مستأجَر — وحاجز PII في `_tenant_detail`
+    # يمنعه أصلاً من محتوى المصنع. Factory-only by design.
+    def _funnel_call(fn, request: Request, action: str, **kw):
+        """جسم مشترك لكل عمليات القمع — one place for the error→HTTP mapping.
+
+        `TierGateError` (طبقة لا تمنح القمع) ⇒ 403 بدعوة ترقية، و`FunnelError`
+        ⇒ 409 عادةً، إلا «غير موجود» فتصير 404 بدلالة العزل نفسها (بلا تسريب
+        وجود + قيد تدقيق لمحاولة العبور).
+        """
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            try:
+                return fn(conn, account_id=ctx.account_id,
+                          actor_user_id=ctx.user_id, **kw)
+            except entitlements.TierGateError as exc:
+                raise HTTPException(status_code=403, detail=exc.as_detail())
+            except funnels.FunnelError as exc:
+                if exc.code == "funnel_not_found":
+                    fid = kw.get("funnel_id")
+                    if fid is not None and funnels.exists_anywhere(conn, int(fid)):
+                        audit.record_denied(
+                            conn, action=action, user_id=ctx.user_id,
+                            account_id=ctx.account_id, resource_type="funnel",
+                            resource_id=int(fid), ip_address=_client_ip(request))
+                    raise HTTPException(status_code=404, detail="not found")
+                raise HTTPException(status_code=409, detail=exc.as_detail())
+        finally:
+            conn.close()
+
+    @app.get(_PREFIX + "/funnels")
+    def list_funnels_ep(request: Request, limit: int = 50):
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            # القراءة لا تُبوَّب بالطبقة: حسابٌ خُفِّض بعد إنشاء أقماعه يجب أن
+            # يبقى قادراً على رؤيتها (لا يُحتجَز عمله خلف ترقية) — الكتابة وحدها
+            # مبوَّبة. Reads aren't tier-gated: a downgrade must not hide data.
+            rows = funnels.list_funnels(conn, ctx.account_id, limit=limit)
+        finally:
+            conn.close()
+        return {"account_id": ctx.account_id, "funnels": rows}
+
+    @app.get(_PREFIX + "/funnels/{funnel_id}")
+    def get_funnel_ep(funnel_id: int, request: Request):
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            row = funnels.detail(conn, ctx.account_id, funnel_id)
+            if row is None:
+                if funnels.exists_anywhere(conn, funnel_id):
+                    audit.record_denied(
+                        conn, action="cross_tenant_funnel_read",
+                        user_id=ctx.user_id, account_id=ctx.account_id,
+                        resource_type="funnel", resource_id=funnel_id,
+                        ip_address=_client_ip(request))
+                raise HTTPException(status_code=404, detail="not found")
+        finally:
+            conn.close()
+        return row
+
+    @app.post(_PREFIX + "/funnels")
+    def create_funnel_ep(request: Request):
+        """أنشئ قمع مقارنة — Gold/Platinum فقط (403 بدعوة ترقية لغيرهما)."""
+        return _funnel_call(funnels.create, request, "cross_tenant_funnel_create")
+
+    @app.post(_PREFIX + "/funnels/{funnel_id}/studies")
+    def attach_funnel_study_ep(funnel_id: int, request: Request,
+                               body: dict = Body(default=None)):
+        """اضمم دراسةً — يفرض سقف `funnel_max_studies` للطبقة (١٠ لـGold)."""
+        body = _json_body(body)
+        study_id = _as_int(body.get("study_id"), "study_id", minimum=1)
+        return _funnel_call(funnels.attach_study, request,
+                            "cross_tenant_funnel_write",
+                            funnel_id=funnel_id, study_id=study_id)
+
+    @app.delete(_PREFIX + "/funnels/{funnel_id}/studies/{study_id}")
+    def detach_funnel_study_ep(funnel_id: int, study_id: int, request: Request):
+        return _funnel_call(funnels.detach_study, request,
+                            "cross_tenant_funnel_write",
+                            funnel_id=funnel_id, study_id=study_id)
+
+    @app.post(_PREFIX + "/funnels/{funnel_id}/select")
+    def select_funnel_study_ep(funnel_id: int, request: Request,
+                               body: dict = Body(default=None)):
+        """compared → selected — الفائز يجب أن يكون من دراسات القمع نفسه."""
+        body = _json_body(body)
+        study_id = _as_int(body.get("study_id"), "study_id", minimum=1)
+        return _funnel_call(funnels.select_study, request,
+                            "cross_tenant_funnel_write",
+                            funnel_id=funnel_id, study_id=study_id)
+
+    @app.post(_PREFIX + "/funnels/{funnel_id}/extract")
+    def extract_funnel_prospects_ep(funnel_id: int, request: Request,
+                                    body: dict = Body(default=None)):
+        """selected → extracted — كل معرّف عميل تُتحقَّق ملكيته قبل أي كتابة."""
+        body = _json_body(body)
+        raw = body.get("prospect_ids")
+        if not isinstance(raw, list):
+            raise HTTPException(status_code=422,
+                                detail="prospect_ids must be a list of integers")
+        ids = [_as_int(p, "prospect_ids[]", minimum=1) for p in raw]
+        return _funnel_call(funnels.extract_prospects, request,
+                            "cross_tenant_funnel_write",
+                            funnel_id=funnel_id, prospect_ids_in=ids)
+
+    @app.post(_PREFIX + "/funnels/{funnel_id}/draft")
+    def attach_funnel_draft_ep(funnel_id: int, request: Request,
+                               body: dict = Body(default=None)):
+        """extracted → drafted — يربط المسودّة التي ستُرسَل."""
+        body = _json_body(body)
+        draft_id = _as_int(body.get("draft_id"), "draft_id", minimum=1)
+        return _funnel_call(funnels.attach_draft, request,
+                            "cross_tenant_funnel_write",
+                            funnel_id=funnel_id, draft_id=draft_id)
+
+    @app.post(_PREFIX + "/funnels/{funnel_id}/send")
+    def send_funnel_ep(funnel_id: int, request: Request):
+        """drafted → sent — **يصفّ البريد فعلياً** ثم يختم `sent_at`.
+
+        بوّابتا المال قبل الصفّ (مديونية + كفاية رصيد) بنفس ترتيب
+        `launch_study`؛ 402 عند رفضهما لا 409.
+        """
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            try:
+                return funnels.send(conn, account_id=ctx.account_id,
+                                    funnel_id=funnel_id, actor_user_id=ctx.user_id)
+            except entitlements.TierGateError as exc:
+                raise HTTPException(status_code=403, detail=exc.as_detail())
+            except funnels.FunnelError as exc:
+                if exc.code == "funnel_not_found":
+                    if funnels.exists_anywhere(conn, funnel_id):
+                        audit.record_denied(
+                            conn, action="cross_tenant_funnel_send",
+                            user_id=ctx.user_id, account_id=ctx.account_id,
+                            resource_type="funnel", resource_id=funnel_id,
+                            ip_address=_client_ip(request))
+                    raise HTTPException(status_code=404, detail="not found")
+                # رفض المال 402 لا 409: العميل يحتاج تمييز «سدِّد/موّل» عن
+                # «الحالة خطأ». Money refusals are 402, not a generic conflict.
+                if exc.code in ("account_delinquent", "insufficient_balance"):
+                    raise HTTPException(status_code=402, detail=exc.as_detail())
+                raise HTTPException(status_code=409, detail=exc.as_detail())
+        finally:
+            conn.close()
 
     # ══════════════════════════ PROSPECTS ═══════════════════════════════════
     @app.get(_PREFIX + "/prospects")

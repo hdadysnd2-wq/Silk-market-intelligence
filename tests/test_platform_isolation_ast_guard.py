@@ -31,6 +31,14 @@ TENANT_TABLES = {
     "studies", "prospects", "drafts", "images", "smtp_configs",
     "comparison_funnels", "wallets", "ledger_entries", "email_queue",
     "suppression_list", "consent_registry", "users",
+    # جدولا وصل القمع مُدرَجان منذ PR-7 **رغم أنهما بلا عمود مالك**: مفتاحهما
+    # مركَّب فقط، فلو تُركا خارج القائمة لما رآهما الحارس إطلاقاً — و
+    # `INSERT INTO funnel_studies` بمعرّف دراسةٍ لحسابٍ آخر يربط بيانات مستأجرٍ
+    # بقمع مستأجر ثانٍ بلا أن يُحمِّر شيء. إدراجهما يُلزِم كل جملة عليهما بسببٍ
+    # مكتوب يشرح **كيف** تُفرَض الملكية، فيصير الخطر موثَّقاً لا خفيّاً.
+    # Included despite having NO owner column: otherwise the guard would never
+    # see them, and a cross-tenant join-table INSERT would pass silently.
+    "funnel_studies", "funnel_prospects",
 }
 
 # أعمدة المالك · owner columns.
@@ -125,6 +133,34 @@ _INTENTIONAL_GLOBAL: dict[tuple[str, str], str] = {
     ("users.py", "SELECT 1 FROM users WHERE id = ?"):
         "exists_anywhere returns a BOOLEAN only (never a row) so the endpoint can "
         "audit a cross-tenant attempt while still answering 404 to the client",
+    # ── قمع المقارنة (PR-7) · comparison funnels ──────────────────────────────
+    ("funnels.py", "SELECT 1 FROM comparison_funnels WHERE id = ?"):
+        "exists_anywhere returns a BOOLEAN only (never a row) so the endpoint can "
+        "audit a cross-tenant attempt while still answering 404 — same pattern "
+        "and same rationale as users.exists_anywhere above",
+    # جدولا الوصل بلا عمود مالك: الملكية تُفرَض **قبل** كل كتابة هنا — القمع عبر
+    # funnels.get (منطَّق بالمالك) وكل معرّف دراسة/عميل/مسودّة عبر repository
+    # (منطَّق بالمالك)، فمعرّفٌ لحسابٍ آخر يُرفَض قبل أن يصل هذه الجُمَل.
+    ("funnels.py", "SELECT study_id FROM funnel_studies WHERE funnel_id = ?"):
+        "join table has no owner column; the funnel_id was ownership-verified via "
+        "funnels.get() (owner-scoped) before this read, and no row enters "
+        "funnel_studies without its study passing repository's owner predicate",
+    ("funnels.py", "SELECT prospect_id FROM funnel_prospects WHERE funnel_id = ?"):
+        "join table has no owner column; funnel_id ownership-verified via "
+        "funnels.get() before this read, and rows only enter after each prospect "
+        "id passed repository.prospects().get(account_id, ...)",
+    ("funnels.py", "INSERT INTO funnel_studies (funnel_id, study_id)"):
+        "both ids are ownership-verified immediately before this write: the funnel "
+        "via funnels.get(account_id, ...) and the study via "
+        "repository.studies(conn).get(account_id, ...) — a foreign id raises first",
+    ("funnels.py", "DELETE FROM funnel_studies WHERE funnel_id = ? AND study_id = ?"):
+        "the funnel was ownership-verified via funnels.get(account_id, ...) above; "
+        "a foreign funnel_id never reaches here, and rowcount==0 is reported as "
+        "not_attached rather than silently succeeding",
+    ("funnels.py", "INSERT OR IGNORE INTO funnel_prospects (funnel_id, prospect_id)"):
+        "every prospect id is verified via repository.prospects().get(account_id, "
+        "...) and the funnel via funnels.get(account_id, ...) before this write; "
+        "a foreign id raises prospect_not_found first",
 }
 
 _SQL_RE = re.compile(r"\b(SELECT|INSERT\s+INTO|INSERT\s+OR\s+IGNORE\s+INTO|UPDATE|DELETE\s+FROM)\b",
