@@ -79,6 +79,23 @@ def _platform_db_path() -> str | None:
         return None
 
 
+def _platform_readiness() -> dict | None:
+    """جهوزيّة المنصّة لِـ/health — None حين لا تتوفّر الحزمة استيراداً.
+
+    يفتح اتصالاً للقراءة فقط ويغلقه؛ أي فشل يعود None بدل إسقاط `/health`
+    (نفس عقد `_platform_db_path`). Best-effort; never breaks /health.
+    """
+    try:
+        from silk_platform import bootstrap as _pboot, db as _pdb
+        conn = _pdb.connect()
+        try:
+            return _pboot.readiness(conn)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _cors_origins() -> list[str]:
     """أصول CORS المسموحة — allowed origins from CORS_ORIGINS; [] = same-origin only.
 
@@ -468,6 +485,12 @@ def create_app():
                 # على الوحدة المركَّبة لا على قرص الحاوية الفاني.
                 # Fifth store: tenant/auth/wallet DB must be verifiable remotely.
                 "platform_db": _platform_db_path(),
+                # جهوزيّة المنصّة: جداولٌ سليمة و**صفر مستخدمين** كانت تجعل كل
+                # دخول يُرفَض برسالة «بيانات غير صحيحة» لا تُميَّز عن كلمة مرور
+                # خاطئة، فيستحيل التشخيص عن بُعد (بلاغ مالك حيّ: «ما يعمل»).
+                # أعدادٌ فقط — بلا بريد ولا كلمة مرور؛ `/health` عامّة.
+                # Tables-but-no-users was undiagnosable remotely: counts only.
+                "platform_ready": _platform_readiness(),
                 # PART E (أمر العمل الرئيس): حالة مصيدة الإقلاع مرئية من
                 # /health — كانت غير قابلة للتفتيش عن بُعد فلا يعرف المالك
                 # إن كان صمّام «رفض الإقلاع على قرص فانٍ» مفعّلاً فعلاً.

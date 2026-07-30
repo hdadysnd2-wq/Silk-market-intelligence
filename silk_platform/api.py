@@ -19,7 +19,8 @@ import threading
 import time
 import uuid
 
-from . import (auth, audit, billing, crypto, email_queue, entitlements,
+from . import (auth, audit, billing, bootstrap, crypto, email_queue,
+               entitlements,
                funnels, lifecycle, passwords, quota, reporting, repository,
                scheduler, seed as seed_mod, settings, smtp_transport, storage,
                throttle, tokens, unsubscribe, users as users_mod, wallet)
@@ -1493,6 +1494,20 @@ def mount(app) -> bool:
         finally:
             conn.close()
         return out
+
+    # تأسيس الحسابات — opt-in بـSILK_SEED_ADMIN_PASSWORD. بلا هذا تُقلِع القاعدة
+    # بجداولَ سليمة و**صفر مستخدمين**، فترفض شاشة الدخول كل شيء برسالة «بيانات
+    # غير صحيحة» لا تُميَّز عن كلمة مرور خاطئة (بلاغ مالك حيّ: «ما يعمل»).
+    # لا يُسقِط الإقلاع أبداً، ولا يطبع كلمة مرور.
+    # Opt-in bootstrap: tables without users made login impossible to diagnose.
+    try:
+        _bconn = _open()
+        try:
+            bootstrap.maybe_seed(_bconn)
+        finally:
+            _bconn.close()
+    except Exception:  # noqa: BLE001 — التأسيس أفضل جهد؛ الخدمة تُقلِع بلا شكّ
+        log.warning("silk_platform: bootstrap step failed", exc_info=True)
 
     # مجدول المهام — opt-in بـSILK_PLATFORM_SCHEDULER=1؛ بلا الضبط لا خيط أصلاً،
     # فتشغيلة اختبار أو تطوير لا تصفّر حصّة ولا تكتب فاتورة. يُبدأ بعد نجاح

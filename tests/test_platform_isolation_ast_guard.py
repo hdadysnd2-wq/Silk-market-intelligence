@@ -127,6 +127,19 @@ _INTENTIONAL_GLOBAL: dict[tuple[str, str], str] = {
     ("auth.py", "SELECT s.*, u.account_id AS account_id"):
         "session resolution is keyed by the sha256 token hash (unguessable) and "
         "is what PRODUCES the account context every other query scopes by",
+    # ── التأسيس والجهوزيّة · bootstrap + readiness ────────────────────────────
+    # كلاهما يعمل **قبل وجود أي سياق طلب**: `maybe_seed` عند الإقلاع (لا مستخدم
+    # ولا حساب بعد — الحساب **نتيجةُ** البذر لا مدخلٌ له)، و`readiness` تُغذّي
+    # `/health` بعددٍ على مستوى المنصّة. فلا account_id يُنطَّق به أصلاً.
+    # لا يُرجَع أي صفّ ولا بريد — منطقيّ/عدديّ فقط، فلا سطح تسريب.
+    ("bootstrap.py", "SELECT 1 FROM users WHERE role = 'silk_admin' LIMIT 1"):
+        "boot-time seed predicate: runs before any request context exists, so no "
+        "account is known yet (the accounts are the RESULT of seeding). Returns a "
+        "boolean only — never a row",
+    ("bootstrap.py", "SELECT COUNT(*) FROM users"):
+        "platform-wide readiness counter for /health (answers 'was this DB ever "
+        "seeded?'). A count, not identities — /health is public so it must never "
+        "expose emails",
     ("seed.py", "SELECT id FROM users WHERE role = 'silk_admin' LIMIT 1"):
         "bootstrap lookup for the seeded silk_admin; runs at seed time before any "
         "request context exists",
