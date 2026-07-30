@@ -19,8 +19,9 @@ import threading
 import time
 import uuid
 
-from . import (auth, audit, crypto, email_queue, quota, repository, seed as
-               seed_mod, settings, throttle, wallet)
+from . import (auth, audit, crypto, email_queue, entitlements, passwords, quota,
+               repository, scheduler, seed as seed_mod, settings, throttle,
+               users as users_mod, wallet)
 from .db import connect, init_db
 from .models import AuthContext, Role, projected_email_cost_cents
 
@@ -761,6 +762,184 @@ def mount(app) -> bool:
             conn.close()
         return {"account_id": ctx.account_id, "audit": rows}
 
+    # ═══════════════ الاستحقاقات والمقاعد · entitlements + seats ═════════════
+    class _UsersRepoShim:
+        """مُهايئ يعرض `exists_anywhere` بتوقيع المستودع — reuse the denial rule.
+
+        `users` ليس في `repository._WRITABLE` عمداً (أعمدته صلاحيات وهويّة، لا
+        حقول CRUD عامّة)، لكن **دلالة رفض الكتابة يجب أن تبقى واحدة**: 404 بلا
+        تسريب وجود + قيد تدقيق لمحاولة العبور. المُهايئ يعيد استخدام
+        `_deny_write_404` بدل نسخ الكتلة سادسةً. Keeps one denial semantics.
+        """
+
+        def __init__(self, conn):
+            self.conn = conn
+
+        def exists_anywhere(self, row_id: int) -> bool:
+            return users_mod.exists_anywhere(self.conn, row_id)
+
+    def _tier_gate_403(exc: entitlements.TierGateError):
+        """ترجم بوّابة الطبقة إلى 403 بدعوة ترقية — the ONE translation point.
+
+        كل مسار يفرض طبقةً يرفع `TierGateError` ويمرّ من هنا، فتخرج دعوة الترقية
+        بشكل واحد للواجهة بدل رسائل متناثرة. One shape for every tier denial.
+        """
+        return HTTPException(status_code=403, detail=exc.as_detail())
+
+    @app.get(_PREFIX + "/entitlements")
+    def get_entitlements(request: Request):
+        """استحقاقات الحساب + استخدامه — what this tier grants and what's used.
+
+        المصنع يقرأ حسابه؛ الأدمِن يقرأ حسابه هو (بيانات المصانع تمرّ من نقاط
+        الأدمِن المخصّصة كي يبقى جدار PII واحداً).
+        """
+        ctx = _require(request, Role.FACTORY, Role.SILK_ADMIN)
+        conn = _open()
+        try:
+            snap = entitlements.snapshot(conn, ctx.account_id)
+        finally:
+            conn.close()
+        return snap.as_dict()
+
+    @app.get(_PREFIX + "/users")
+    def list_account_users(request: Request):
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            rows = users_mod.list_users(conn, ctx.account_id)
+            seats = {"limit": entitlements.seat_limit(
+                         users_mod.account_tier(conn, ctx.account_id)),
+                     "used": entitlements.seats_used(conn, ctx.account_id)}
+        finally:
+            conn.close()
+        return {"users": rows, "seats": seats}
+
+    @app.post(_PREFIX + "/users")
+    def create_account_user(request: Request, body: dict = Body(default=None)):
+        """أنشئ مستخدماً فرعياً — seat-gated; the new user's role is always factory.
+
+        الدور و`account_id` **لا يُقرآن من الجسم** إطلاقاً (`users.create_sub_user`
+        يفرضهما): قراءتهما كانت ستسمح لمصنع بإنشاء `silk_admin` أو بزرع مستخدم
+        في حساب آخر.
+        """
+        ctx = _require(request, Role.FACTORY)
+        body = _json_body(body)
+        _require_fields(body, "email", "password")
+        conn = _open()
+        try:
+            try:
+                row = users_mod.create_sub_user(
+                    conn, ctx.account_id, email=body.get("email"),
+                    password=body.get("password"),
+                    first_name=body.get("first_name"),
+                    last_name=body.get("last_name"),
+                    language_preference=body.get("language_preference") or "en")
+            except entitlements.TierGateError as exc:
+                # قيد تدقيق للمنع (§2: «block + upgrade prompt + audit entry»).
+                audit.record(conn, action="seat_limit_exceeded",
+                             user_id=ctx.user_id, account_id=ctx.account_id,
+                             resource_type="user",
+                             changes={"limit": exc.limit, "used": exc.used,
+                                      "tier": exc.tier},
+                             ip_address=_client_ip(request))
+                conn.commit()
+                raise _tier_gate_403(exc)
+            except users_mod.DuplicateEmail as exc:
+                raise HTTPException(status_code=409, detail=str(exc))
+            except passwords.PasswordError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+            except users_mod.UserError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+            audit.record(conn, action="sub_user_created", user_id=ctx.user_id,
+                         account_id=ctx.account_id, resource_type="user",
+                         resource_id=row["id"], ip_address=_client_ip(request))
+            conn.commit()
+        finally:
+            conn.close()
+        return row
+
+    @app.get(_PREFIX + "/users/{user_id}")
+    def get_account_user(user_id: int, request: Request):
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            row = users_mod.get_user(conn, ctx.account_id, user_id)
+            if row is None:
+                if users_mod.exists_anywhere(conn, user_id):
+                    audit.record_denied(conn, action="cross_tenant_read",
+                                        user_id=ctx.user_id,
+                                        account_id=ctx.account_id,
+                                        resource_type="user", resource_id=user_id,
+                                        ip_address=_client_ip(request))
+                raise HTTPException(status_code=404, detail="not found")
+        finally:
+            conn.close()
+        return row
+
+    @app.patch(_PREFIX + "/users/{user_id}")
+    def patch_account_user(user_id: int, request: Request,
+                           body: dict = Body(default=None)):
+        """حدّث حقول عرض مستخدم — profile fields only (no role, no activation)."""
+        ctx = _require(request, Role.FACTORY)
+        body = _json_body(body)
+        conn = _open()
+        try:
+            try:
+                row = users_mod.update_profile(conn, ctx.account_id, user_id, body)
+            except users_mod.UserError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+            if row is None:
+                _deny_write_404(conn, request, ctx, _UsersRepoShim(conn), user_id,
+                                "user", "cross_tenant_write")
+            audit.record(conn, action="sub_user_updated", user_id=ctx.user_id,
+                         account_id=ctx.account_id, resource_type="user",
+                         resource_id=user_id, ip_address=_client_ip(request))
+            conn.commit()
+        finally:
+            conn.close()
+        return row
+
+    def _set_user_active(user_id: int, request: Request, active: bool):
+        """جسم مشترك للتنشيط/التعطيل — one body so the two paths cannot drift."""
+        ctx = _require(request, Role.FACTORY)
+        conn = _open()
+        try:
+            try:
+                row = users_mod.set_active(conn, ctx.account_id, user_id, active,
+                                           acting_user_id=ctx.user_id)
+            except entitlements.TierGateError as exc:
+                audit.record(conn, action="seat_limit_exceeded",
+                             user_id=ctx.user_id, account_id=ctx.account_id,
+                             resource_type="user", resource_id=user_id,
+                             changes={"limit": exc.limit, "used": exc.used,
+                                      "tier": exc.tier, "on": "activate"},
+                             ip_address=_client_ip(request))
+                conn.commit()
+                raise _tier_gate_403(exc)
+            except users_mod.UserError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
+            if row is None:
+                _deny_write_404(conn, request, ctx, _UsersRepoShim(conn), user_id,
+                                "user", "cross_tenant_write")
+            audit.record(conn,
+                         action="sub_user_activated" if active
+                         else "sub_user_deactivated",
+                         user_id=ctx.user_id, account_id=ctx.account_id,
+                         resource_type="user", resource_id=user_id,
+                         ip_address=_client_ip(request))
+            conn.commit()
+        finally:
+            conn.close()
+        return row
+
+    @app.post(_PREFIX + "/users/{user_id}/deactivate")
+    def deactivate_account_user(user_id: int, request: Request):
+        return _set_user_active(user_id, request, False)
+
+    @app.post(_PREFIX + "/users/{user_id}/activate")
+    def activate_account_user(user_id: int, request: Request):
+        return _set_user_active(user_id, request, True)
+
     # ══════════════════════════ ADMIN ═══════════════════════════════════════
     @app.get(_PREFIX + "/admin/metrics")
     def admin_metrics(request: Request):
@@ -848,6 +1027,55 @@ def mount(app) -> bool:
             conn.close()
         return {"audit": rows}
 
+    @app.get(_PREFIX + "/admin/accounts")
+    def admin_list_accounts(request: Request, limit: int = 100):
+        """اسرد حسابات المصانع بطبقاتها ومقاعدها — tier management needs this view.
+
+        مقاييس فقط (طبقة، مقاعد، حالة) بلا محتوى مصنع ولا PII — جدار الأدمِن
+        القائم يمنع محتوى المصانع، وهذه النقطة لا تخرقه. No factory content/PII.
+        """
+        ctx = _require(request, Role.SILK_ADMIN)
+        limit = _as_int(limit, "limit", minimum=1, maximum=500, default=100)
+        conn = _open()
+        try:
+            rows = conn.execute(
+                "SELECT id, name, tier, is_active, created_at FROM accounts "
+                "WHERE kind = 'factory' ORDER BY id LIMIT ?", (limit,)).fetchall()
+            out = []
+            for r in rows:
+                out.append({**dict(r),
+                            "seats_limit": entitlements.seat_limit(r["tier"]),
+                            "seats_used": entitlements.seats_used(conn, r["id"])})
+        finally:
+            conn.close()
+        return {"accounts": out}
+
+    @app.post(_PREFIX + "/admin/accounts/{account_id}/tier")
+    def admin_set_tier(account_id: int, request: Request,
+                       body: dict = Body(default=None)):
+        """غيّر طبقة حساب مصنع — audited; a seat-breaking downgrade is refused.
+
+        رمز `seats_exceed_target_tier` يرجع 409: على الأدمِن تعطيل الزائد أولاً
+        ثم التخفيض؛ لا شيفرة تختار **أيّ** مستخدم يُعطَّل.
+        """
+        ctx = _require(request, Role.SILK_ADMIN)
+        body = _json_body(body)
+        _require_fields(body, "tier")
+        conn = _open()
+        try:
+            try:
+                out = entitlements.set_account_tier(
+                    conn, account_id, body.get("tier"), admin_user_id=ctx.user_id)
+            except entitlements.TierChangeError as exc:
+                code = {"account_not_found": 404,
+                        "not_a_factory_account": 422,
+                        "unknown_tier": 422,
+                        "seats_exceed_target_tier": 409}.get(exc.code, 422)
+                raise HTTPException(status_code=code, detail=exc.as_detail())
+        finally:
+            conn.close()
+        return out
+
     @app.post(_PREFIX + "/admin/users/{user_id}/reset")
     def admin_issue_reset(user_id: int, request: Request):
         """إعادة تعيين مساعدة من الأدمِن — PR-5 stopgap until email delivery lands.
@@ -893,4 +1121,9 @@ def mount(app) -> bool:
             conn.close()
         return out
 
+    # مجدول المهام — opt-in بـSILK_PLATFORM_SCHEDULER=1؛ بلا الضبط لا خيط أصلاً،
+    # فتشغيلة اختبار أو تطوير لا تصفّر حصّة ولا تكتب فاتورة. يُبدأ بعد نجاح
+    # التركيب كي لا يبقى خيطٌ يعمل لتطبيق لم يُركَّب.
+    # Started only after a successful mount; no thread unless explicitly enabled.
+    scheduler.start()
     return True
