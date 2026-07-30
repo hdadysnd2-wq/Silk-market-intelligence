@@ -32,16 +32,18 @@ except BaseException:  # noqa: BLE001 — غائبة في CI، وقد تكون �
 
 
 def _fernet_key() -> bytes:
-    """اشتقّ مفتاح Fernet من السرّ — 32-byte urlsafe-base64 key from the secret."""
-    raw = os.environ.get("SILK_PLATFORM_SECRET", "").strip() or tokens._EPHEMERAL_SECRET
-    digest = hashlib.sha256(raw.encode("utf-8")).digest()
+    """اشتقّ مفتاح Fernet من السرّ — 32-byte urlsafe-base64 key from the secret.
+
+    السرّ يُحلّ عبر `tokens.secret()` حصراً (مصدر واحد للحقيقة) — لا إعادة تنفيذ
+    لقاعدة البيئة/الاحتياط هنا. Resolved through the single secret provider.
+    """
+    digest = hashlib.sha256(tokens.secret()).digest()
     return base64.urlsafe_b64encode(digest)
 
 
 def _keystream(nonce: bytes, length: int) -> bytes:
     """تيّار مفاتيح HMAC في وضع العدّاد — HMAC-SHA256 keystream (CTR mode)."""
-    key = (os.environ.get("SILK_PLATFORM_SECRET", "").strip()
-           or tokens._EPHEMERAL_SECRET).encode("utf-8")
+    key = tokens.secret()
     out = bytearray()
     counter = 0
     while len(out) < length:
@@ -53,9 +55,8 @@ def _keystream(nonce: bytes, length: int) -> bytes:
 
 def _mac(nonce: bytes, ciphertext: bytes) -> bytes:
     """وسم مُصادَقة على النصّ المعمّى — encrypt-then-MAC authentication tag."""
-    key = (os.environ.get("SILK_PLATFORM_SECRET", "").strip()
-           or tokens._EPHEMERAL_SECRET).encode("utf-8")
-    return hmac.new(key, b"mac" + nonce + ciphertext, hashlib.sha256).digest()
+    return hmac.new(tokens.secret(), b"mac" + nonce + ciphertext,
+                    hashlib.sha256).digest()
 
 
 def encrypt(plaintext: str) -> str:

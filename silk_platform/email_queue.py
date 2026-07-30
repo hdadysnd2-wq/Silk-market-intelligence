@@ -51,8 +51,13 @@ def pick_content(draft: dict, language: str) -> tuple[str, str]:
 
 def enqueue(conn: sqlite3.Connection, *, account_id: int, study_id: int,
             prospect: dict, draft: dict, smtp_config_id: int | None,
-            actor_user_id: int | None) -> int:
-    """صُفّ بريداً واحداً لعميل — interpolate + queue one email; return its id."""
+            actor_user_id: int | None, commit: bool = True) -> int:
+    """صُفّ بريداً واحداً لعميل — interpolate + queue one email; return its id.
+
+    `commit=False` للصفّ الجماعي داخل معاملة المُنادي (إطلاق دراسة بآلاف
+    المستلمين): التزامٌ لكل صفّ كان يعني fsync لكل مستلم.
+    Pass commit=False to batch many rows inside the caller's transaction.
+    """
     subject, body = pick_content(draft, prospect.get("language_preference", "en"))
     subject = interpolate(subject, prospect)
     body = interpolate(body, prospect)
@@ -62,13 +67,29 @@ def enqueue(conn: sqlite3.Connection, *, account_id: int, study_id: int,
         "actor_user_id, queued_at) VALUES (?,?,?,?,?,?,?,?, 'queued', ?, ?)",
         (account_id, study_id, prospect.get("id"), prospect.get("email"),
          draft.get("id"), smtp_config_id, subject, body, actor_user_id, now_iso()))
-    conn.commit()
+    if commit:
+        conn.commit()
     return int(cur.lastrowid)
 
 
 def _null_sender(smtp_config: dict, email_row: dict) -> None:
     """ناقل غير مُهيَّأ — PR-1 wires no real SMTP transport (PR-5 does)."""
     raise RuntimeError("no SMTP transport configured (wired in PR-5)")
+
+
+def _safe_error(exc: Exception) -> str:
+    """نصّ خطأ مُنقّى للتخزين — redact secrets before persisting transport errors.
+
+    `last_error` قد يُعرَض في لوحة المصنع/الأدمِن، وأخطاء SMTP الحقيقية (PR-5)
+    تحمل المضيف واسم المستخدم وردّ الخادم. نمرّ بمُنقّي المشروع القائم كي لا
+    يتسرّب سرّ في حقل تشخيصي. Reuses the repo's existing secret redactor.
+    """
+    text = str(exc)[:300]
+    try:
+        import silk_diagnostics
+        return silk_diagnostics._redact(text)
+    except Exception:  # noqa: BLE001 — المُنقّي أفضل جهد؛ لا يمنع تسجيل الخطأ
+        return text
 
 
 def _suppressed(conn: sqlite3.Connection, account_id: int, email: str) -> bool:
@@ -91,11 +112,17 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
     يرجّع ملخّصاً {sent, suppressed, failed, halted_by_kill_switch, remaining}.
     """
     sender = sender or _null_sender
-    rows = conn.execute(
-        "SELECT * FROM email_queue WHERE status = 'queued' ORDER BY id ASC"
-    ).fetchall()
+    # `LIMIT` في SQL لا في بايثون: بلا هذا يُحمَّل كل صفٍّ مصفوف (بنصّ الرسالة
+    # كاملاً) إلى الذاكرة ثم يُعالَج جزء منه. Bound the fetch in SQL.
+    sql = "SELECT * FROM email_queue WHERE status = 'queued' ORDER BY id ASC"
+    args: tuple = ()
+    if limit is not None:
+        sql += " LIMIT ?"
+        args = (int(limit),)
+    rows = conn.execute(sql, args).fetchall()
     summary = {"sent": [], "suppressed": [], "failed": [],
                "halted_by_kill_switch": False, "remaining": 0}
+    cfg_memo: dict[int, dict | None] = {}   # تهيئة SMTP لكل دراسة تُقرأ مرّة
     processed = 0
     for row in rows:
         if limit is not None and processed >= limit:
@@ -125,26 +152,42 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
             continue
         cfg = None
         if email["smtp_config_id"]:
-            crow = conn.execute("SELECT * FROM smtp_configs WHERE id = ?",
-                                (email["smtp_config_id"],)).fetchone()
-            cfg = dict(crow) if crow else None
+            sid = int(email["smtp_config_id"])
+            if sid not in cfg_memo:   # تُقرأ مرّة لكل تهيئة في المرور الواحد
+                crow = conn.execute("SELECT * FROM smtp_configs WHERE id = ?",
+                                    (sid,)).fetchone()
+                cfg_memo[sid] = dict(crow) if crow else None
+            cfg = cfg_memo[sid]
+        # طالِب بالصفّ **قبل** الإرسال — claim the row before sending. بلا هذا،
+        # مرورَان متزاملان (مجدول + نداء يدوي) يقرأان نفس الصفّ «queued» فيُرسَل
+        # البريد مرّتين ويُخصَم مرّتين. المطالبة UPDATE محروس + فحص rowcount،
+        # فيخسر الثاني ويتخطّى. الحالة الوسيطة 'sending' تجعل المطالبة مرئية.
+        claim = conn.execute(
+            "UPDATE email_queue SET status = 'sending', attempts = attempts + 1 "
+            "WHERE id = ? AND status = 'queued'", (eid,))
+        if claim.rowcount == 0:
+            conn.commit()
+            continue   # مرورٌ آخر طالب به · another pass owns this row
+        conn.commit()
         try:
             sender(cfg or {}, email)
         except Exception as exc:  # noqa: BLE001 — فشل الإرسال يُسجَّل لا يُخفى
-            conn.execute("UPDATE email_queue SET status = 'failed', attempts = "
-                         "attempts + 1, last_error = ? WHERE id = ?",
-                         (str(exc)[:300], eid))
+            conn.execute("UPDATE email_queue SET status = 'failed', "
+                         "last_error = ? WHERE id = ?", (_safe_error(exc), eid))
             conn.commit()
             summary["failed"].append(eid)
             processed += 1
             continue
         # نجح الإرسال — الموافقة + الخصم + الحالة في **معاملة واحدة** كي لا يقع
-        # خصم مزدوج عند تعطّل بين التزامين (ملاحظة مراجعة خصامية). الالتزام
-        # الذرّي: إمّا تُثبَت الثلاثة أو يبقى الصفّ مصفوفاً (يُعاد إرساله نظيفاً).
-        # Atomic: consent + debit + status='sent' commit together — no
-        # double-charge window. (Residual: a crash after transport but before
-        # commit can re-send once; exactly-once delivery needs an idempotency
-        # key at the SMTP layer — deferred to PR-5.)
+        # خصم مزدوج عند تعطّل بين التزامين. الالتزام الذرّي: إمّا تُثبَت الثلاثة
+        # أو لا شيء. Atomic: consent + debit + status='sent' commit together.
+        #
+        # `allow_negative=True` مقصود هنا وليس تسامحاً: البريد **خرج فعلاً**.
+        # فحص الرصيد قبل الإرسال هو البوّابة؛ أمّا بعد الخروج فرفضُ الخصم كان
+        # سيتراجع بسجلّ الموافقة أيضاً (خصمٌ مفقود + بريدٌ مُرسَل بلا قيد موافقة
+        # = خرق امتثال). الدَّين يُسجَّل ويُسوّى، ولا يُمحى أثر رسالة أُرسِلت.
+        # The message physically left: never roll back its consent record — book
+        # the debit even if a concurrent charge pushed the balance below zero.
         verbatim = f"Subject: {email['subject']}\n\n{email['body']}"
         try:
             conn.commit()                       # اطوِ المعلّق قبل BEGIN الصريح
@@ -162,15 +205,16 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
                                description="email sent",
                                metadata={"study_id": email["study_id"],
                                          "prospect_id": email["prospect_id"],
-                                         "email_queue_id": eid})
+                                         "email_queue_id": eid},
+                               allow_negative=True)
+            # محروس بحالة المطالبة — guarded by the claim we own.
             conn.execute("UPDATE email_queue SET status = 'sent', sent_at = ? "
-                         "WHERE id = ?", (now_iso(), eid))
+                         "WHERE id = ? AND status = 'sending'", (now_iso(), eid))
             conn.commit()
         except Exception as exc:  # noqa: BLE001 — الفشل يُسجَّل، لا خصم جزئي
             conn.rollback()
-            conn.execute("UPDATE email_queue SET status = 'failed', attempts = "
-                         "attempts + 1, last_error = ? WHERE id = ?",
-                         (str(exc)[:300], eid))
+            conn.execute("UPDATE email_queue SET status = 'failed', "
+                         "last_error = ? WHERE id = ?", (_safe_error(exc), eid))
             conn.commit()
             summary["failed"].append(eid)
             processed += 1

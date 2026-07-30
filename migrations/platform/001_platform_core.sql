@@ -62,7 +62,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at       TEXT NOT NULL,
     last_activity_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS ix_sessions_token ON sessions(token_hash);
+-- لا فهرس على token_hash: قيد UNIQUE أعلاه يبني فهرسه الضمني أصلاً، وفهرس
+-- ثانٍ مطابق يُصان عند كل دخول/خروج بلا فائدة استعلام.
+-- No index on token_hash — the UNIQUE constraint's implicit index covers it.
 CREATE INDEX IF NOT EXISTS ix_sessions_user  ON sessions(user_id);
 
 -- ── رموز إعادة تعيين كلمة المرور · single-use, time-limited reset tokens ──────
@@ -286,14 +288,17 @@ CREATE TABLE IF NOT EXISTS email_queue (
     smtp_config_id INTEGER,
     subject        TEXT,
     body           TEXT,
+    -- 'sending' حالة مطالبة وسيطة: العامل يطالب بالصفّ ذرّياً قبل الإرسال فلا
+    -- يرسله مرورَان متزاملان مرّتين. A claim state so two passes can't double-send.
     status         TEXT NOT NULL DEFAULT 'queued'
-                       CHECK (status IN ('queued','sent','failed','suppressed')),
+                       CHECK (status IN ('queued','sending','sent','failed','suppressed')),
     actor_user_id  INTEGER,
     attempts       INTEGER NOT NULL DEFAULT 0,
     last_error     TEXT,
     queued_at      TEXT NOT NULL,
     sent_at        TEXT
 );
-CREATE INDEX IF NOT EXISTS ix_queue_status  ON email_queue(status);
 CREATE INDEX IF NOT EXISTS ix_queue_account ON email_queue(account_id);
+-- المركَّب (status, id) يخدم أيضاً كل شرط على status وحده (عمود رائد)، فلا
+-- حاجة لفهرس status منفرد. The composite's leading column serves status-only scans.
 CREATE INDEX IF NOT EXISTS ix_queue_order   ON email_queue(status, id);

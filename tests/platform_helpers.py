@@ -59,6 +59,7 @@ def make_factory(tier: str, email: str, password: str = "Factory1234",
     """
     from silk_platform import db as pdb, passwords, wallet
     from silk_platform.db import now_iso
+    from silk_platform.models import Operation
     conn = pdb.connect()
     try:
         now = now_iso()
@@ -73,12 +74,16 @@ def make_factory(tier: str, email: str, password: str = "Factory1234",
             "VALUES (?,?,?, 'factory', 'F', 'Owner', 'en', ?, ?)",
             (aid, email.lower(), passwords.hash_password(password), now, now))
         uid = int(cur.lastrowid)
-        w = wallet.ensure_wallet(conn, aid)
-        if fund_cents:
-            conn.execute("UPDATE wallets SET balance = ? WHERE account_id = ?",
-                         (fund_cents, aid))
-            conn.commit()
+        wallet.ensure_wallet(conn, aid)
         conn.commit()
+        if fund_cents:
+            # التمويل يمرّ بالدفتر لا بكتابة رصيد خام: التثبيت نفسه يجب أن يُنمذج
+            # المسار المسموح، وإلا نُطبِّع الانحراف الذي وُجد الدفتر غير القابل
+            # للتعديل لمنعه (رصيد بلا قيد = لا مُكتشِف له).
+            # Fund through the ledger — never raw-UPDATE a balance, even in tests.
+            wallet.post_entry(conn, account_id=aid, actor_user_id=uid,
+                              operation=Operation.WALLET_FUNDED, amount=fund_cents,
+                              description="test fixture funding")
     finally:
         conn.close()
     return {"account_id": aid, "user_id": uid, "email": email, "password": password,

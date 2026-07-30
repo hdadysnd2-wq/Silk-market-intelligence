@@ -32,6 +32,21 @@ class PasswordError(ValueError):
     """كلمة مرور تخالف السياسة — password violates the policy."""
 
 
+MAX_PASSWORD_BYTES = 4096   # حدّ عِلوي للمدخل (منع إنفاق CPU على مدخل ضخم)
+
+
+def _bcrypt_input(password: str) -> bytes:
+    """مدخل bcrypt بعد تلخيص SHA-256 — pre-hash so nothing is silently truncated.
+
+    bcrypt يتجاهل ما بعد ٧٢ بايت **صمتاً**: بلا هذا التلخيص تُصادِق عبارةُ مرور
+    طويلة على أوّل ٧٢ بايت منها فقط، وتختلف مساحة كلمات المرور الفعلية بين
+    الخلفيتين (scrypt لا يقتطع). التلخيص يعطي ٤٤ بايت base64 ثابتة فتمرّ كامل
+    الإنتروبيا. Pre-hash to base64(sha256) — no silent 72-byte truncation.
+    """
+    digest = hashlib.sha256(password.encode("utf-8")).digest()
+    return base64.b64encode(digest)
+
+
 def validate_policy(password: str) -> None:
     """افرض سياسة كلمة المرور — min 8 chars, mixed case + a digit.
 
@@ -39,6 +54,9 @@ def validate_policy(password: str) -> None:
     """
     if not isinstance(password, str) or len(password) < 8:
         raise PasswordError("password must be at least 8 characters")
+    if len(password.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise PasswordError(
+            f"password must be at most {MAX_PASSWORD_BYTES} bytes")
     if not re.search(r"[a-z]", password):
         raise PasswordError("password must contain a lowercase letter")
     if not re.search(r"[A-Z]", password):
@@ -56,7 +74,7 @@ def hash_password(password: str, *, enforce_policy: bool = True) -> str:
         validate_policy(password)
     if _bcrypt is not None:
         salt = _bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)
-        return _bcrypt.hashpw(password.encode("utf-8"), salt).decode("ascii")
+        return _bcrypt.hashpw(_bcrypt_input(password), salt).decode("ascii")
     # بديل قياسي · stdlib scrypt fallback — "$scrypt$N$r$p$salt$dk"
     salt = os.urandom(16)
     dk = hashlib.scrypt(password.encode("utf-8"), salt=salt,
@@ -76,7 +94,7 @@ def verify_password(password: str, stored: str) -> bool:
         if stored.startswith("$2"):   # bcrypt ($2a$/$2b$/$2y$)
             if _bcrypt is None:
                 return False
-            return _bcrypt.checkpw(password.encode("utf-8"), stored.encode("ascii"))
+            return _bcrypt.checkpw(_bcrypt_input(password), stored.encode("ascii"))
         if stored.startswith("$scrypt$"):
             _, _tag, n, r, p, salt_b64, dk_b64 = stored.split("$")
             salt = base64.b64decode(salt_b64)

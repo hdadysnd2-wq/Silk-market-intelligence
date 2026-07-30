@@ -76,6 +76,12 @@ def _isolated_fact_store(monkeypatch):
     بعد تشغيلات تدقيق Stage 1). Every test gets its own store unless it overrides."""
     monkeypatch.setenv("SILK_STORE_DB",
                        os.path.join(tempfile.mkdtemp(), "store.db"))
+    # قاعدة المنصّة (المستأجرون/المصادقة/المحافظ) تُعزَل هنا أيضاً: api.py الجذر
+    # يركّب /platform داخل create_app()، فأيّ اختبار قديم يمسّ مساراً تحتها كان
+    # سيهيّئ `data/platform.db` في شجرة العمل ويسرّب حالة بين الاختبارات — نفس
+    # عائلة الحادثة التي وُلد لها هذا التثبيت. Isolate the 5th store too.
+    monkeypatch.setenv("SILK_PLATFORM_DB",
+                       os.path.join(tempfile.mkdtemp(), "platform.db"))
     # 1b: عطّل مباعدة النداءات في الاختبارات — الشبكة مقطوعة أصلاً، والمباعدة
     # 250ms × مئات النداءات الفاشلة كانت ستبطئ الحزمة بلا فائدة.
     monkeypatch.setenv("SILK_HTTP_MIN_GAP_MS", "0")
@@ -94,6 +100,16 @@ def _isolated_fact_store(monkeypatch):
     # صراحة قبل أي استخدام.
     import silk_context
     silk_context._data_counter.set(None)
+    # عدّاد خنق الدخول حالةُ وحدة (عملية واحدة في الإنتاج) — تُصفَّر بين
+    # الاختبارات وإلا تسرّبت محاولات فاشلة من اختبار الخنق فحجبت دخول اختبار
+    # لاحق لا علاقة له (اكتُشف فعلياً عند إضافة اختبار الخنق).
+    # Reset the in-memory login throttle between tests (module-level state).
+    try:
+        import silk_platform.api as _papi
+        with _papi._login_lock:
+            _papi._login_fails.clear()
+    except Exception:  # noqa: BLE001 — المنصّة اختيارية استيراداً
+        pass
 
 
 @pytest.fixture(autouse=True)

@@ -63,20 +63,11 @@ def _roll_period_if_needed(conn: sqlite3.Connection, acc: sqlite3.Row) -> int:
     return int(row["current_month_study_count"])
 
 
-def evaluate(conn: sqlite3.Connection, account_id: int) -> QuotaDecision:
-    """قيّم الحصّة دون تعديل — check whether a launch is allowed (read-only)."""
-    acc = _account(conn, account_id)
-    tier = Tier(acc["tier"])
-    limits = tier_limits(tier)
-    if tier == Tier.BASIC:
-        used = int(acc["lifetime_study_count"])
-        allowed = used < limits.lifetime_studies
-        return QuotaDecision(allowed, "" if allowed else "lifetime_quota_exceeded",
-                             limits.lifetime_studies, used, tier.value)
-    used = _roll_period_if_needed(conn, acc)
-    allowed = used < limits.monthly_studies
-    return QuotaDecision(allowed, "" if allowed else "monthly_quota_exceeded",
-                         limits.monthly_studies, used, tier.value)
+# لا دالّة `evaluate()` منفصلة عمداً: مسار الحصّة **واحد** هو `reserve_launch`
+# (فحص وزيادة ذرّيان في تعليمة واحدة). نسخة «قراءة فقط» ثانية كانت تكرّر منطق
+# الطبقات بلا الشكل الآمن من TOCTOU، فأيّ مُنادٍ لها يعيد إدخال السباق المُغلَق.
+# Deliberately one quota path (reserve_launch); a read-only twin would duplicate
+# the tier rules without the race-safe guarded UPDATE.
 
 
 def reserve_launch(conn: sqlite3.Connection, account_id: int, *,
@@ -125,11 +116,17 @@ def monthly_reset(conn: sqlite3.Connection) -> int:
 
     مهمّة أوّل الشهر 00:00 UTC. يكتب قيد تدقيق. يرجّع عدد الحسابات المصفَّرة.
     Basic's lifetime counter is deliberately untouched (survives the reset).
+
+    محروسة بمفتاح الفترة (`quota_period != period`) فتكون **خاملة التكرار**:
+    نداء ثانٍ في نفس الشهر (إعادة تشغيل المجدول، أو إطلاق مزدوج) لا يصفّر شيئاً
+    ولا يمنح حصّة إضافية. Period-guarded ⇒ idempotent within a month.
     """
     period = current_period()
     cur = conn.execute(
         "UPDATE accounts SET current_month_study_count = 0, quota_period = ?, "
-        "updated_at = ? WHERE tier != 'basic'", (period, now_iso()))
+        "updated_at = ? WHERE tier != 'basic' "
+        "AND (quota_period IS NULL OR quota_period != ?)",
+        (period, now_iso(), period))
     audit.record(conn, action="monthly_quota_reset", resource_type="accounts",
                  changes={"period": period, "accounts_reset": cur.rowcount})
     conn.commit()

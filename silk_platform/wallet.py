@@ -27,15 +27,20 @@ class InsufficientFunds(WalletError):
 
 
 def ensure_wallet(conn: sqlite3.Connection, account_id: int) -> dict:
-    """اضمن وجود محفظة للحساب — get-or-create; returns the wallet row."""
+    """اضمن وجود محفظة للحساب — get-or-create; returns the wallet row.
+
+    `INSERT OR IGNORE` يجعل الإنشاء ذرّياً: النداءان المتزامنان الأوّلان لا
+    يتسابقان على UNIQUE(account_id) فيسقط الخاسر بـIntegrityError غير ملتقط
+    (كان يُظهر 500 على أوّل عرض للمحفظة). Atomic get-or-create; no race.
+    """
     row = conn.execute("SELECT * FROM wallets WHERE account_id = ?",
                        (account_id,)).fetchone()
     if row:
         return dict(row)
     now = now_iso()
-    conn.execute("INSERT INTO wallets (account_id, balance, lifetime_funded, "
-                 "lifetime_spent, created_at, updated_at) VALUES (?,0,0,0,?,?)",
-                 (account_id, now, now))
+    conn.execute("INSERT OR IGNORE INTO wallets (account_id, balance, "
+                 "lifetime_funded, lifetime_spent, created_at, updated_at) "
+                 "VALUES (?,0,0,0,?,?)", (account_id, now, now))
     conn.commit()
     return dict(conn.execute("SELECT * FROM wallets WHERE account_id = ?",
                              (account_id,)).fetchone())

@@ -19,10 +19,25 @@ from .models import AuthContext, Role
 
 SESSION_TTL_HOURS = 24
 RESET_TTL_MINUTES = 30
+# لا تكتب نافذة النشاط لكل طلب — الكتابة fsync على كل GET تتنافس مع الكاتب
+# الوحيد في SQLite. نُحدّثها فقط بعد مضيّ هذه المدّة، ودلالة الـ24 ساعة سليمة
+# لأن أي طلب داخل النافذة يمدّها. Coarse sliding: same 24h semantics, far fewer writes.
+ACTIVITY_WRITE_GRANULARITY_S = 300
 
 # هاش وهمي صالح لتشغيل تحقّق حين لا يوجد مستخدم — يوحّد زمن الردّ فيمنع تعداد
-# المستخدمين عبر التوقيت. A valid dummy hash burned when the user is absent.
-_DUMMY_HASH = passwords.hash_password("Dummy-Password-0", enforce_policy=False)
+# المستخدمين عبر التوقيت. يُحسَب كسولاً مرّة واحدة: حسابه وقت الاستيراد كان
+# يدفع ثمن bcrypt عامل ١٢ (~٢٥٠ms) في كل إقلاع وكل جلسة اختبار بلا فائدة.
+# A valid dummy hash burned when the user is absent — computed lazily once.
+_DUMMY_HASH_CACHE: str | None = None
+
+
+def _dummy_hash() -> str:
+    """هاش وهمي مُذكَّر — memoized dummy hash (no bcrypt cost at import time)."""
+    global _DUMMY_HASH_CACHE
+    if _DUMMY_HASH_CACHE is None:
+        _DUMMY_HASH_CACHE = passwords.hash_password("Dummy-Password-0",
+                                                    enforce_policy=False)
+    return _DUMMY_HASH_CACHE
 
 
 def _parse(ts: str) -> datetime.datetime:
@@ -48,7 +63,7 @@ def authenticate(conn: sqlite3.Connection, email: str, password: str) -> dict | 
     row = conn.execute(
         "SELECT * FROM users WHERE email = ?", ((email or "").strip().lower(),)
     ).fetchone()
-    stored = row["password_hash"] if row else _DUMMY_HASH
+    stored = row["password_hash"] if row else _dummy_hash()
     ok = passwords.verify_password(password or "", stored)
     if not row or not ok:
         return None
@@ -102,12 +117,20 @@ def resolve_session(conn: sqlite3.Connection, raw_token: str) -> AuthContext | N
     now = _now()
     if _parse(row["expires_at"]) <= now:
         return None  # منتهية بعدم النشاط · expired
-    # نافذة منزلقة: كل طلب صالح يُمدّد الانتهاء 24 ساعة من الآن.
-    conn.execute(
-        "UPDATE sessions SET last_activity_at = ?, expires_at = ? WHERE id = ?",
-        (_fmt(now), _fmt(now + datetime.timedelta(hours=SESSION_TTL_HOURS)),
-         row["id"]))
-    conn.commit()
+    # نافذة منزلقة خشِنة: كل طلب صالح يُمدّد الانتهاء ٢٤ ساعة، لكن الكتابة تحدث
+    # فقط بعد مضيّ ACTIVITY_WRITE_GRANULARITY_S على آخر تحديث — فلا معاملة كتابة
+    # (fsync) على كل GET تتنافس مع كاتب SQLite الوحيد. الدلالة محفوظة: أي طلب
+    # داخل النافذة يمدّها، والفارق الأقصى بين المخزَّن والفعلي هو هذه الحبيبية.
+    try:
+        elapsed = (now - _parse(row["last_activity_at"])).total_seconds()
+    except (TypeError, ValueError):
+        elapsed = ACTIVITY_WRITE_GRANULARITY_S + 1  # طابع تالف ⇒ حدّثه
+    if elapsed >= ACTIVITY_WRITE_GRANULARITY_S:
+        conn.execute(
+            "UPDATE sessions SET last_activity_at = ?, expires_at = ? WHERE id = ?",
+            (_fmt(now), _fmt(now + datetime.timedelta(hours=SESSION_TTL_HOURS)),
+             row["id"]))
+        conn.commit()
     return AuthContext(
         user_id=row["user_id"], account_id=row["account_id"],
         role=Role(row["role"]), email=row["email"],
@@ -162,22 +185,37 @@ def consume_reset_token(conn: sqlite3.Connection, raw_token: str,
     """
     if not raw_token:
         return False
+    token_hash = tokens.hash_token(raw_token)
     row = conn.execute(
         "SELECT * FROM password_reset_tokens WHERE token_hash = ?",
-        (tokens.hash_token(raw_token),)).fetchone()
+        (token_hash,)).fetchone()
     if not row or row["used_at"]:
         return False
     if _parse(row["expires_at"]) <= _now():
         return False
+    # السياسة والتجزئة **قبل** المطالبة بالرمز، كي لا تحرق كلمةٌ ضعيفة الرمز.
     passwords.validate_policy(new_password)  # raises PasswordError on violation
     new_hash = passwords.hash_password(new_password)
-    conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
-                 (new_hash, now_iso(), row["user_id"]))
-    conn.execute("UPDATE password_reset_tokens SET used_at = ? WHERE id = ?",
-                 (now_iso(), row["id"]))
-    # إبطال الجلسات القائمة بعد تغيير كلمة المرور · invalidate live sessions.
-    conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))
-    conn.commit()
+    # الأحادية تُفرَض ذرّياً في القاعدة لا بفحص بايثون: `AND used_at IS NULL`
+    # + فحص rowcount داخل معاملة كتابة فورية، فتخسر المطالبة الثانية المتزامنة
+    # ولا يُعاد استعمال رمز واحد مرّتين. Atomic single-use claim (guarded UPDATE).
+    conn.commit()                      # اطوِ المعلّق قبل BEGIN الصريح
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        cur = conn.execute(
+            "UPDATE password_reset_tokens SET used_at = ? "
+            "WHERE id = ? AND used_at IS NULL", (now_iso(), row["id"]))
+        if cur.rowcount == 0:
+            conn.rollback()            # سبقنا غيرُنا · another confirm won the race
+            return False
+        conn.execute("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
+                     (new_hash, now_iso(), row["user_id"]))
+        # إبطال الجلسات القائمة بعد تغيير كلمة المرور · invalidate live sessions.
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["user_id"],))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return True
 
 

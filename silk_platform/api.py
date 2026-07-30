@@ -14,18 +14,98 @@ Cross-tenant reads return 404 (no existence leak); role walls return 403.
 # الفوري (كائنات حقيقية) هو ما يجعل FastAPI يميّز Request عن معامل استعلام.
 import logging
 import os
+import sqlite3
+import threading
+import time
 import uuid
 
 from . import (auth, audit, crypto, email_queue, quota, repository, seed as
                seed_mod, settings, wallet)
 from .db import connect, init_db
-from .models import (AuthContext, Operation, Role, projected_email_cost_cents,
-                     tier_limits, Tier, PRICE_EMAIL_SENT_CENTS)
+from .models import AuthContext, Role, projected_email_cost_cents
 
 log = logging.getLogger(__name__)
 
 COOKIE_NAME = "silk_session"
 _PREFIX = "/platform"
+
+# ── خنق محاولات الدخول · login throttle ──────────────────────────────────────
+# نافذة ثابتة لكل هويّة (بريد + IP): التحقّق ثابت الزمن يمنع تعداد المستخدمين
+# لكنه لا يمنع تخميناً غاشماً بلا سقف. الحالة في الذاكرة (عملية واحدة على
+# Railway) وتُطهَّر ذاتياً. Fixed-window per-identity throttle on failed logins.
+LOGIN_MAX_FAILURES = 10
+LOGIN_WINDOW_S = 300
+_login_fails: dict[str, list[float]] = {}
+_login_lock = threading.Lock()
+
+
+def _login_identity(email: str, ip: str | None) -> str:
+    return f"{(email or '').strip().lower()}|{ip or '-'}"
+
+
+def _login_throttled(identity: str) -> bool:
+    """هل تجاوزت الهويّة سقف الفشل في النافذة؟ — is this identity locked out?"""
+    now = time.time()
+    with _login_lock:
+        hits = [t for t in _login_fails.get(identity, []) if now - t < LOGIN_WINDOW_S]
+        _login_fails[identity] = hits
+        return len(hits) >= LOGIN_MAX_FAILURES
+
+
+def _login_record_failure(identity: str) -> None:
+    """سجّل محاولة فاشلة — count one failed attempt for this identity."""
+    now = time.time()
+    with _login_lock:
+        hits = [t for t in _login_fails.get(identity, []) if now - t < LOGIN_WINDOW_S]
+        hits.append(now)
+        _login_fails[identity] = hits
+        if len(_login_fails) > 4096:   # حدّ ذاكرة: طهّر النوافذ المنتهية
+            for k in [k for k, v in _login_fails.items()
+                      if not v or now - v[-1] >= LOGIN_WINDOW_S]:
+                _login_fails.pop(k, None)
+
+
+def _login_clear(identity: str) -> None:
+    """امسح العدّاد بعد دخول ناجح — reset the counter on success."""
+    with _login_lock:
+        _login_fails.pop(identity, None)
+
+
+# ── تحقّق من المدخلات · input coercion (client faults must be 4xx, never 500) ─
+def _as_int(value, field: str, *, minimum: int | None = None,
+            maximum: int | None = None, default: int | None = None):
+    """حوّل مدخلاً إلى صحيح أو ارفعه 422 — coerce to int or raise a 422.
+
+    يرفض النصّ غير الرقمي والعائم (المال بالسنتات الصحيحة: 250.75 لا تُقتطَع
+    صمتاً إلى 250) والمنطقي. Rejects non-numeric, float, and bool inputs.
+    """
+    from fastapi import HTTPException
+    if value is None or value == "":
+        if default is not None:
+            return default
+        raise HTTPException(status_code=422, detail=f"{field} is required")
+    if isinstance(value, bool) or isinstance(value, float):
+        raise HTTPException(status_code=422,
+                            detail=f"{field} must be an integer, got {value!r}")
+    try:
+        out = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422,
+                            detail=f"{field} must be an integer, got {value!r}")
+    if minimum is not None and out < minimum:
+        raise HTTPException(status_code=422, detail=f"{field} must be >= {minimum}")
+    if maximum is not None and out > maximum:
+        raise HTTPException(status_code=422, detail=f"{field} must be <= {maximum}")
+    return out
+
+
+def _require_fields(body: dict, *names: str) -> None:
+    """اطلب حقولاً غير فارغة — 422 for a missing NOT NULL field (never a 500)."""
+    from fastapi import HTTPException
+    missing = [n for n in names if body.get(n) in (None, "")]
+    if missing:
+        raise HTTPException(status_code=422,
+                            detail=f"missing required field(s): {', '.join(missing)}")
 
 
 # ── أدوات · helpers (fastapi-free so they stay unit-testable) ────────────────
@@ -84,7 +164,16 @@ def mount(app) -> bool:
         log.warning("fastapi unavailable — platform router not mounted")
         return False
 
-    from fastapi import HTTPException
+    from fastapi import Body, HTTPException
+    from starlette.concurrency import run_in_threadpool
+
+    def _resolve_token(token: str):
+        """حُلّ الرمز في اتصال خاص — blocking; runs in the threadpool."""
+        conn = _open()
+        try:
+            return auth.resolve_session(conn, token)
+        finally:
+            conn.close()
 
     # ── وسيط تحميل السياق · context-loading middleware ───────────────────────
     @app.middleware("http")
@@ -93,16 +182,16 @@ def mount(app) -> bool:
 
         أفضل جهد: لا يرفع أبداً؛ الرمز الغائب/المنتهي => state.auth = None،
         والنقاط المحميّة هي من تفرض 401/403. Best-effort; guards enforce.
+
+        عمل SQLite الحاجب يُنفَّذ في مجمّع خيوط لا على حلقة الأحداث — الوسيط
+        يعمل لكل طلب، وحجبُ الحلقة هنا كان يعطّل خدمة المحرّك المُركَّبة معه.
+        The blocking DB read runs off the event loop (shared app!).
         """
         request.state.auth = None
         if request.url.path.startswith(_PREFIX):
             token = _bearer(request.headers) or request.cookies.get(COOKIE_NAME, "")
             if token:
-                conn = _open()
-                try:
-                    request.state.auth = auth.resolve_session(conn, token)
-                finally:
-                    conn.close()
+                request.state.auth = await run_in_threadpool(_resolve_token, token)
         return await call_next(request)
 
     # ── حرّاس الأدوار · role guards ──────────────────────────────────────────
@@ -123,12 +212,15 @@ def mount(app) -> bool:
 
     # ── نقطة عزل عامّة · shared tenant-scoped fetch with 404/403 semantics ────
     def _tenant_detail(request: Request, repo_factory, row_id: int,
-                       resource_type: str):
+                       resource_type: str) -> dict:
         """اجلب صفّاً مُستأجَراً بدلالة الدور — enforce the isolation matrix.
 
         - analyst: 403 (مجمّعات فقط).
         - admin: يرى دراسات حساب سِلك فقط؛ محتوى مصنع => 403.
         - factory: حسابه فقط؛ صفّ حساب آخر => 404 (+ تدقيق محاولة عبور).
+
+        يُغلق اتصاله بنفسه ويرجّع الصفّ فقط — تسليم الاتصال للمُنادي كان عقداً
+        قابلاً للتسريب بلا فائدة. Owns and closes its connection; returns the row.
         """
         ctx = _ctx(request)
         conn = _open()
@@ -138,7 +230,7 @@ def mount(app) -> bool:
                 raise HTTPException(status_code=403, detail="analysts see aggregates only")
             row = repo.get(ctx.account_id, row_id)
             if row is not None:
-                return ctx, conn, row  # caller closes conn
+                return row
             # غير مملوك للمنادي · not owned by the caller.
             foreign = repo.exists_anywhere(row_id)
             if ctx.is_silk_admin:
@@ -157,25 +249,47 @@ def mount(app) -> bool:
                                     resource_type=resource_type, resource_id=row_id,
                                     ip_address=_client_ip(request))
             raise HTTPException(status_code=404, detail="not found")
-        except HTTPException:
+        finally:
             conn.close()
-            raise
-        except Exception:
-            conn.close()
-            raise
+
+    def _deny_write_404(conn, request: Request, ctx: AuthContext, repo,
+                        row_id: int, resource_type: str, action: str):
+        """دلالة رفض الكتابة عبر المستأجر — one place for the write-denial rule.
+
+        صفر صفوف متأثّرة يعني: إمّا الصفّ غير موجود أو لحسابٍ آخر. الحالتان 404
+        (لا تسريب وجود)، ومحاولة العبور تُسجَّل تدقيقاً. كانت هذه الكتلة منسوخة
+        في خمسة مواضع، فتُنسى في السادس. Single definition of the denial semantics.
+        """
+        if repo.exists_anywhere(row_id):
+            audit.record_denied(conn, action=action, user_id=ctx.user_id,
+                                account_id=ctx.account_id,
+                                resource_type=resource_type, resource_id=row_id,
+                                ip_address=_client_ip(request))
+        raise HTTPException(status_code=404, detail="not found")
 
     # ══════════════════════════ AUTH ════════════════════════════════════════
+    # ملاحظة على `def` بلا `async` في كل ما يلي: هذه المعالجات تُنفِّذ عملاً
+    # حاجباً (bcrypt عامل ١٢ ≈ ٢٥٠ms، وSQLite بمهلة انتظار قفل). FastAPI يشغّل
+    # المعالجات المتزامنة في مجمّع خيوط تلقائياً، فلا تُحجَب حلقة الأحداث —
+    # وهي حلقة **مشتركة** مع خدمة المحرّك المُركَّبة على نفس التطبيق.
+    # Sync handlers ⇒ FastAPI runs them in its threadpool, off the shared loop.
     @app.post(_PREFIX + "/auth/login")
-    async def login(request: Request):
-        body = _json_body(await _safe_json(request))
+    def login(request: Request, body: dict = Body(default=None)):
+        body = _json_body(body)
         email = (body.get("email") or "").strip()
         password = body.get("password") or ""
+        identity = _login_identity(email, _client_ip(request))
+        if _login_throttled(identity):
+            raise HTTPException(status_code=429,
+                                detail="too many failed attempts; try again later")
         conn = _open()
         try:
             user = auth.authenticate(conn, email, password)
             if not user:
+                _login_record_failure(identity)
                 # لا تعداد مستخدمين: نفس الرسالة والتوقيت للمجهول والخطأ.
                 raise HTTPException(status_code=401, detail="invalid credentials")
+            _login_clear(identity)
             raw = auth.create_session(
                 conn, user["id"], ip_address=_client_ip(request),
                 user_agent=request.headers.get("user-agent"))
@@ -196,7 +310,7 @@ def mount(app) -> bool:
         return resp
 
     @app.post(_PREFIX + "/auth/logout")
-    async def logout(request: Request):
+    def logout(request: Request):
         ctx = _ctx(request)
         conn = _open()
         try:
@@ -209,15 +323,15 @@ def mount(app) -> bool:
         return resp
 
     @app.get(_PREFIX + "/me")
-    async def me(request: Request):
+    def me(request: Request):
         ctx = _ctx(request)
         return {"user_id": ctx.user_id, "account_id": ctx.account_id,
                 "role": ctx.role.value, "email": ctx.email,
                 "language_preference": ctx.language_preference}
 
     @app.post(_PREFIX + "/auth/password-reset/request")
-    async def reset_request(request: Request):
-        body = _json_body(await _safe_json(request))
+    def reset_request(request: Request, body: dict = Body(default=None)):
+        body = _json_body(body)
         conn = _open()
         try:
             raw = auth.issue_reset_token(conn, body.get("email") or "")
@@ -235,9 +349,9 @@ def mount(app) -> bool:
         return out
 
     @app.post(_PREFIX + "/auth/password-reset/confirm")
-    async def reset_confirm(request: Request):
+    def reset_confirm(request: Request, body: dict = Body(default=None)):
         from .passwords import PasswordError
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
             try:
@@ -253,18 +367,24 @@ def mount(app) -> bool:
 
     # ══════════════════════════ STUDIES ═════════════════════════════════════
     def _validate_smtp_binding(conn, ctx: AuthContext, smtp_config_id):
-        """ارفض ربط SMTP عابراً للمستأجر — reject foreign smtp_config binding."""
-        if smtp_config_id in (None, "", 0):
+        """ارفض ربط SMTP عابراً للمستأجر — reject foreign smtp_config binding.
+
+        `None` وحدها تعني «غير مضبوط»؛ أمّا 0 أو "" فقيمة **غير صالحة** تُرفَض
+        422 — كانت تعبر الفحص ثم تُكتب في عمود بمفتاح أجنبي مُفعَّل فتُنتج 500.
+        Only None means unset: 0/"" are invalid (they used to reach the FK).
+        """
+        if smtp_config_id is None:
             return None
+        sid = _as_int(smtp_config_id, "smtp_config_id", minimum=1)
         row = conn.execute("SELECT * FROM smtp_configs WHERE id = ?",
-                           (smtp_config_id,)).fetchone()
+                           (sid,)).fetchone()
         if not row or row["owner_id"] != ctx.account_id:
             raise HTTPException(status_code=422,
                                 detail="smtp_config_id not owned by this account")
         return dict(row)
 
     @app.get(_PREFIX + "/studies")
-    async def list_studies(request: Request):
+    def list_studies(request: Request):
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
         conn = _open()
         try:
@@ -274,15 +394,18 @@ def mount(app) -> bool:
         return {"studies": rows}
 
     @app.post(_PREFIX + "/studies")
-    async def create_study(request: Request):
+    def create_study(request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
             _validate_smtp_binding(conn, ctx, body.get("smtp_config_id"))
             fields = {k: body.get(k) for k in
                       ("title_en", "title_ar", "description_en", "description_ar",
-                       "target_count", "smtp_config_id")}
+                       "smtp_config_id")}
+            # عدد مستهدف صحيح غير سالب — otherwise launch's int() would 500 later.
+            fields["target_count"] = _as_int(body.get("target_count"),
+                                             "target_count", minimum=0, default=0)
             fields["created_by_user_id"] = ctx.user_id
             row = repository.studies(conn).create(ctx.account_id, fields)
             audit.record(conn, action="study_created", user_id=ctx.user_id,
@@ -294,31 +417,28 @@ def mount(app) -> bool:
         return row
 
     @app.get(_PREFIX + "/studies/{study_id}")
-    async def get_study(study_id: int, request: Request):
-        ctx, conn, row = _tenant_detail(request, repository.studies, study_id, "study")
-        conn.close()
-        return row
+    def get_study(study_id: int, request: Request):
+        return _tenant_detail(request, repository.studies, study_id, "study")
 
     @app.patch(_PREFIX + "/studies/{study_id}")
-    async def patch_study(study_id: int, request: Request):
+    def patch_study(study_id: int, request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
             if body.get("smtp_config_id") is not None:
                 _validate_smtp_binding(conn, ctx, body.get("smtp_config_id"))
+            fields = {k: body[k] for k in body if k in
+                      ("title_en", "title_ar", "description_en",
+                       "description_ar", "smtp_config_id")}
+            if "target_count" in body:   # صحيح غير سالب أو 422 (لا None لعمود NOT NULL)
+                fields["target_count"] = _as_int(body.get("target_count"),
+                                                 "target_count", minimum=0)
             repo = repository.studies(conn)
-            updated = repo.update(ctx.account_id, study_id,
-                                  {k: body[k] for k in body if k in
-                                   ("title_en", "title_ar", "description_en",
-                                    "description_ar", "target_count", "smtp_config_id")})
+            updated = repo.update(ctx.account_id, study_id, fields)
             if updated is None:
-                if repo.exists_anywhere(study_id):
-                    audit.record_denied(conn, action="cross_tenant_write",
-                                        user_id=ctx.user_id, account_id=ctx.account_id,
-                                        resource_type="study", resource_id=study_id,
-                                        ip_address=_client_ip(request))
-                raise HTTPException(status_code=404, detail="not found")
+                _deny_write_404(conn, request, ctx, repo, study_id, "study",
+                                "cross_tenant_write")
             audit.record(conn, action="study_updated", user_id=ctx.user_id,
                          account_id=ctx.account_id, resource_type="study",
                          resource_id=study_id)
@@ -328,19 +448,15 @@ def mount(app) -> bool:
         return updated
 
     @app.delete(_PREFIX + "/studies/{study_id}")
-    async def delete_study(study_id: int, request: Request):
+    def delete_study(study_id: int, request: Request):
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
         conn = _open()
         try:
             repo = repository.studies(conn)
             ok = repo.delete(ctx.account_id, study_id)
             if not ok:
-                if repo.exists_anywhere(study_id):
-                    audit.record_denied(conn, action="cross_tenant_delete",
-                                        user_id=ctx.user_id, account_id=ctx.account_id,
-                                        resource_type="study", resource_id=study_id,
-                                        ip_address=_client_ip(request))
-                raise HTTPException(status_code=404, detail="not found")
+                _deny_write_404(conn, request, ctx, repo, study_id, "study",
+                                "cross_tenant_delete")
             audit.record(conn, action="study_deleted", user_id=ctx.user_id,
                          account_id=ctx.account_id, resource_type="study",
                          resource_id=study_id)
@@ -350,24 +466,27 @@ def mount(app) -> bool:
         return {"ok": True}
 
     @app.post(_PREFIX + "/studies/{study_id}/launch")
-    async def launch_study(study_id: int, request: Request):
-        """أطلق دراسة — smtp validation → wallet sufficiency → quota → in_progress.
+    def launch_study(study_id: int, request: Request, body: dict = Body(default=None)):
+        """أطلق دراسة — smtp validation → wallet sufficiency → claim → quota → queue.
 
         العدّاد يزيد هنا فقط (أوّل بريد). مفتاح القتل لا يمنع الإطلاق لكنه يوقف
         الإرسال في العامل. The quota counter increments only here.
+
+        **ترتيب مقصود**: الانتقال draft→in_progress يُطالَب به ذرّياً (`AND
+        state='draft'` + فحص rowcount) **قبل** حجز الحصّة، فنقرتان متزامنتان
+        لا تُنتجان إلا رابحاً واحداً — سابقاً كانتا تستهلكان حصّتين وتصفّان كل
+        عميل مرّتين. وإن رُفضت الحصّة يُعاد الانتقال إلى draft (تعويض) فلا
+        تُحرَق حصّة بدراسة لم تنطلق. Claim-then-reserve, with compensation.
         """
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
-            study = repository.studies(conn).get(ctx.account_id, study_id)
+            repo = repository.studies(conn)
+            study = repo.get(ctx.account_id, study_id)
             if study is None:
-                if repository.studies(conn).exists_anywhere(study_id):
-                    audit.record_denied(conn, action="cross_tenant_launch",
-                                        user_id=ctx.user_id, account_id=ctx.account_id,
-                                        resource_type="study", resource_id=study_id,
-                                        ip_address=_client_ip(request))
-                raise HTTPException(status_code=404, detail="not found")
+                _deny_write_404(conn, request, ctx, repo, study_id, "study",
+                                "cross_tenant_launch")
             if study["state"] != "draft":
                 raise HTTPException(status_code=409,
                                     detail=f"study is {study['state']}, not draft")
@@ -391,10 +510,25 @@ def mount(app) -> bool:
                                     detail={"error": "insufficient_balance",
                                             "projected_cents": projected,
                                             "balance_cents": int(w["balance"])})
-            # (3) الحصّة: احجز (يزيد العدّاد) · quota reserve (increments counter).
+            # (3) طالِب بالانتقال ذرّياً · atomically claim draft→in_progress.
+            now = auth.now_iso()
+            claim = conn.execute(
+                "UPDATE studies SET state = 'in_progress', launched_at = ?, "
+                "updated_at = ? WHERE id = ? AND owner_id = ? AND state = 'draft'",
+                (now, now, study_id, ctx.account_id))
+            conn.commit()
+            if claim.rowcount == 0:   # سبقنا طلبٌ متزامن · a concurrent launch won
+                raise HTTPException(status_code=409,
+                                    detail="study is no longer draft (already launching)")
+            # (4) الحصّة: احجز (يزيد العدّاد) · quota reserve (increments counter).
             decision = quota.reserve_launch(conn, ctx.account_id,
                                             actor_user_id=ctx.user_id)
             if not decision.allowed:
+                # تعويض: أعِد الدراسة مسودّةً فلا تُحرَق حصّة بلا إطلاق.
+                conn.execute("UPDATE studies SET state = 'draft', launched_at = NULL, "
+                             "updated_at = ? WHERE id = ? AND owner_id = ?",
+                             (auth.now_iso(), study_id, ctx.account_id))
+                conn.commit()
                 raise HTTPException(status_code=403,
                                     detail={"error": "quota_exceeded",
                                             "reason": decision.reason,
@@ -402,25 +536,28 @@ def mount(app) -> bool:
                                             "limit": decision.limit,
                                             "used": decision.used,
                                             "upgrade": True})
-            # (4) انتقال draft→in_progress + صفّ البريد (إن مُرّرت قائمة) .
-            conn.execute("UPDATE studies SET state = 'in_progress', launched_at = ?, "
-                         "updated_at = ? WHERE id = ? AND owner_id = ?",
-                         (auth.now_iso(), auth.now_iso(), study_id, ctx.account_id))
+            # (5) صفّ البريد (إن مُرّرت قائمة) — استعلام واحد لكل العملاء والتزام
+            # واحد في النهاية، بدل SELECT وcommit لكل مستلم (5000 مستلم = 5000
+            # جولة + 5000 fsync). One batched SELECT, one commit.
             queued = 0
             draft_id = body.get("draft_id")
             prospect_ids = body.get("prospect_ids") or []
             if draft_id and prospect_ids:
                 draft = repository.drafts(conn).get(ctx.account_id, draft_id)
                 if draft:
-                    for pid in prospect_ids:
-                        pr = repository.prospects(conn).get(ctx.account_id, pid)
-                        if pr:
-                            email_queue.enqueue(
-                                conn, account_id=ctx.account_id, study_id=study_id,
-                                prospect=pr, draft=draft,
-                                smtp_config_id=study["smtp_config_id"],
-                                actor_user_id=ctx.user_id)
-                            queued += 1
+                    ids = [_as_int(p, "prospect_ids[]", minimum=1)
+                           for p in prospect_ids]
+                    marks = ",".join("?" for _ in ids)
+                    rows = conn.execute(
+                        f"SELECT * FROM prospects WHERE owner_id = ? AND id IN ({marks})",
+                        [ctx.account_id, *ids]).fetchall()
+                    for pr in rows:
+                        email_queue.enqueue(
+                            conn, account_id=ctx.account_id, study_id=study_id,
+                            prospect=dict(pr), draft=draft,
+                            smtp_config_id=study["smtp_config_id"],
+                            actor_user_id=ctx.user_id, commit=False)
+                        queued += 1
             audit.record(conn, action="study_launched", user_id=ctx.user_id,
                          account_id=ctx.account_id, resource_type="study",
                          resource_id=study_id, changes={"queued": queued})
@@ -433,7 +570,7 @@ def mount(app) -> bool:
 
     # ══════════════════════════ PROSPECTS ═══════════════════════════════════
     @app.get(_PREFIX + "/prospects")
-    async def list_prospects(request: Request):
+    def list_prospects(request: Request):
         ctx = _require(request, Role.FACTORY)  # PII — factory own only
         conn = _open()
         try:
@@ -443,17 +580,20 @@ def mount(app) -> bool:
         return {"prospects": rows}
 
     @app.post(_PREFIX + "/prospects")
-    async def create_prospect(request: Request):
+    def create_prospect(request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
+            _require_fields(body, "email")
             fields = {k: body.get(k) for k in
                       ("email", "first_name", "last_name", "company", "industry",
                        "language_preference", "tags")}
             try:
                 row = repository.prospects(conn).create(ctx.account_id, fields)
-            except Exception as exc:  # unique (owner_id,email) etc.
+            except sqlite3.IntegrityError as exc:
+                # خطأ عميل (بريد مكرّر/قيد عمود) => 422. أمّا أخطاء التشغيل
+                # (قفل/قرص) فتُترك تصعد 5xx كي لا تُقنَّع كخطأ مدخلات.
                 raise HTTPException(status_code=422, detail=str(exc))
             conn.commit()
         finally:
@@ -461,49 +601,45 @@ def mount(app) -> bool:
         return row
 
     @app.get(_PREFIX + "/prospects/{prospect_id}")
-    async def get_prospect(prospect_id: int, request: Request):
-        ctx, conn, row = _tenant_detail(request, repository.prospects,
-                                        prospect_id, "prospect")
-        conn.close()
-        return row
+    def get_prospect(prospect_id: int, request: Request):
+        return _tenant_detail(request, repository.prospects, prospect_id, "prospect")
 
     @app.patch(_PREFIX + "/prospects/{prospect_id}")
-    async def patch_prospect(prospect_id: int, request: Request):
+    def patch_prospect(prospect_id: int, request: Request,
+                       body: dict = Body(default=None)):
         ctx = _require(request, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
             repo = repository.prospects(conn)
             try:
                 updated = repo.update(ctx.account_id, prospect_id, body)
-            except Exception as exc:  # تصادم UNIQUE(owner_id,email) => 422 لا 500
+            except sqlite3.IntegrityError as exc:  # UNIQUE(owner_id,email) => 422
                 raise HTTPException(status_code=422, detail=str(exc))
             if updated is None:
-                if repo.exists_anywhere(prospect_id):
-                    audit.record_denied(conn, action="cross_tenant_write",
-                                        user_id=ctx.user_id, account_id=ctx.account_id,
-                                        resource_type="prospect", resource_id=prospect_id,
-                                        ip_address=_client_ip(request))
-                raise HTTPException(status_code=404, detail="not found")
+                _deny_write_404(conn, request, ctx, repo, prospect_id, "prospect",
+                                "cross_tenant_write")
+            audit.record(conn, action="prospect_updated", user_id=ctx.user_id,
+                         account_id=ctx.account_id, resource_type="prospect",
+                         resource_id=prospect_id)
             conn.commit()
         finally:
             conn.close()
         return updated
 
     @app.delete(_PREFIX + "/prospects/{prospect_id}")
-    async def delete_prospect(prospect_id: int, request: Request):
+    def delete_prospect(prospect_id: int, request: Request):
         ctx = _require(request, Role.FACTORY)
         conn = _open()
         try:
             repo = repository.prospects(conn)
             ok = repo.delete(ctx.account_id, prospect_id)
             if not ok:
-                if repo.exists_anywhere(prospect_id):
-                    audit.record_denied(conn, action="cross_tenant_delete",
-                                        user_id=ctx.user_id, account_id=ctx.account_id,
-                                        resource_type="prospect", resource_id=prospect_id,
-                                        ip_address=_client_ip(request))
-                raise HTTPException(status_code=404, detail="not found")
+                _deny_write_404(conn, request, ctx, repo, prospect_id, "prospect",
+                                "cross_tenant_delete")
+            audit.record(conn, action="prospect_deleted", user_id=ctx.user_id,
+                         account_id=ctx.account_id, resource_type="prospect",
+                         resource_id=prospect_id)
             conn.commit()
         finally:
             conn.close()
@@ -511,7 +647,7 @@ def mount(app) -> bool:
 
     # ══════════════════════════ SMTP CONFIGS ════════════════════════════════
     @app.get(_PREFIX + "/smtp-configs")
-    async def list_smtp(request: Request):
+    def list_smtp(request: Request):
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
         conn = _open()
         try:
@@ -524,20 +660,27 @@ def mount(app) -> bool:
         return {"smtp_configs": rows}
 
     @app.post(_PREFIX + "/smtp-configs")
-    async def create_smtp(request: Request):
+    def create_smtp(request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
+            # أعمدة NOT NULL تُتحقَّق هنا فيصير النقص 422 لا 500 (IntegrityError).
+            _require_fields(body, "host", "port", "from_email")
             fields = {k: body.get(k) for k in
-                      ("label", "host", "port", "from_email", "from_name",
+                      ("label", "host", "from_email", "from_name",
                        "use_tls", "is_active")}
+            fields["port"] = _as_int(body.get("port"), "port",
+                                     minimum=1, maximum=65535)
             # تشفير بيانات الاعتماد عند التخزين · encrypt credentials at rest.
             if body.get("username"):
                 fields["username_enc"] = crypto.encrypt(body["username"])
             if body.get("password"):
                 fields["password_enc"] = crypto.encrypt(body["password"])
-            row = repository.smtp_configs(conn).create(ctx.account_id, fields)
+            try:
+                row = repository.smtp_configs(conn).create(ctx.account_id, fields)
+            except sqlite3.IntegrityError as exc:
+                raise HTTPException(status_code=422, detail=str(exc))
             row.pop("username_enc", None)
             row.pop("password_enc", None)
             conn.commit()
@@ -547,16 +690,20 @@ def mount(app) -> bool:
 
     # ══════════════════════════ IMAGES ══════════════════════════════════════
     @app.post(_PREFIX + "/images")
-    async def create_image(request: Request):
+    def create_image(request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.FACTORY)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
             ext = (body.get("ext") or "bin").lstrip(".")
             key = f"{ctx.account_id}/{uuid.uuid4().hex}.{ext}"
             fields = {"filename": body.get("filename"), "storage_key": key,
                       "mime_type": body.get("mime_type"),
-                      "size_bytes": int(body.get("size_bytes") or 0),
+                      # حجم غير سالب حتماً: قيمة سالبة كانت تُنقص مجموع الحساب
+                      # فيتخطّاه `HAVING bytes > 0` وتصير فاتورة تخزينه صفراً.
+                      # Non-negative: a negative row could zero the storage bill.
+                      "size_bytes": _as_int(body.get("size_bytes"), "size_bytes",
+                                            minimum=0, default=0),
                       "uploaded_by_user_id": ctx.user_id,
                       "alt_text_en": body.get("alt_text_en"),
                       "alt_text_ar": body.get("alt_text_ar")}
@@ -567,24 +714,28 @@ def mount(app) -> bool:
         return row
 
     @app.get(_PREFIX + "/images/{image_id}/signed-url")
-    async def image_signed_url(image_id: int, request: Request):
-        """رابط موقّع للصورة — verify owner_id BEFORE signing; foreign ⇒ 404/403."""
-        ctx, conn, row = _tenant_detail(request, repository.images, image_id, "image")
-        try:
-            from . import tokens
-            import time
-            # التوقيع يحدث فقط بعد إثبات الملكية · signed only after ownership proven.
-            expiry = int(time.time()) + 900
-            payload = f"{row['storage_key']}:{expiry}"
-            sig = tokens.sign(payload)
-            url = f"/files/{row['storage_key']}?expires={expiry}&sig={sig}"
-        finally:
-            conn.close()
-        return {"signed_url": url, "expires": expiry}
+    def image_signed_url(image_id: int, request: Request):
+        """رابط موقّع للصورة — verify owner_id BEFORE signing; foreign ⇒ 404/403.
+
+        **حدّ معلَن**: مسار الخدمة `/files/...` نفسه يأتي مع خزن البايتات في
+        موجة الصور (PR-8) — لا شيء يُرفَع فعلياً الآن (هذه النقطة تسجّل بيانات
+        وصفية فقط)، فالرابط موقّع وصحيح البنية لكنه لا يُخدَم بعد. البوّابة التي
+        يفرضها القسم ١٣ (لا توقيع لمالك أجنبي) نافذة هنا.
+        Declared limit: the /files serving route lands with PR-8 storage.
+        """
+        row = _tenant_detail(request, repository.images, image_id, "image")
+        from . import tokens
+        # التوقيع يحدث فقط بعد إثبات الملكية · signed only after ownership proven.
+        expiry = int(time.time()) + 900
+        sig = tokens.sign(f"{row['storage_key']}:{expiry}")
+        return {"signed_url": f"/files/{row['storage_key']}?expires={expiry}&sig={sig}",
+                "expires": expiry, "storage_key": row["storage_key"],
+                "serving_available": False,
+                "note": "URL signing is enforced now; /files serving lands in PR-8"}
 
     # ══════════════════════════ WALLET / LEDGER ═════════════════════════════
     @app.get(_PREFIX + "/wallet")
-    async def get_wallet_ep(request: Request):
+    def get_wallet_ep(request: Request):
         # analyst: لا بيانات حساب فردية · no individual account data.
         ctx = _ctx(request)
         if ctx.is_silk_analyst:
@@ -597,7 +748,7 @@ def mount(app) -> bool:
         return w
 
     @app.get(_PREFIX + "/wallet/ledger")
-    async def get_ledger_ep(request: Request, limit: int = 20):
+    def get_ledger_ep(request: Request, limit: int = 20):
         ctx = _ctx(request)
         if ctx.is_silk_analyst:
             raise HTTPException(status_code=403, detail="analysts see aggregates only")
@@ -611,7 +762,7 @@ def mount(app) -> bool:
 
     # ══════════════════════════ AUDIT (factory own) ═════════════════════════
     @app.get(_PREFIX + "/audit")
-    async def factory_audit(request: Request, limit: int = 50):
+    def factory_audit(request: Request, limit: int = 50):
         ctx = _require(request, Role.FACTORY)
         conn = _open()
         try:  # own account only — cannot see other accounts' logs
@@ -622,7 +773,7 @@ def mount(app) -> bool:
 
     # ══════════════════════════ ADMIN ═══════════════════════════════════════
     @app.get(_PREFIX + "/admin/metrics")
-    async def admin_metrics(request: Request):
+    def admin_metrics(request: Request):
         ctx = _require(request, Role.SILK_ADMIN)
         conn = _open()
         try:
@@ -642,13 +793,15 @@ def mount(app) -> bool:
         return out
 
     @app.post(_PREFIX + "/admin/fund")
-    async def admin_fund(request: Request):
+    def admin_fund(request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.SILK_ADMIN)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
-            factory_id = int(body.get("account_id") or 0)
-            amount = int(body.get("amount_cents") or 0)
+            # صحيحان أو 422: `int("1,000")` كان 500، و250.75 كانت تُقتطَع صمتاً
+            # إلى 250 فيُقيَّد مبلغ يخالف ما أرسله الأدمِن (المال سنتات صحيحة).
+            factory_id = _as_int(body.get("account_id"), "account_id", minimum=1)
+            amount = _as_int(body.get("amount_cents"), "amount_cents", minimum=1)
             acc = conn.execute("SELECT * FROM accounts WHERE id = ?",
                                (factory_id,)).fetchone()
             if not acc or acc["kind"] != "factory":
@@ -672,7 +825,7 @@ def mount(app) -> bool:
         return out
 
     @app.get(_PREFIX + "/admin/kill-switch")
-    async def get_kill_switch(request: Request):
+    def get_kill_switch(request: Request):
         ctx = _require(request, Role.SILK_ADMIN)
         conn = _open()
         try:
@@ -682,9 +835,9 @@ def mount(app) -> bool:
         return {"on": state}
 
     @app.post(_PREFIX + "/admin/kill-switch")
-    async def set_kill_switch_ep(request: Request):
+    def set_kill_switch_ep(request: Request, body: dict = Body(default=None)):
         ctx = _require(request, Role.SILK_ADMIN)
-        body = _json_body(await _safe_json(request))
+        body = _json_body(body)
         conn = _open()
         try:
             settings.set_kill_switch(conn, bool(body.get("on")),
@@ -695,8 +848,8 @@ def mount(app) -> bool:
         return {"on": state}
 
     @app.get(_PREFIX + "/admin/audit")
-    async def admin_audit(request: Request, limit: int = 50,
-                          account_id: int | None = None, action: str | None = None):
+    def admin_audit(request: Request, limit: int = 50,
+                    account_id: int | None = None, action: str | None = None):
         ctx = _require(request, Role.SILK_ADMIN)
         conn = _open()
         try:  # global search (admin only)
@@ -706,7 +859,7 @@ def mount(app) -> bool:
         return {"audit": rows}
 
     @app.post(_PREFIX + "/admin/users/{user_id}/reset")
-    async def admin_issue_reset(user_id: int, request: Request):
+    def admin_issue_reset(user_id: int, request: Request):
         """إعادة تعيين مساعدة من الأدمِن — PR-5 stopgap until email delivery lands.
 
         يُصدر رمزاً أحادي الاستخدام (٣٠ دقيقة) لمستخدم، يوصله الأدمِن للمستخدم
@@ -731,7 +884,7 @@ def mount(app) -> bool:
 
     # ══════════════════════════ ANALYST ═════════════════════════════════════
     @app.get(_PREFIX + "/analyst/aggregates")
-    async def analyst_aggregates(request: Request):
+    def analyst_aggregates(request: Request):
         # مجمّعات مجهّلة للقراءة فقط — no account-level data, no PII.
         ctx = _require(request, Role.SILK_ANALYST, Role.SILK_ADMIN)
         conn = _open()
@@ -751,11 +904,3 @@ def mount(app) -> bool:
         return out
 
     return True
-
-
-async def _safe_json(request) -> dict:
-    """اقرأ جسم JSON بلا انهيار — parse body; {} on empty/invalid."""
-    try:
-        return await request.json()
-    except Exception:  # noqa: BLE001
-        return {}

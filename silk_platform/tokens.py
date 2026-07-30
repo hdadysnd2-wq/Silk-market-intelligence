@@ -19,10 +19,21 @@ import secrets
 _EPHEMERAL_SECRET = secrets.token_hex(32)
 
 
-def _secret() -> bytes:
-    """السرّ الخادمي للتوقيع/التجزئة — server signing secret (env or ephemeral)."""
+def secret() -> bytes:
+    """السرّ الخادمي — **المُحلِّل الوحيد** للسرّ (توقيع + تعمية الحقول).
+
+    مصدر واحد للحقيقة: `crypto.py` ينادي هذه ولا يعيد تنفيذ القاعدة، فنقل
+    السرّ إلى KMS/Vault لاحقاً يُعدَّل في موضع واحد ولا ينشقّ النظام (نصفه
+    يوقّع بسرّ ونصفه يعمّي بآخر ⇒ اعتماد SMTP غير قابل للفكّ).
+    The sole secret resolver for the whole package (env, else ephemeral).
+    """
     return (os.environ.get("SILK_PLATFORM_SECRET", "").strip()
             or _EPHEMERAL_SECRET).encode("utf-8")
+
+
+def _secret() -> bytes:
+    """اسم داخلي متوافق — internal alias kept for existing call sites."""
+    return secret()
 
 
 def new_token(nbytes: int = 32) -> str:

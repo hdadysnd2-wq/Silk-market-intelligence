@@ -27,8 +27,16 @@ _WRITABLE: dict[str, set[str]] = {
     "drafts": {"study_id", "subject_en", "subject_ar", "body_en", "body_ar", "version"},
     "images": {"filename", "storage_key", "mime_type", "size_bytes",
                "uploaded_by_user_id", "alt_text_en", "alt_text_ar"},
-    "comparison_funnels": {"state"},
+    # `comparison_funnels` غير مُدرَج عمداً: عمود `state` آلةُ حالاتٍ ببوّابة
+    # طبقة (Gold/Platinum) وقيود دفتر لكل انتقال، فإدراجه في CRUD العامّ يفتح
+    # باباً ثانياً يتخطّى تلك البوّابات. تُضيفه موجة القمع مع نقاطها واختباراتها.
+    # Deliberately absent: a gated state machine must not be generic-CRUD writable.
 }
+
+# جداول بلا عمود `updated_at` — الطابع الزمني عندها هو عمود الإنشاء وحده.
+# Tables whose only timestamp is their creation column (no updated_at).
+_NO_UPDATED_AT = {"images"}
+_CREATED_COL = {"images": "uploaded_at"}
 
 
 class TenantRepository:
@@ -90,14 +98,10 @@ class TenantRepository:
                  if k in _WRITABLE[self.table] and v is not None}
         clean[self.owner_col] = account_id
         now = now_iso()
-        cols = list(clean.keys())
-        if self.table != "images":
-            clean["created_at"] = now
+        clean[_CREATED_COL.get(self.table, "created_at")] = now
+        if self.table not in _NO_UPDATED_AT:
             clean["updated_at"] = now
-            cols = list(clean.keys())
-        else:
-            clean["uploaded_at"] = now
-            cols = list(clean.keys())
+        cols = list(clean.keys())
         placeholders = ", ".join("?" for _ in cols)
         cur = self.conn.execute(
             f"INSERT INTO {self.table} ({', '.join(cols)}) VALUES ({placeholders})",
@@ -114,7 +118,10 @@ class TenantRepository:
         clean = {k: v for k, v in fields.items() if k in _WRITABLE[self.table]}
         if not clean:
             return self.get(account_id, row_id)
-        clean["updated_at"] = now_iso()
+        # لا تختم `updated_at` على جدول لا يملكه (images) — كان يفشل كل تحديث
+        # لصورة بـ«no such column». Only stamp updated_at where the column exists.
+        if self.table not in _NO_UPDATED_AT:
+            clean["updated_at"] = now_iso()
         sets = ", ".join(f"{c} = ?" for c in clean)
         cur = self.conn.execute(
             f"UPDATE {self.table} SET {sets} WHERE id = ? AND {self.owner_col} = ?",
@@ -153,6 +160,6 @@ def drafts(conn: sqlite3.Connection) -> TenantRepository:
 def images(conn: sqlite3.Connection) -> TenantRepository:
     return TenantRepository(conn, "images")
 
-
-def funnels(conn: sqlite3.Connection) -> TenantRepository:
-    return TenantRepository(conn, "comparison_funnels")
+# لا مصنع `funnels()` هنا: القمع (Gold/Platinum) يحتاج بوّابة طبقة وقيود دفتر
+# لكل انتقال حالة، فمساره يُبنى مع نقاطه واختباراته في موجته لا قبلها.
+# No funnels() factory yet — the tier-gated funnel arrives with its own PR.
