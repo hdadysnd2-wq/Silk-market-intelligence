@@ -29,12 +29,26 @@ _SECTION_MARKERS = (
     "§58", "code-review", "code review",
 )
 
+# الأرقام العربية-الهندية (٠-٩) مقبولة كالغربية: هذا ريبو عربيّ أولاً، وكتابة
+# «٢ مُصلَحتان» هي الصيغة الطبيعية فيه. بوّابةٌ ترفض التصريح الصحيح لأنه مكتوب
+# بلغة الريبو تدفع كاتبه إلى **حذفها** — وهو أسوأ ما قد يحدث لحارس، والبوّابة
+# نفسها تحذّر منه. Arabic-Indic digits and dual/plural forms are first-class.
+_DIGITS = r"[0-9٠-٩]+"
+# صِيَغ «مُصلَحة» مفردةً ومثنّى وجمعاً، بالهمزة والشكل أو بدونهما.
+_FIXED_AR = r"مُ?صلَ?ح(ة|تان|تين|ات|ان)"
+
 # تصريح صريح عن الملاحظات العالية: إمّا نفيها أو معالجتها/تسجيلها.
 _HIGH_DECLARATIONS = (
-    r"لا\s+(عيوب|ملاحظات)\s+high",
+    r"لا\s+(عيوب|ملاحظات|ملاحظة)\s+high",
+    # «لا ملاحظة high غير معالَجة» — نفيٌ بصيغة «لا شيء متبقٍّ» لا «لا شيء وُجد».
+    r"لا\s+(ملاحظة|ملاحظات|عيوب)\s+high[^.\n]{0,40}(غير\s+معالَ?جة|بلا\s+معالجة)",
     r"no\s+high[- ](severity\s+)?(findings|defects|issues)",
+    r"no\s+unaddressed\s+high",
     r"high[- ]severity[^.\n]{0,40}(fixed|resolved|addressed|none)",
-    r"(\d+)\s*(ملاحظة|ملاحظات|finding|findings)[^.\n]{0,60}(مُصلَحة|مصلحة|fixed|addressed)",
+    rf"{_DIGITS}\s*(ملاحظة|ملاحظات|finding|findings)[^.\n]{{0,60}}({_FIXED_AR}|fixed|addressed)",
+    # الترتيب المعاكس: «٢ مُصلَحتان» / «مُصلَحتان: ٢» بلا كلمة «ملاحظة» بينهما.
+    rf"{_DIGITS}\s*{_FIXED_AR}",
+    rf"{_FIXED_AR}[^.\n]{{0,20}}{_DIGITS}",
     r"خطر\s+مقبول",                     # accepted-risk ledger entry
     r"accepted\s+risk",
 )

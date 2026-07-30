@@ -75,3 +75,48 @@ def test_main_passes_on_a_compliant_pr_payload(tmp_path, monkeypatch):
         encoding="utf-8")
     monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload))
     assert gate.main() == 0
+
+
+# ── صِيَغ عربية طبيعية · Arabic-native declaration forms (PR-3 hardening) ────
+# البوّابة رفضت متن PR #189 الصحيح لأنه كتب «٢ مُصلَحتان» بأرقام عربية-هندية
+# وصيغة مثنّى. بوّابةٌ ترفض التصريح الصحيح لأنه بلغة الريبو تدفع كاتبه لحذفها —
+# أسوأ مصير لحارس. هذه الأقفال تمنع عودة البرشاقة.
+import pytest as _pytest
+
+
+@_pytest.mark.parametrize("phrase", [
+    "٢ ملاحظة مُصلَحة",          # أرقام عربية-هندية + مفرد
+    "٢ مُصلَحتان",                # مثنّى بلا كلمة «ملاحظة»
+    "٣ مُصلَحات",                 # جمع
+    "ملاحظتان مُصلَحتان: ٢",      # ترتيب معاكس
+    "2 findings fixed",
+    "لا عيوب high",
+    "لا ملاحظة high غير معالَجة",  # نفيٌ بصيغة «لا متبقٍّ»
+    "no high-severity findings",
+    "no unaddressed high findings",
+    "خطر مقبول",
+    "accepted risk",
+])
+def test_natural_declaration_forms_are_accepted(phrase):
+    """كل صيغة تصريح طبيعية تُقبَل — عربية ومثنّى وأرقاماً هندية."""
+    body = f"## المراجعة الذاتية · self-review (§58)\n\n{phrase} وتمّت المعالجة."
+    assert gate.check(body) == [], f"rejected a valid declaration: {phrase!r}"
+
+
+def test_a_body_with_a_section_but_no_outcome_still_fails():
+    """قسمٌ بلا تصريح عن النتيجة **يجب** أن يفشل — البوّابة لم تُفرَّغ بالتوسيع.
+
+    هذا هو الاتجاه المهمّ بعد توسيع الصِيَغ: توسيعٌ يقبل كل شيء = حذفُ الحارس.
+    """
+    body = ("## المراجعة الذاتية · self-review (§58)\n\n"
+            "راجعتُ الفرق وكل شيء يبدو ممتازاً.")
+    problems = gate.check(body)
+    assert problems, "a section with no high-severity outcome must still fail"
+    assert any("high-severity outcome" in p for p in problems)
+
+
+def test_arabic_digits_alone_are_not_a_declaration():
+    """رقمٌ عربيّ عابر في المتن لا يُعَدّ تصريحاً — لا إيجابٌ كاذب."""
+    body = ("## المراجعة الذاتية · self-review (§58)\n\n"
+            "غيّرتُ ٣ ملفات وأضفتُ ٧ اختبارات.")
+    assert gate.check(body), "loose digits must not satisfy the gate"
