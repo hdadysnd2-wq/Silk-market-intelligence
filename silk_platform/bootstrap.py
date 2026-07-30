@@ -45,6 +45,38 @@ def _explicit(name: str) -> bool:
     return bool(os.environ.get(_IDENTITY_ENV[name], "").strip())
 
 
+def seed_problem() -> str | None:
+    """أوّل كلمة بذر مضبوطة تخالف السياسة — **باسم المتغيّر، لا قيمته**.
+
+    **البلاغ الحيّ الذي أنتج هذه الدالّة:** المالك ضبط البوّابة ثم ظلّ الدخول
+    يُرفَض بـ«invalid credentials». والسبب أن كلمته خالفت السياسة، فرفع
+    `passwords.hash_password` استثناءً، فابتلعه الإقلاع (صواباً — لا يُسقِط
+    الخدمة)، فبقيت القاعدة بصفر مستخدمين. و`readiness()` قال `seeded:false` مع
+    `seed_gate_set:true` **بلا سبب**، فالسبب كان في سجلّ النشر وحده. لا يجوز
+    إجبار المالك على قراءة السجلّات لمعرفة أنّ كلمته تحتاج حرفاً كبيراً.
+
+    ملاحظتان على السلامة:
+    - رسائل `validate_policy` نصوصٌ ثابتة (قواعد السياسة) لا تحوي كلمة المرور
+      أبداً، فإظهارها في `/health` العامّة يسمّي **المتغيّر والقاعدة** فقط.
+    - البوّابة غير المضبوطة تُبلَّغ بحقلها `seed_gate_set`، فلا نُزاحمها بسبب
+      ثانٍ لا أثر له (لا بذر أصلاً بلا بوّابة).
+
+    Names the offending VARIABLE and the violated rule — never the value.
+    """
+    if not os.environ.get(GATE_ENV, "").strip():
+        return None
+    from . import passwords
+    for _kind, env in sorted(_IDENTITY_ENV.items()):
+        raw = os.environ.get(env, "").strip()
+        if not raw:
+            continue                      # غير مضبوطة ⇒ تُولَّد عشوائياً
+        try:
+            passwords.validate_policy(raw)
+        except passwords.PasswordError as exc:
+            return f"{env}: {exc}"
+    return None
+
+
 def is_seeded(conn: sqlite3.Connection) -> bool:
     """هل توجد هويّة أدمِن؟ — same predicate `seed()` uses for idempotency."""
     row = conn.execute(
@@ -65,12 +97,16 @@ def readiness(conn: sqlite3.Connection) -> dict:
         except sqlite3.Error:
             return -1        # جدول غائب/قاعدة غير مهيّأة · schema not applied
     users = _count("SELECT COUNT(*) FROM users")
+    seeded = users > 0 and is_seeded(conn)
     return {
-        "seeded": users > 0 and is_seeded(conn),
+        "seeded": seeded,
         "users": users,
         "accounts": _count("SELECT COUNT(*) FROM accounts"),
         # هل البوّابة مضبوطة؟ (لا قيمتها) — يفسّر «لماذا لم يُبذَر».
         "seed_gate_set": bool(os.environ.get(GATE_ENV, "").strip()),
+        # ولماذا لم يُبذَر **والبوّابة مضبوطة**: اسم المتغيّر المخالف + القاعدة.
+        # لا معنى له بعد نجاح البذر، فيُصفَّر حينها.
+        "seed_error": None if seeded else seed_problem(),
     }
 
 
@@ -95,6 +131,19 @@ def maybe_seed(conn: sqlite3.Connection) -> dict:
             "(and optionally %s) then redeploy to create the accounts.",
             GATE_ENV, GATE_ENV, _IDENTITY_ENV["factory_a"])
         return {"seeded": False, "reason": "gate_unset", "gate": GATE_ENV}
+
+    # ارفض **قبل** المحاولة، وسمِّ المتغيّر. `seed()` يُلبِّد الكلمات الأربع
+    # مسبقاً قبل إدخال أيّ صفّ، فمخالفةٌ في هويّة اختياريّة تمنع إنشاء الأدمِن
+    # أيضاً؛ أُبقي هذا الرفضَ الشامل (تجاهلُ ما ضبطه المالك صراحةً أسوأ) وأُصلِح
+    # تشخيصه: «فشل» بلا اسم متغيّر كان يُلام فيه الأدمِن ظلماً.
+    problem = seed_problem()
+    if problem:
+        log.error(
+            "silk_platform: not seeding — %s. No account was created, so every "
+            "login will be rejected as 'invalid credentials'. The policy is: at "
+            "least 8 characters including a lowercase letter, an uppercase "
+            "letter and a digit. Fix that variable and redeploy.", problem)
+        return {"seeded": False, "reason": "password_policy", "detail": problem}
 
     try:
         if is_seeded(conn):
