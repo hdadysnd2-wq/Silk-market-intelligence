@@ -20,7 +20,7 @@ import time
 import uuid
 
 from . import (auth, audit, billing, crypto, email_queue, entitlements,
-               passwords, quota, reporting, repository, scheduler,
+               lifecycle, passwords, quota, reporting, repository, scheduler,
                seed as seed_mod, settings, smtp_transport, storage, throttle,
                tokens, unsubscribe, users as users_mod, wallet)
 from .db import connect, init_db
@@ -645,81 +645,43 @@ def mount(app) -> bool:
             conn.close()
         return out
 
-    @app.post(_PREFIX + "/studies/{study_id}/complete")
-    def complete_study(study_id: int, request: Request):
-        """أنهِ دراسة — in_progress→completed فقط، يختم completed_at.
-
-        لا انتقال من draft (لم تُطلَق أصلاً) ولا من archived. مطالبة ذرّية
-        بنفس نمط launch_study: `AND state='in_progress'` + فحص rowcount، كي
-        لا يُنهي طلبان متزامنان الدراسة مرّتين بقيدَي تدقيق متعارضين.
-        Atomic claim mirrors launch_study — a concurrent duplicate call 409s.
-        """
+    # ═══════════════ دورة حياة الدراسة · study lifecycle transitions ═════════
+    def _lifecycle(fn, study_id: int, request: Request, action: str):
+        """جسم مشترك لانتقالَي الإنهاء والأرشفة — one body so they cannot drift."""
         ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
         conn = _open()
         try:
-            repo = repository.studies(conn)
-            study = repo.get(ctx.account_id, study_id)
-            if study is None:
-                _deny_write_404(conn, request, ctx, repo, study_id, "study",
-                                "cross_tenant_complete")
-            if study["state"] != "in_progress":
-                raise HTTPException(status_code=409,
-                                    detail=f"study is {study['state']}, not in_progress")
-            now = auth.now_iso()
-            claim = conn.execute(
-                "UPDATE studies SET state = 'completed', completed_at = ?, "
-                "updated_at = ? WHERE id = ? AND owner_id = ? AND state = 'in_progress'",
-                (now, now, study_id, ctx.account_id))
-            if claim.rowcount == 0:
-                conn.commit()
-                raise HTTPException(status_code=409,
-                                    detail="study is no longer in_progress (already completed)")
-            audit.record(conn, action="study_completed", user_id=ctx.user_id,
-                         account_id=ctx.account_id, resource_type="study",
-                         resource_id=study_id)
-            conn.commit()
-            out = {"ok": True, "state": "completed", "completed_at": now}
+            try:
+                out = fn(conn, account_id=ctx.account_id, study_id=study_id,
+                         actor_user_id=ctx.user_id)
+            except lifecycle.LifecycleError as exc:
+                raise HTTPException(status_code=409, detail=exc.as_detail())
+            if out is None:
+                repo = repository.studies(conn)
+                _deny_write_404(conn, request, ctx, repo, study_id, "study", action)
         finally:
             conn.close()
         return out
+
+    @app.post(_PREFIX + "/studies/{study_id}/complete")
+    def complete_study_ep(study_id: int, request: Request):
+        """أنهِ دراسة — in_progress → completed؛ 409 ما دام في الطابور معلّق.
+
+        «مكتملة» ورسائلها ستخرج بعد دقائق **ادعاءٌ كاذب** عن الواقع — والعامل لا
+        يفحص حالة الدراسة، فلا شيء يوقفها. ينتظر العميل النفاد أو يؤرشف.
+        """
+        return _lifecycle(lifecycle.complete_study, study_id, request,
+                          "cross_tenant_complete")
 
     @app.post(_PREFIX + "/studies/{study_id}/archive")
-    def archive_study(study_id: int, request: Request):
-        """أرشِف دراسة — من draft أو completed فقط، لا من in_progress النشطة.
+    def archive_study_ep(study_id: int, request: Request):
+        """أرشِف دراسة — **سحبٌ حقيقي**: يُلغي البريد المعلّق ثم يُغلق الحالة.
 
-        دراسة نشطة (بريد ما زال يُصفّ/يُرسَل) لا تُؤرشَف مباشرة كي لا يُخفيها
-        هذا المسار عن لوحة المتابعة وهي حيّة — يجب completed أو حذف المسودّة
-        أولاً. An in-flight study cannot be archived out from under its send.
+        يرجّع `cancelled_queued_emails`. صفٌّ مُرسَل مِن قبل لا يُمَسّ (له قيد
+        موافقة وقيد دفتر)، وصفٌّ في الطريق (`sending`) يرفع 409 عابراً.
         """
-        ctx = _require(request, Role.SILK_ADMIN, Role.FACTORY)
-        conn = _open()
-        try:
-            repo = repository.studies(conn)
-            study = repo.get(ctx.account_id, study_id)
-            if study is None:
-                _deny_write_404(conn, request, ctx, repo, study_id, "study",
-                                "cross_tenant_archive")
-            if study["state"] not in ("draft", "completed"):
-                raise HTTPException(status_code=409,
-                                    detail=f"study is {study['state']}, cannot archive "
-                                           "from this state")
-            now = auth.now_iso()
-            claim = conn.execute(
-                "UPDATE studies SET state = 'archived', updated_at = ? "
-                "WHERE id = ? AND owner_id = ? AND state IN ('draft', 'completed')",
-                (now, study_id, ctx.account_id))
-            if claim.rowcount == 0:
-                conn.commit()
-                raise HTTPException(status_code=409,
-                                    detail="study state changed concurrently; not archived")
-            audit.record(conn, action="study_archived", user_id=ctx.user_id,
-                         account_id=ctx.account_id, resource_type="study",
-                         resource_id=study_id)
-            conn.commit()
-            out = {"ok": True, "state": "archived"}
-        finally:
-            conn.close()
-        return out
+        return _lifecycle(lifecycle.archive_study, study_id, request,
+                          "cross_tenant_archive")
 
     # ══════════════════════════ PROSPECTS ═══════════════════════════════════
     @app.get(_PREFIX + "/prospects")
