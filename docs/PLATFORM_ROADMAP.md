@@ -133,10 +133,21 @@ CRUD كامل مُستأجَر للدراسات/العملاء/المسودّا�
 الطابور بمطالبة ذرّية، مفتاح القتل **يُفحَص لكل بريد** (يتخطّى ولا يُسقط ويستأنف
 بالترتيب)، سجلّ الموافقة الحرفي، وقائمة القمع المقيَّدة بالحساب.
 
+### ✅ نُفِّذ الآن · shipped now
+
+| بند | الموضع | الدليل |
+|---|---|---|
+| **ناقل SMTP حقيقي** | `silk_platform/smtp_transport.py` (`send()`, stdlib `smtplib`+`email.mime`، `smtp_cls` مُدخَل حقناً)؛ `email_queue.sender()` يفكّ تعمية بيانات اعتماد `smtp_configs` ويناديه؛ موصول فعلياً بنبضة `scheduler.py` (`run_email_pass`، ليس على تقويم `due_jobs` — البريد يحتاج زمن استجابة بمقياس النبضة) | `tests/test_platform_smtp_delivery.py` |
+| **مفتاح idempotency** | `smtp_transport.message_id(kind, row_id)` حتميّ — إعادة معالجة نفس الصفّ (الحاصد) تُنتج **نفس** Message-ID، فخادمٌ يُميِّز به يعامل المحاولتين كرسالة واحدة؛ SMTP نفسه بلا آلية تسليم-مرّة-واحدة أصيلة | `test_message_id_is_deterministic_per_row` |
+| **حاصد الصفوف العالقة** | `email_queue.reap_stuck()` + عمود `claimed_at` (ترحيل 003) — صفٌّ عالق أقدم من `SILK_PLATFORM_EMAIL_STUCK_SECONDS` يُعاد `queued`، أو `failed` عند استنفاد `SILK_PLATFORM_EMAIL_MAX_ATTEMPTS` | `test_reap_stuck_requeues_recent_and_fails_exhausted` |
+| **رابط إلغاء اشتراك موقَّع + صفحته الثنائية اللغة** | `silk_platform/unsubscribe.py` (HMAC عبر `tokens.sign`، بلا حالة خادم)، `GET /platform/unsubscribe` (عامّ بلا مصادقة)، مُدرَج تلقائياً كعنصر نائب `{{unsubscribe_link}}` في `email_queue.enqueue()` | `test_unsubscribe_valid_link_updates_suppression_and_consent`، `test_unsubscribe_then_future_send_is_suppressed` |
+| **توصيل بريد إعادة تعيين كلمة المرور** | `smtp_transport.operator_config_from_env()` — SMTP تشغيلي منفصل عن `smtp_configs` المستأجَرة (يصدر قبل أي جلسة)؛ فشلٌ يُسجَّل تدقيقاً لا يُرفَع للردّ | `test_password_reset_sends_email_when_operator_smtp_configured`، `test_password_reset_email_failure_is_audited_not_raised` |
+
 ### ⬜ ناقص
-**ناقل SMTP حقيقي** (يُحقَن الآن)، وتوصيل بريد إعادة تعيين كلمة المرور، ورابط
-إلغاء الاشتراك الموقَّع + صفحته ثنائية اللغة، و**مفتاح idempotency** يجعل
-التسليم «مرّة واحدة» بدل «مرّة على الأقل»، و**حاصد** للصفوف العالقة في `sending`.
+
+| بند | الحالة | ملاحظة |
+|---|---|---|
+| صفحة `reset-password` نفسها | ⬜ PR-6 | البريد يحمل رابطاً لها (`{base}/reset-password?token=...`) لكن لا واجهة له بعد — طبقة عرض |
 
 ---
 

@@ -1,19 +1,24 @@
 """طابور البريد وعامل الإرسال — email queue + worker (kill-switch aware).
 
 خط الإرسال: اختر العملاء ← اختر المسودّة بلغة العميل ← عبّئ العناصر النائبة
-({{first_name}}) ← صُفّ برسالة مع تهيئة SMTP للدراسة. العامل يفحص مفتاح القتل
-**لكل بريد** وقت الإرسال؛ حين يكون مُفعَّلاً يتوقّف ويترك المصفوف (لا يُفقَد)،
-ويُستأنف بالترتيب عند التعطيل. كل إرسال ناجح: قيد سجلّ موافقة + خصم دفتر واحد.
+({{first_name}}, {{unsubscribe_link}}) ← صُفّ برسالة مع تهيئة SMTP للدراسة.
+العامل يفحص مفتاح القتل **لكل بريد** وقت الإرسال؛ حين يكون مُفعَّلاً يتوقّف
+ويترك المصفوف (لا يُفقَد)، ويُستأنف بالترتيب عند التعطيل. كل إرسال ناجح:
+قيد سجلّ موافقة + خصم دفتر واحد.
 
-Naql (transport) is injected — PR-1 wires none, so tests pass a fake sender and
-production wires a real SMTP sender in PR-5. Never sends silently.
+Naql (transport) is injected — `sender()` below wires the real SMTP transport
+(PR-5); `_null_sender` stays the module-level default so calling
+`process_queue` without an explicit sender never sends anything silently
+(only `scheduler.py`'s production wiring passes the real one).
 """
 from __future__ import annotations
 
+import datetime
 import re
 import sqlite3
 
-from . import settings, wallet
+from . import crypto, settings, unsubscribe, wallet
+from . import smtp_transport
 from .db import now_iso
 from .models import Operation, PRICE_EMAIL_SENT_CENTS
 
@@ -59,8 +64,14 @@ def enqueue(conn: sqlite3.Connection, *, account_id: int, study_id: int,
     Pass commit=False to batch many rows inside the caller's transaction.
     """
     subject, body = pick_content(draft, prospect.get("language_preference", "en"))
-    subject = interpolate(subject, prospect)
-    body = interpolate(body, prospect)
+    # رابط إلغاء اشتراك موقَّع كعنصر نائب — a signed unsubscribe link, injected
+    # as just another placeholder (`{{unsubscribe_link}}`) alongside prospect
+    # fields; the drafts UI (PR-6) is what will actually insert the token.
+    enriched = {**prospect,
+               "unsubscribe_link": unsubscribe.build_url(
+                   account_id, prospect.get("email") or "")}
+    subject = interpolate(subject, enriched)
+    body = interpolate(body, enriched)
     cur = conn.execute(
         "INSERT INTO email_queue (account_id, study_id, prospect_id, "
         "prospect_email, draft_id, smtp_config_id, subject, body, status, "
@@ -73,8 +84,28 @@ def enqueue(conn: sqlite3.Connection, *, account_id: int, study_id: int,
 
 
 def _null_sender(smtp_config: dict, email_row: dict) -> None:
-    """ناقل غير مُهيَّأ — PR-1 wires no real SMTP transport (PR-5 does)."""
-    raise RuntimeError("no SMTP transport configured (wired in PR-5)")
+    """ناقل غير مُهيَّأ — the default; a caller must opt in to the real one."""
+    raise RuntimeError("no SMTP transport configured (pass sender=email_queue.sender)")
+
+
+def sender(smtp_config: dict, email_row: dict) -> None:
+    """الناقل الحقيقي المُوصَّل — decrypts stored creds, sends via SMTP.
+
+    توقيعه مطابقٌ لـ`_null_sender` عمداً كي يُمرَّر مكانه بلا تغييرٍ في
+    `process_queue`. مُعرِّف الرسالة حتميّ (`smtp_transport.message_id`) —
+    مفتاح idempotency التسليم: إعادة معالجة نفس الصفّ (الحاصد) تُنتج نفس
+    المعرّف لا رسالة جديدة من منظور خادمٍ يُميِّز به.
+    Same signature as `_null_sender` on purpose — a drop-in replacement.
+    """
+    smtp_transport.send(
+        host=smtp_config["host"], port=smtp_config["port"],
+        use_tls=bool(smtp_config["use_tls"]),
+        username=crypto.decrypt(smtp_config.get("username_enc") or ""),
+        password=crypto.decrypt(smtp_config.get("password_enc") or ""),
+        from_email=smtp_config["from_email"], from_name=smtp_config.get("from_name") or "",
+        to_email=email_row["prospect_email"], subject=email_row["subject"],
+        body=email_row["body"],
+        msg_id=smtp_transport.message_id("email", email_row["id"]))
 
 
 def _safe_error(exc: Exception) -> str:
@@ -163,8 +194,8 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
         # البريد مرّتين ويُخصَم مرّتين. المطالبة UPDATE محروس + فحص rowcount،
         # فيخسر الثاني ويتخطّى. الحالة الوسيطة 'sending' تجعل المطالبة مرئية.
         claim = conn.execute(
-            "UPDATE email_queue SET status = 'sending', attempts = attempts + 1 "
-            "WHERE id = ? AND status = 'queued'", (eid,))
+            "UPDATE email_queue SET status = 'sending', attempts = attempts + 1, "
+            "claimed_at = ? WHERE id = ? AND status = 'queued'", (now_iso(), eid))
         if claim.rowcount == 0:
             conn.commit()
             continue   # مرورٌ آخر طالب به · another pass owns this row
@@ -225,3 +256,44 @@ def process_queue(conn: sqlite3.Connection, *, sender=None,
         "SELECT COUNT(*) AS c FROM email_queue WHERE status = 'queued'"
     ).fetchone()["c"])
     return summary
+
+
+def reap_stuck(conn: sqlite3.Connection, *, stale_after_seconds: int = 900,
+               max_attempts: int = 5) -> dict:
+    """حاصد الصفوف العالقة في 'sending' — reset or fail rows stuck mid-claim.
+
+    عملية طالبت بصفٍّ (`status='sending'`) ثم تعطّلت **قبل** الإرسال أو
+    **بعد** الإرسال وقبل تسجيل النتيجة، تترك صفّاً لا يتقدّم أبداً — لا
+    مرورٍ لاحق يلمسه لأن شرط المطالبة `status='queued'` لا يطابقه. هذا
+    يعيده queued (فيُعاد إرساله بنفس `message_id` الحتمي — مفتاح idempotency
+    التسليم أعلاه)، أو failed إن استُنفدت المحاولات (`attempts`، المُختوم
+    عند كل مطالبة) كي لا تتكرّر المحاولة أبداً على صفٍّ يفشل بثبات.
+
+    A process that claimed a row then crashed leaves it stuck forever — no
+    later pass re-claims it (the claim's `WHERE status='queued'` won't
+    match). Requeue it (the deterministic Message-ID makes a resend
+    idempotent downstream) unless attempts are exhausted, in which case it's
+    declared failed instead of retried forever.
+    """
+    cutoff = (datetime.datetime.now(datetime.timezone.utc)
+             - datetime.timedelta(seconds=stale_after_seconds)).strftime(
+                 "%Y-%m-%dT%H:%M:%SZ")
+    rows = conn.execute(
+        "SELECT id, attempts FROM email_queue WHERE status = 'sending' "
+        "AND claimed_at IS NOT NULL AND claimed_at < ?", (cutoff,)).fetchall()
+    requeued: list[int] = []
+    failed: list[int] = []
+    for row in rows:
+        if row["attempts"] >= max_attempts:
+            conn.execute(
+                "UPDATE email_queue SET status = 'failed', "
+                "last_error = 'stuck_in_sending_max_attempts_exceeded' "
+                "WHERE id = ? AND status = 'sending'", (row["id"],))
+            failed.append(row["id"])
+        else:
+            conn.execute(
+                "UPDATE email_queue SET status = 'queued', claimed_at = NULL "
+                "WHERE id = ? AND status = 'sending'", (row["id"],))
+            requeued.append(row["id"])
+    conn.commit()
+    return {"requeued": requeued, "failed": failed}

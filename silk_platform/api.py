@@ -21,7 +21,8 @@ import uuid
 
 from . import (auth, audit, billing, crypto, email_queue, entitlements,
                passwords, quota, reporting, repository, scheduler,
-               seed as seed_mod, settings, throttle, users as users_mod, wallet)
+               seed as seed_mod, settings, smtp_transport, throttle, tokens,
+               unsubscribe, users as users_mod, wallet)
 from .db import connect, init_db
 from .models import (AuthContext, PRICE_REPORT_CENTS, Role,
                      projected_email_cost_cents)
@@ -30,6 +31,22 @@ log = logging.getLogger(__name__)
 
 COOKIE_NAME = "silk_session"
 _PREFIX = "/platform"
+
+_UNSUB_STYLE = ("body{font-family:system-ui,sans-serif;max-width:32rem;"
+               "margin:4rem auto;padding:0 1rem;line-height:1.6;color:#1a1a1a}"
+               ".ar{direction:rtl;text-align:right;margin-top:1.5rem}")
+_UNSUB_OK_HTML = (f"<!doctype html><html><head><meta charset=\"utf-8\">"
+                  f"<title>Unsubscribed</title><style>{_UNSUB_STYLE}</style></head>"
+                  f"<body><p>You have been unsubscribed and will not receive "
+                  f"further emails from this sender.</p>"
+                  f"<p class=\"ar\">تم إلغاء اشتراكك، ولن تصلك رسائل أخرى من "
+                  f"هذا المرسل.</p></body></html>")
+_UNSUB_INVALID_HTML = (f"<!doctype html><html><head><meta charset=\"utf-8\">"
+                       f"<title>Invalid link</title><style>{_UNSUB_STYLE}</style></head>"
+                       f"<body><p>This unsubscribe link is invalid or has been "
+                       f"altered.</p>"
+                       f"<p class=\"ar\">رابط إلغاء الاشتراك هذا غير صالح أو "
+                       f"جرى تعديله.</p></body></html>")
 
 # خنق الدخول يعيش في قاعدة المنصّة لا في ذاكرة العملية (`silk_platform/throttle.py`):
 # الحالة على مستوى الوحدة تنفصل لكل worker فيصير السقف ١٠×عددها، وتُمحى عند كل
@@ -134,7 +151,7 @@ def mount(app) -> bool:
     boot_config_guard()   # افشل بصوت عالٍ على سوء تهيئة الإنتاج · fail fast
     try:
         from fastapi import Request, Response
-        from fastapi.responses import JSONResponse
+        from fastapi.responses import HTMLResponse, JSONResponse
     except Exception:  # noqa: BLE001 — بلا fastapi لا تركيب (استيراد بلا انهيار)
         log.warning("fastapi unavailable — platform router not mounted")
         return False
@@ -305,18 +322,59 @@ def mount(app) -> bool:
                 "role": ctx.role.value, "email": ctx.email,
                 "language_preference": ctx.language_preference}
 
+    def _send_password_reset_email(conn, email: str, lang: str, raw_token: str) -> None:
+        """أرسل بريد إعادة التعيين — best-effort؛ لا يرفع أبداً للمنادي.
+
+        غياب تهيئة SMTP التشغيلية (`operator_config_from_env`) أو فشل الإرسال
+        يُسجَّل تدقيقاً فقط؛ ردّ العميل يبقى `{"ok": true}` بصرف النظر — رفعُ
+        عطلٍ هنا كان سيصنع قناةً جانبية (توقيت/حالة استثناء) تُميّز بريداً
+        موجوداً عن غائب. Never raises — a failure here must not become a
+        side-channel that reveals whether the email exists.
+        """
+        cfg = smtp_transport.operator_config_from_env()
+        if cfg is None:
+            return
+        reset_url = f"{unsubscribe.base_url()}/reset-password?token={raw_token}"
+        if lang == "ar":
+            subject = "إعادة تعيين كلمة المرور — سِلك"
+            body = ("لإعادة تعيين كلمة مرورك اضغط الرابط التالي (صالح لفترة محدودة):\n"
+                    f"{reset_url}\n\nإن لم تطلب هذا فتجاهل الرسالة.")
+        else:
+            subject = "Password reset — Silk"
+            body = ("Reset your password using the link below (valid for a "
+                    f"limited time):\n{reset_url}\n\nIf you did not request this, "
+                    "ignore this email.")
+        msg_id = f"<platform-password-reset-{tokens.hash_token(raw_token)[:16]}@silk-platform.local>"
+        try:
+            smtp_transport.send(host=cfg["host"], port=cfg["port"], use_tls=cfg["use_tls"],
+                                username=cfg["username"], password=cfg["password"],
+                                from_email=cfg["from_email"], from_name=cfg["from_name"],
+                                to_email=email, subject=subject, body=body, msg_id=msg_id)
+        except Exception as exc:  # noqa: BLE001 — يُسجَّل لا يُخفى ولا يُرفَع
+            audit.record(conn, action="password_reset_email_failed",
+                         resource_type="user", changes={"error": email_queue._safe_error(exc)})
+            conn.commit()
+            return
+        audit.record(conn, action="password_reset_email_sent", resource_type="user")
+        conn.commit()
+
     @app.post(_PREFIX + "/auth/password-reset/request")
     def reset_request(request: Request, body: dict = Body(default=None)):
         body = _json_body(body)
+        email = (body.get("email") or "").strip().lower()
+        raw = None
         conn = _open()
         try:
-            raw = auth.issue_reset_token(conn, body.get("email") or "")
+            raw = auth.issue_reset_token(conn, email)
+            if raw is not None:
+                lang = auth.user_language_by_email(conn, email)
+                _send_password_reset_email(conn, email, lang, raw)
         finally:
             conn.close()
         # لا تفصح عن وجود المستخدم · never reveal whether the user exists.
         # أمنيّاً حرج: الرمز الخام لا يُعاد في الردّ إطلاقاً في الإنتاج — وإلا
         # لأمكن أي مهاجم طلب إعادة تعيين لأي بريد والاستيلاء على الحساب فوراً.
-        # يُرسَل بالبريد (PR-5). يُكشف في الردّ فقط خلف علم بيئة صريح للاختبار.
+        # يُرسَل بالبريد أعلاه. يُكشف في الردّ فقط خلف علم بيئة صريح للاختبار.
         # SECURITY: the raw token is emailed, never returned in the response —
         # exposing it would allow trivial account takeover. Test-only env gate.
         out = {"ok": True}
@@ -340,6 +398,36 @@ def mount(app) -> bool:
         if not ok:
             raise HTTPException(status_code=400, detail="invalid or used token")
         return {"ok": True}
+
+    # ══════════════════════════ UNSUBSCRIBE ═════════════════════════════════
+    # عامّة بلا مصادقة عمداً — تُنقَر من عميل بريدٍ خارج أي جلسة، والتوقيع
+    # HMAC (لا حساباً/دوراً) هو الحارس الوحيد؛ صحيح لأنه وُلِّد فقط عند صفّ
+    # بريدٍ فعليّ لهذا الزوج (account_id, email). Public by design — clicked
+    # from an email client outside any session; the HMAC signature alone is
+    # the guard, valid because it was only ever minted for a real queued send.
+    @app.get(_PREFIX + "/unsubscribe")
+    def unsubscribe_click(a: int, e: str, s: str):
+        if not unsubscribe.verify(a, e, s):
+            return HTMLResponse(_UNSUB_INVALID_HTML, status_code=400)
+        email_norm = (e or "").strip().lower()
+        conn = _open()
+        try:
+            now = auth.now_iso()
+            conn.execute(
+                "INSERT OR IGNORE INTO suppression_list "
+                "(account_id, email, reason, created_at) VALUES (?, ?, "
+                "'unsubscribe_link', ?)", (a, email_norm, now))
+            conn.execute(
+                "UPDATE consent_registry SET unsubscribed_at = ?, "
+                "unsubscribe_reason = 'link_click' WHERE sending_account_id = ? "
+                "AND prospect_email = ? AND unsubscribed_at IS NULL",
+                (now, a, email_norm))
+            audit.record(conn, action="unsubscribed", account_id=a,
+                         resource_type="consent", changes={"email": email_norm})
+            conn.commit()
+        finally:
+            conn.close()
+        return HTMLResponse(_UNSUB_OK_HTML)
 
     # ══════════════════════════ STUDIES ═════════════════════════════════════
     def _validate_smtp_binding(conn, ctx: AuthContext, smtp_config_id):
