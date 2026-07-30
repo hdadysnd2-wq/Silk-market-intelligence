@@ -23,3 +23,8 @@ jobs:
         run: pip install -r requirements.txt pytest httpx
       - name: Run tests
         run: python -m pytest tests/ -q
+      # بوّابة §58: متن الـPR يجب أن يصرّح بنتيجة المراجعة الذاتية والملاحظات
+      # العالية. كانت القاعدة تعتمد على تذكّر شخص؛ صارت فحصاً. تعمل على أحداث
+      # pull_request فقط (تتخطّى push بنجاح). §58 self-review declaration gate.
+      - name: Self-review gate (CLAUDE.md §58)
+        run: python tools/check_self_review_gate.py
