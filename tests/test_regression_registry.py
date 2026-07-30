@@ -1852,6 +1852,40 @@ def _guard_gate_passes_synthetic_but_silent_on_real():
     assert _exists("tools/canonical_nadec_yemen_dairy.py")
 
 
+def _guard_seat_lock_is_load_bearing():
+    """LESSONS ٧٦ — اختبارُ تزامنٍ اجتاز شيفرةً **غير ذرّية** فبدا حارساً وهو خامل.
+
+    مسارُ إعادة تنشيط المستخدم (PR-2) كان فحصاً-ثمّ-تحديثاً بلا قفلٍ فوري، فطلبان
+    متوازيان يمرّان معاً من بوّابة المقاعد ويكتبان ⇒ تجاوزُ سقفٍ مدفوع. التقطته
+    المراجعة الذاتية (§58)، لكن **اختبارَ الحاجز الأوّل اجتاز النسخة المعطوبة**:
+    القسمُ الحرج أقصر من ميلي ثانية فتسلسلَ الخيطان بحكم GIL.
+
+    الحارس يحمي **الاثنين معاً** — القفل والمُميِّز:
+      (١) `BEGIN IMMEDIATE` قائم في مسارَي كتابة المقعد (الإنشاء والتنشيط)؛
+      (٢) نافذةُ الفحص المُوسَّعة (`_widen_seat_check_window`) مربوطةٌ فعلاً
+          باختبارَي المقاعد — فلو حُذفت لعاد الاختبار يجتاز كوداً غير ذرّي بصمت.
+    إثباتٌ محفوظ: بحذف القفل يخرج الاختبار `[True, True]` (٤ نشطين على سقف ٣).
+    """
+    src = _read("silk_platform/users.py")
+    assert src.count("BEGIN IMMEDIATE") >= 2, (
+        "silk_platform/users.py: مسارا كتابة المقعد (create_sub_user/set_active) "
+        "يجب أن يبدأا معاملة كتابة فورية — بلا ذلك يتجاوز تنشيطان متزامنان السقف")
+    # التنشيط تحديداً محروسٌ بالحالة كي تخسر الكتابة الثانية بلا أثر.
+    assert "AND is_active = ?" in src, (
+        "silk_platform/users.py: تحديث التنشيط بلا شرط `is_active` — الكتابة "
+        "الثانية تنجح صمتاً")
+    tests = _read("tests/test_platform_concurrency.py")
+    assert "def _widen_seat_check_window" in tests, (
+        "tests/test_platform_concurrency.py: مُوسِّع نافذة الفحص محذوف — بدونه "
+        "يجتاز كودٌ غير ذرّي اختبارَ التزامن (أخضر فارغ)")
+    for name in ("test_concurrent_sub_user_creates_never_exceed_seat_cap",
+                 "test_concurrent_reactivations_never_exceed_seat_cap"):
+        assert name in tests, f"اختبار قفل المقاعد مفقود: {name}"
+        body = tests.split(f"def {name}(")[1].split("\ndef ")[0]
+        assert "_widen_seat_check_window" in body, (
+            f"{name}: لا يُوسِّع نافذة الفحص ⇒ قد يجتاز شيفرةً غير ذرّية")
+
+
 _LESSONS = {
     1: _needles("docs/LIVE_PROOF_RUNBOOK.md", "لا يُشغَّل هيرمتياً"),
     2: _needles("silk_render.py", "_deep_research_view"),
@@ -1934,6 +1968,7 @@ _LESSONS = {
     73: _guard_dialog_axis_siblings_never_partial,         # E3 — لا مجموعةَ محورٍ جزئية
     74: _guard_dialog_prose_carries_no_product_brand_or_country,  # E4 — لا صدى منتج/علامة/دولة
     75: _guard_gate_passes_synthetic_but_silent_on_real,  # تحليل ٧ — بوّابة مرّت التركيبيّ ثم صمتت على الحقيقيّ (قفلان لكلّ بوّابة)
+    76: _guard_seat_lock_is_load_bearing,  # PR-2 — قفل المقعد وحارسه المُميِّز
 }
 
 _TRAPS = [

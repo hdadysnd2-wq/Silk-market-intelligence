@@ -8,7 +8,7 @@ Each worker uses its OWN sqlite connection (connections aren't thread-shareable)
 import threading
 
 from platform_helpers import make_factory, seed
-from silk_platform import db as pdb, quota, wallet
+from silk_platform import db as pdb, entitlements, quota, users, wallet
 from silk_platform.models import Operation
 
 
@@ -120,6 +120,127 @@ def test_concurrent_funding_no_lost_updates(monkeypatch):
     assert w["lifetime_funded"] == N * amount
     assert credits == N
     assert snaps == sorted(set(snaps))           # every snapshot unique & ordered
+
+
+def _widen_seat_check_window(monkeypatch, delay_s=0.15):
+    """وسّع نافذة فحص المقعد صناعياً — make the check-then-write window observable.
+
+    **لماذا هذا ضروري:** حاجزُ البدء وحده لا يُثبِت ذرّية هنا. عملُ المقعد أقصر
+    من ميلي ثانية، فخيطان يتسلسلان فعلياً بحكم GIL وينتهي كلٌّ قبل أن يبدأ
+    الآخر — فيجتاز الاختبارَ **كودٌ غير ذرّي** ولا يُثبِت شيئاً (وهذا ما حدث
+    بالضبط: نسخةٌ بلا `BEGIN IMMEDIATE` اجتازت اختباراً بحاجز فقط).
+
+    بتأخير الفحص، يصير التشابك مضموناً: بلا قفلٍ فوري يقرأ الخيطان «مقعد متاح»
+    كلاهما فيتجاوزان السقف؛ ومع القفل الفوري يُحتجَز الثاني حتى يلتزم الأوّل
+    فيرى المقعد مأخوذاً. فحصُ الفرق هو ما يجعل هذا الاختبار حارساً حقيقياً.
+
+    Without a widened window the GIL serializes such short critical sections and
+    a NON-atomic implementation passes — an empty green. The delay makes the
+    interleaving deterministic, so the lock is what the assertion measures.
+    """
+    import time
+    real = entitlements.seats_used
+
+    def slow_seats_used(conn, account_id):
+        n = real(conn, account_id)
+        time.sleep(delay_s)          # النافذة التي يجب أن يُغلقها القفل
+        return n
+
+    monkeypatch.setattr(entitlements, "seats_used", slow_seats_used)
+
+
+def test_concurrent_sub_user_creates_never_exceed_seat_cap(monkeypatch):
+    """إنشاءان متزامنان على مقعد واحد متبقٍّ ⇒ ينجح واحد فقط.
+
+    المقعد مالٌ (الطبقة مدفوعة)، فتجاوزه تجاوزُ فوترة. نافذة الفحص مُوسَّعة كي
+    يكون القفل الفوري هو ما يُقاس فعلاً لا ترتيبُ GIL العابر.
+    """
+    seed(monkeypatch)
+    f = make_factory("silver", "conc-seat@f.local")     # seats = 3
+    conn = pdb.connect()
+    try:
+        users.create_sub_user(conn, f["account_id"], email="seat-filler@f.local",
+                              password="Racer1234")     # نشط ٢ ⇒ مقعد واحد
+        assert entitlements.seats_used(conn, f["account_id"]) == 2
+    finally:
+        conn.close()
+
+    _widen_seat_check_window(monkeypatch)
+
+    def attempt(i):
+        conn = pdb.connect()
+        try:
+            users.create_sub_user(conn, f["account_id"],
+                                  email=f"conc-seat-{i}@f.local",
+                                  password="Racer1234")
+            return True
+        except entitlements.TierGateError:
+            return False
+        finally:
+            conn.close()
+
+    results = _run_concurrent(2, attempt)
+    assert sum(1 for r in results if r) == 1, f"only one seat may be granted: {results}"
+    conn = pdb.connect()
+    try:
+        # `seats_used` مُرقَّع هنا، فاقرأ العدد من القاعدة مباشرةً.
+        used = conn.execute("SELECT COUNT(*) c FROM users WHERE account_id = ? "
+                            "AND is_active = 1", (f["account_id"],)).fetchone()["c"]
+    finally:
+        conn.close()
+    assert used == 3, f"seat cap breached: {used} active on a 3-seat tier"
+
+
+def test_concurrent_reactivations_never_exceed_seat_cap(monkeypatch):
+    """تنشيطان متزامنان على مقعد واحد متبقٍّ ⇒ ينجح واحد فقط.
+
+    الثقب الذي التقطته المراجعة الذاتية (§58): مسار التنشيط كان فحصاً-ثمّ-تحديثاً
+    بلا قفل فوري بخلاف مسار الإنشاء، فطلبان متوازيان يمرّان معاً من `require_seat`
+    ويكتبان ⇒ تجاوز السقف، أي تعطيلُ البوّابة التي وُجدت إعادة التنشيط لتمرّ منها.
+
+    ملاحظة: الشرط `is_active = 0` في التحديث **لا يكفي** وحده، لأن الخيطين
+    يستهدفان صفَّين مختلفين فيمرّ حرسُ كلٍّ منهما — القفل الفوري هو الفاعل.
+    Locks the re-activation TOCTOU found by the §58 self-review.
+    """
+    seed(monkeypatch)
+    f = make_factory("silver", "conc-react@f.local")    # seats = 3
+    conn = pdb.connect()
+    try:
+        ids = [users.create_sub_user(conn, f["account_id"],
+                                     email=f"react-{i}@f.local",
+                                     password="Racer1234")["id"]
+               for i in range(2)]
+        for uid in ids:
+            users.set_active(conn, f["account_id"], uid, False,
+                             acting_user_id=f["user_id"])
+        users.create_sub_user(conn, f["account_id"], email="react-filler@f.local",
+                              password="Racer1234")
+        assert entitlements.seats_used(conn, f["account_id"]) == 2   # ⇒ مقعد واحد
+    finally:
+        conn.close()
+
+    _widen_seat_check_window(monkeypatch)
+
+    def attempt(i):
+        conn = pdb.connect()
+        try:
+            users.set_active(conn, f["account_id"], ids[i], True,
+                             acting_user_id=f["user_id"])
+            return True
+        except entitlements.TierGateError:
+            return False
+        finally:
+            conn.close()
+
+    results = _run_concurrent(2, attempt)
+    assert sum(1 for r in results if r) == 1, f"only one may win: {results}"
+    conn = pdb.connect()
+    try:
+        used = conn.execute("SELECT COUNT(*) c FROM users WHERE account_id = ? "
+                            "AND is_active = 1", (f["account_id"],)).fetchone()["c"]
+    finally:
+        conn.close()
+    assert used == 3, f"seat cap breached: {used} active on a 3-seat tier"
 
 
 def test_concurrent_debits_no_lost_updates(monkeypatch):

@@ -24,14 +24,37 @@ import pytest
 _PKG = pathlib.Path(__file__).resolve().parent.parent / "silk_platform"
 
 # الجداول التي تحمل عمود مالك (مُستأجَرة) — من الترحيل 001.
+# `users` مُدرَج منذ PR-2: صار للمنصّة مسارُ إدارة مستخدمين فرعيين يكتب في هذا
+# الجدول، فاستعلامٌ غير منطَّق فيه يعني قراءة/تعديل مستخدمي مستأجرٍ آخر — وهو
+# أخطر من تسريب دراسة لأنه مسار صلاحية. Added in PR-2 with sub-user management.
 TENANT_TABLES = {
     "studies", "prospects", "drafts", "images", "smtp_configs",
     "comparison_funnels", "wallets", "ledger_entries", "email_queue",
-    "suppression_list", "consent_registry",
+    "suppression_list", "consent_registry", "users",
 }
 
-# قيود المالك المقبولة في نصّ الجملة.
-OWNER_PREDICATES = ("owner_id", "account_id", "sending_account_id")
+# أعمدة المالك · owner columns.
+OWNER_COLUMNS = ("owner_id", "account_id", "sending_account_id")
+
+
+def _has_owner_predicate(sql: str) -> bool:
+    """هل يقيّد المالكَ **فعلاً**؟ — is the owner column an actual constraint?
+
+    الفحص السابق كان «هل يظهر اسم عمود المالك في النصّ؟» فكان
+    `SELECT u.account_id AS account_id FROM users WHERE token = ?` يمرّ لأن الاسم
+    ظهر في قائمة الإسقاط — لا في قيدٍ. حارسٌ يُخدَع بذكر الاسم يعطي طمأنينة
+    كاذبة، فالتمييز الآن على **شكل** الاستعمال:
+
+    - `INSERT`: وجود العمود في قائمة الأعمدة **هو** الشكل الصحيح (الملكية تُكتب).
+    - غيرها (`SELECT`/`UPDATE`/`DELETE`): يجب أن يكون العمود في مقارنة —
+      `account_id = ?` أو `IN (...)` أو `IS NULL` — أي قيداً لا إسقاطاً.
+
+    Distinguishes a real constraint from a mere mention of the column name.
+    """
+    if re.match(r"\s*INSERT\b", sql, re.IGNORECASE):
+        return any(col in sql for col in OWNER_COLUMNS)
+    return any(re.search(rf"\b{col}\s*(=|!=|<>|\bIN\b|\bIS\b)", sql, re.IGNORECASE)
+               for col in OWNER_COLUMNS)
 
 # استثناءات مقصودة **مقيَّدة بالوحدة**: (الوحدة، مقتطف) → السبب.
 # تقييد الوحدة يُبقي الحارس حادّاً: تحويلات حالة الطابور مسموحة في عامل الطابور
@@ -66,6 +89,31 @@ _INTENTIONAL_GLOBAL: dict[tuple[str, str], str] = {
     ("api.py", "SELECT * FROM smtp_configs WHERE id = ?"):
         "ownership verified immediately after fetch in _validate_smtp_binding "
         "(rejects with 422 when owner_id differs)",
+    # ── مسارات الهويّة على `users` · identity paths (PR-2) ───────────────────
+    # الدخول وإعادة التعيين **يجب** أن تكون عالمية: البريد هو هويّة الدخول وهو
+    # فريد على مستوى المنصّة، فالحساب غير معروف بعد قبل أن تُحلّ الهويّة. تقييدها
+    # بحساب يعني استحالة تسجيل الدخول أصلاً.
+    ("auth.py", "SELECT * FROM users WHERE email = ?"):
+        "login must resolve a globally-unique email before any account is known "
+        "(the account is a RESULT of authentication, not an input to it)",
+    ("auth.py", "SELECT id FROM users WHERE email = ?"):
+        "password-reset request resolves the global login identity; the endpoint "
+        "returns 200 regardless so it leaks no existence",
+    ("auth.py", "SELECT id FROM users WHERE id = ?"):
+        "admin-issued reset (silk_admin-only route) targets a user by id across "
+        "accounts by design; the route itself is role-walled",
+    ("auth.py", "UPDATE users SET password_hash"):
+        "reset confirmation is authenticated by the single-use token itself, not "
+        "by a session, so no account context exists at that point",
+    ("auth.py", "SELECT s.*, u.account_id AS account_id"):
+        "session resolution is keyed by the sha256 token hash (unguessable) and "
+        "is what PRODUCES the account context every other query scopes by",
+    ("seed.py", "SELECT id FROM users WHERE role = 'silk_admin' LIMIT 1"):
+        "bootstrap lookup for the seeded silk_admin; runs at seed time before any "
+        "request context exists",
+    ("users.py", "SELECT 1 FROM users WHERE id = ?"):
+        "exists_anywhere returns a BOOLEAN only (never a row) so the endpoint can "
+        "audit a cross-tenant attempt while still answering 404 to the client",
 }
 
 _SQL_RE = re.compile(r"\b(SELECT|INSERT\s+INTO|INSERT\s+OR\s+IGNORE\s+INTO|UPDATE|DELETE\s+FROM)\b",
@@ -80,9 +128,20 @@ def _iter_sql_literals():
     """
     for path in sorted(_PKG.glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        # أجزاء الـf-string الحرفيّة تُزار **مرّتين** بـ`ast.walk`: مرّة داخل
+        # `JoinedStr` ومرّة كعقدة `Constant` مستقلّة. بلا استثنائها كان
+        # `f"UPDATE users SET {cols} WHERE account_id = ?"` يُبلَّغ عنه كجملة
+        # مقطوعة «UPDATE users SET» بلا قيد مالك — **إنذار كاذب** يدفع لإدراج
+        # استثناء لا حاجة له، وكل استثناء زائد يوسّع الثقب الحقيقي.
+        # f-string fragments are visited twice by ast.walk; count them once.
+        in_fstring = {id(v) for node in ast.walk(tree)
+                      if isinstance(node, ast.JoinedStr)
+                      for v in node.values if isinstance(v, ast.Constant)}
         for node in ast.walk(tree):
-            # نصّ حرفيّ مفرد
+            # نصّ حرفيّ مفرد (وليس جزءاً من f-string سبق جمعه)
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if id(node) in in_fstring:
+                    continue
                 if _SQL_RE.search(node.value):
                     yield path.name, " ".join(node.value.split())
             # f-string / تلاصق: اجمع كل الأجزاء الحرفيّة في عقدة واحدة
@@ -125,7 +184,7 @@ def test_every_tenant_query_is_owner_scoped_or_declared():
         tables = _tables_touched(sql)
         if not tables:
             continue
-        if any(p in sql for p in OWNER_PREDICATES):
+        if _has_owner_predicate(sql):
             continue
         if _is_allowlisted(module, sql):
             continue
@@ -186,7 +245,7 @@ def test_guard_actually_catches_an_unscoped_query(tmp_path, monkeypatch):
     globals()["_PKG"] = fake
     try:
         found = [f"{m}: {s}" for m, s in _iter_sql_literals()
-                 if _tables_touched(s) and not any(p in s for p in OWNER_PREDICATES)
+                 if _tables_touched(s) and not _has_owner_predicate(s)
                  and not _is_allowlisted(m, s)]
         assert found, "the guard failed to catch a deliberately unscoped query"
     finally:

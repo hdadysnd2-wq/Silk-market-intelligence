@@ -639,6 +639,15 @@ _SYMBOL_ANCHORS_EXTRA = [
       "def test_module_has_no_hardcoded_product_brand_or_country_literal"]),
     (74, "tests/test_regression_registry.py",
      ["def _guard_dialog_prose_carries_no_product_brand_or_country"]),
+    # البند ٧٦ — قفل المقعد الذرّي **ومُميِّزه**: الحارس يحمي الاثنين، فحذفُ
+    # مُوسِّع النافذة يعيد الاختبار إلى «أخضر فارغ» يجتاز كوداً غير ذرّي.
+    (76, "silk_platform/users.py",
+     ["BEGIN IMMEDIATE", "AND is_active = ?"]),
+    (76, "tests/test_platform_concurrency.py",
+     ["def _widen_seat_check_window",
+      "def test_concurrent_reactivations_never_exceed_seat_cap"]),
+    (76, "tests/test_regression_registry.py",
+     ["def _guard_seat_lock_is_load_bearing"]),
 ]
 
 
