@@ -2,8 +2,8 @@
 
 > **حالة الدليل (الدلاء الثلاثة · three-bucket honesty):**
 > **«hermetic only».** كل ادّعاءات هذا المستند مُثبَتة برُتبة ١ فقط —
-> `python3 -m pytest tests/test_platform_*.py -q` أخضر (**٧٢ اختباراً في ستّة
-> ملفات**: auth 16، isolation 8، roles 7، quota/wallet/kill-switch 12،
+> `python3 -m pytest tests/test_platform_*.py -q` أخضر (**٧٤ اختباراً في ستّة
+> ملفات**: auth 18، isolation 8، roles 7، quota/wallet/kill-switch 12،
 > concurrency 4، review-hardening 25) ضمن الحزمة الكاملة. **لم** يُقلَع خادم
 > uvicorn حقيقي ولا متصفّح (رُتبتا ٢–٣) لهذه المنصّة بعد؛ فهي **ليست** بعد في
 > دلو «جاهز لتأكيد المالك بنقرة». التكامل الحيّ وe2e يأتيان في PR لاحق حين
@@ -123,16 +123,20 @@
   rowcount) محدود الزمن (30 دقيقة)؛ يُبطل كل الجلسات؛ يفرض سياسة (≥8، حالتان + رقم).
 - كلمة المرور تُلخَّص SHA-256 قبل bcrypt فلا يقتطعها حدّ ٧٢ بايت صمتاً.
 - خنق الدخول: ١٠ محاولات فاشلة لكل (بريد + IP) في نافذة ٥ دقائق ⇒ 429.
+- **عامل العمل**: الإنتاج bcrypt ١٢ (مُثبَت بإعادة إنتاج مباشرة). الاختبارات
+  تخفّضه إلى ٤ عبر `SILK_PLATFORM_BCRYPT_ROUNDS` (قياس: ٢٧٧ms للتجزئة الواحدة ⇒
+  الحزمة ١٣٣ث؛ بعد التخفيض ٣١ث). الإنتاج محميّ ثلاثياً: الافتراضي ١٢، وقيمة
+  تالفة ⇒ ١٢، و`boot_config_guard` **يرفض الإقلاع** بأقلّ من ١٢ مع إشارة إنتاج.
 
 ## ٧) الاختبارات (القسم ١٣) · Section 13 acceptance suite
 
-**٧٢ اختباراً هرمتياً عبر ستّة ملفات** — `test_platform_auth.py` (16) ·
+**٧٤ اختباراً هرمتياً عبر ستّة ملفات** — `test_platform_auth.py` (18) ·
 `test_platform_isolation.py` (8) · `test_platform_roles.py` (7) ·
 `test_platform_quota_wallet_killswitch.py` (12) · `test_platform_concurrency.py`
 (4، خيوط حقيقية) · `test_platform_review_hardening.py` (25، أقفال المراجعة).
 
 ```bash
-python3 -m pytest tests/test_platform_*.py -q      # 72 passed
+python3 -m pytest tests/test_platform_*.py -q      # 74 passed
 python3 -m pytest tests/ -q                         # الحزمة الكاملة تبقى خضراء
 python3 -m silk_platform.seed                       # هيّئ + ابذر قاعدة المنصّة
 ```

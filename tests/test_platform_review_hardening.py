@@ -35,6 +35,7 @@ def test_root_app_boots_and_mounts_platform_when_configured(monkeypatch):
     """مع السرّ مضبوطاً: الإقلاع ينجح و/platform مُركَّبة فعلاً (لا 404 صامت)."""
     setup_env(monkeypatch)          # يضبط SILK_PLATFORM_SECRET
     monkeypatch.setenv("SILK_PLATFORM_SECURE_COOKIES", "1")
+    monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", "12")   # محاكاة إنتاج كاملة
     import api as root_api
     app = root_api.create_app()
     paths = {getattr(r, "path", "") for r in app.routes}

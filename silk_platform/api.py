@@ -107,6 +107,16 @@ def boot_config_guard() -> None:
             "SILK_PLATFORM_SECRET must be set when a production signal is active "
             "(SILK_PLATFORM_REQUIRE_SECRET=1 or SILK_PLATFORM_SECURE_COOKIES=1); "
             "refusing to boot with an ephemeral per-process secret.")
+    # عامل عمل مُخفَّض لا يصل الإنتاج أبداً: التخفيض أداةُ اختبارات، فلو تسرّب
+    # `SILK_PLATFORM_BCRYPT_ROUNDS` إلى بيئة إنتاجية نرفض الإقلاع بصوت عالٍ بدل
+    # تجزئة كلمات مرور حقيقية بعاملٍ ضعيف صامتاً.
+    # A reduced work factor can never reach production — it refuses to boot.
+    from .passwords import bcrypt_rounds, _BCRYPT_MIN_PRODUCTION
+    if prod_signal and bcrypt_rounds() < _BCRYPT_MIN_PRODUCTION:
+        raise RuntimeError(
+            f"SILK_PLATFORM_BCRYPT_ROUNDS={bcrypt_rounds()} is below the "
+            f"production minimum ({_BCRYPT_MIN_PRODUCTION}); it is a test-only "
+            "knob. Refusing to boot with a weakened password work factor.")
 
 
 def create_platform_app():

@@ -21,6 +21,11 @@ on:
 jobs:
   e2e-live-shape:
     runs-on: ubuntu-latest
+    # نفس منطق ci.yml (الافتراضي ٦ ساعات) بهامش أوسع: هذه الوظيفة تُثبِّت
+    # LibreOffice وخطوطاً وchromium وتُقلِع خادماً حقيقياً، فتُكمل عادةً في
+    # ~٣–٥ دقائق؛ ٣٠ يقتل التعليق ولا يُسقِط تثبيتاً بطيئاً.
+    # Same rationale as ci.yml, wider margin (installs LibreOffice + chromium).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 

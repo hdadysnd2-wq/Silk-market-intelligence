@@ -16,10 +16,51 @@ import hmac
 import os
 import re
 
-_BCRYPT_ROUNDS = 12
+_BCRYPT_ROUNDS = 12          # الإنتاج · production work factor (spec §11)
+_BCRYPT_MIN_PRODUCTION = 12  # أقلّ عامل مقبول في الإنتاج · prod floor
 _SCRYPT_N = 2 ** 14   # عامل تكلفة scrypt (16384) — CPU/memory hardness
 _SCRYPT_R = 8
 _SCRYPT_P = 1
+
+
+def bcrypt_rounds() -> int:
+    """عامل عمل bcrypt — 12 افتراضاً، ويُخفَّض **للاختبارات فقط** بالبيئة.
+
+    السبب المقيس: تجزئة واحدة بعامل ١٢ تكلف ~٢٧٧ms وتحقّقٌ واحد ~٢٧٣ms، فحزمة
+    الاختبارات (مئات العمليات) قفزت من ~٢٥ث إلى ~١٣٣ث — اتجاه غير مستدام مع نمو
+    الاختبارات. التخفيض في الاختبارات لا يُضعف الإنتاج بثلاث حمايات:
+      ١) غياب المتغيّر ⇒ ١٢ (الافتراضي هو الإنتاج، لا العكس).
+      ٢) قيمة تالفة/خارج المدى ⇒ ١٢ (خطأ مطبعي لا يُخفّض العامل صمتاً).
+      ٣) `boot_config_guard` **يرفض الإقلاع** بعاملٍ أقلّ من ١٢ مع أي إشارة إنتاج.
+    Test-only reduction; production cannot be weakened (default, clamp, boot guard).
+    """
+    raw = os.environ.get("SILK_PLATFORM_BCRYPT_ROUNDS", "").strip()
+    if not raw:
+        return _BCRYPT_ROUNDS
+    try:
+        rounds = int(raw)
+    except ValueError:
+        return _BCRYPT_ROUNDS
+    if not 4 <= rounds <= 31:          # مدى bcrypt الصالح · valid bcrypt range
+        return _BCRYPT_ROUNDS
+    return rounds
+
+
+def scrypt_n() -> int:
+    """عامل تكلفة scrypt (المسار الاحتياطي) — env-tunable for tests; default 2^14.
+
+    يجب أن يكون قوّةً للعدد ٢؛ أي قيمة أخرى تُتجاهَل ويُستخدَم الافتراضي.
+    """
+    raw = os.environ.get("SILK_PLATFORM_SCRYPT_N", "").strip()
+    if not raw:
+        return _SCRYPT_N
+    try:
+        n = int(raw)
+    except ValueError:
+        return _SCRYPT_N
+    if n < 2 or (n & (n - 1)) != 0:     # ليست قوّةً للعدد ٢ · not a power of two
+        return _SCRYPT_N
+    return n
 
 try:  # اختياري: bcrypt الحقيقي حين يتوفّر · optional real bcrypt
     import bcrypt as _bcrypt
@@ -73,14 +114,16 @@ def hash_password(password: str, *, enforce_policy: bool = True) -> str:
     if enforce_policy:
         validate_policy(password)
     if _bcrypt is not None:
-        salt = _bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)
+        salt = _bcrypt.gensalt(rounds=bcrypt_rounds())
         return _bcrypt.hashpw(_bcrypt_input(password), salt).decode("ascii")
     # بديل قياسي · stdlib scrypt fallback — "$scrypt$N$r$p$salt$dk"
+    # العامل مضمَّن في السلسلة فيبقى كل هاش قديم قابلاً للتحقّق بعد أي تغيير.
+    n = scrypt_n()
     salt = os.urandom(16)
     dk = hashlib.scrypt(password.encode("utf-8"), salt=salt,
-                        n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=32)
+                        n=n, r=_SCRYPT_R, p=_SCRYPT_P, dklen=32)
     b64 = lambda b: base64.b64encode(b).decode("ascii")  # noqa: E731
-    return f"$scrypt${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}${b64(salt)}${b64(dk)}"
+    return f"$scrypt${n}${_SCRYPT_R}${_SCRYPT_P}${b64(salt)}${b64(dk)}"
 
 
 def verify_password(password: str, stored: str) -> bool:

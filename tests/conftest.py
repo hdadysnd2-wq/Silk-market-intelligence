@@ -103,6 +103,15 @@ def _isolated_fact_store(monkeypatch):
     # لا حاجة لتصفير خنق الدخول يدوياً: حالته صارت في قاعدة المنصّة (المعزولة
     # لكل اختبار بالسطر أعلاه) لا في ذاكرة الوحدة — فالعزل يأتي مجّاناً.
     # Login-throttle state lives in the (per-test isolated) platform DB.
+    #
+    # عامل عمل كلمات المرور مُخفَّض **في الاختبارات فقط**: قياس فعلي — تجزئة
+    # bcrypt بعامل ١٢ = ~٢٧٧ms وتحقّق = ~٢٧٣ms، فحزمة المنصّة قفزت ٢٥ث→١٣٣ث
+    # واتجاهها يسوء مع كل اختبار جديد. الإنتاج غير متأثّر بثلاث حمايات
+    # (الافتراضي ١٢، وقيمة تالفة ⇒ ١٢، وحارس الإقلاع يرفض أقلّ من ١٢ في الإنتاج)،
+    # واختبار عامل ١٢ يمسح هذا المتغيّر ويدفع تكلفة تجزئة حقيقية واحدة ليُثبِته.
+    # Test-only work-factor reduction; production is protected three ways.
+    monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", "4")
+    monkeypatch.setenv("SILK_PLATFORM_SCRYPT_N", "1024")
 
 
 @pytest.fixture(autouse=True)

@@ -206,14 +206,44 @@ def test_reset_token_never_exposed_without_flag(monkeypatch):
 
 
 def test_bcrypt_used_at_cost_12_when_available(monkeypatch):
-    """عند توفّر bcrypt (المسار الإنتاجي بعد التثبيت) يُستخدَم بعامل ١٢."""
+    """المسار الإنتاجي bcrypt بعامل ١٢ — **بإعادة إنتاج مباشرة** لا بقراءة إعداد.
+
+    حزمة الاختبارات تخفّض العامل للسرعة (conftest)، فهذا الاختبار **يمسح**
+    المتغيّر ليعود الافتراضي الإنتاجي، ويدفع تكلفة تجزئة+تحقّق حقيقيَّين بعامل ١٢
+    (~٥٥٠ms مرّة واحدة في الحزمة كلّها). فالضمانة مُثبَتة بالتشغيل الفعلي، ولا
+    يُضعفها التخفيض في بقيّة الاختبارات.
+    Proves cost-12 by real reproduction, not by reading a config value.
+    """
     import silk_platform.passwords as p
     if p._bcrypt is None:
-        import pytest
         pytest.skip("bcrypt not importable in this environment (scrypt fallback)")
+    monkeypatch.delenv("SILK_PLATFORM_BCRYPT_ROUNDS", raising=False)
+    assert p.bcrypt_rounds() == 12          # الافتراضي بلا ضبط = الإنتاج
     h = p.hash_password("Abcd1234")
-    assert h.startswith("$2b$12$")   # bcrypt, work factor 12 (spec §11)
+    assert h.startswith("$2b$12$")          # bcrypt, work factor 12 (spec §11)
     assert p.verify_password("Abcd1234", h) and not p.verify_password("xxxx1234", h)
+
+
+def test_reduced_work_factor_cannot_reach_production(monkeypatch):
+    """عامل مُخفَّض + إشارة إنتاج ⇒ رفض إقلاع (التخفيض أداة اختبارات حصراً)."""
+    from silk_platform.api import boot_config_guard
+    monkeypatch.setenv("SILK_PLATFORM_SECRET", "a-real-secret")
+    monkeypatch.setenv("SILK_PLATFORM_SECURE_COOKIES", "1")   # production signal
+    monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", "4")
+    with pytest.raises(RuntimeError, match="BCRYPT_ROUNDS"):
+        boot_config_guard()
+    monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", "12")
+    boot_config_guard()   # عامل إنتاجي ⇒ لا رفض
+
+
+def test_work_factor_override_cannot_silently_weaken(monkeypatch):
+    """قيمة تالفة/خارج المدى ترجع إلى ١٢ — خطأ مطبعي لا يُخفّض العامل صمتاً."""
+    from silk_platform import passwords as p
+    for bad in ("", "abc", "0", "3", "99", "-5", "12.5"):
+        monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", bad)
+        assert p.bcrypt_rounds() == 12, f"{bad!r} must fall back to 12"
+    monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", "4")   # صالح (اختبارات)
+    assert p.bcrypt_rounds() == 4
 
 
 def test_boot_guard_requires_secret_in_production(monkeypatch):
@@ -221,6 +251,9 @@ def test_boot_guard_requires_secret_in_production(monkeypatch):
     from silk_platform.api import boot_config_guard
     monkeypatch.delenv("SILK_PLATFORM_SECRET", raising=False)
     monkeypatch.setenv("SILK_PLATFORM_SECURE_COOKIES", "1")   # production signal
+    # محاكاة إنتاج كاملة: عامل عمل إنتاجي أيضاً، وإلا رفض الحارس لسببٍ آخر
+    # (وهو سلوك مقصود يقفله test_reduced_work_factor_cannot_reach_production).
+    monkeypatch.setenv("SILK_PLATFORM_BCRYPT_ROUNDS", "12")
     with pytest.raises(RuntimeError):
         boot_config_guard()
     monkeypatch.setenv("SILK_PLATFORM_SECRET", "a-real-secret")
